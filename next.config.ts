@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
    allowedDevOrigins: [
-        "abs-performer-citation-steven.trycloudflare.com",
+        "jpg-usb-albums-periods.trycloudflare.com",
         "localhost:3000",
         "192.168.1.11",
         "*"
