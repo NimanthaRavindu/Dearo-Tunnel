@@ -232,7 +232,7 @@ export default function AddOperationalExpensePage({ params }: PageProps) {
                 <CreditCard size={11} className="text-slate-500" /> Total Paid Amount (LKR)
               </label>
               <input
-                
+                required
                 type="number"
                 step="0.01"
                 placeholder="0.00"
