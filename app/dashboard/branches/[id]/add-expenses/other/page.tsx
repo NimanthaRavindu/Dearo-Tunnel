@@ -178,7 +178,7 @@ export default function AddOperationalExpensePage({ params }: PageProps) {
             {/* Expense Allocation Date Input */}
             <div className="flex flex-col gap-1.5">
               <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest font-mono flex items-center gap-1.5">
-                <Calendar size={11} className="text-slate-200 "/> Expense Allocation Date
+                <Calendar size={11} className="text-slate-400 " /> Expense Allocation Date
               </label>
               <input
                 required

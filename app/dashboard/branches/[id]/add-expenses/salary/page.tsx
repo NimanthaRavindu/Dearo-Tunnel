@@ -182,7 +182,7 @@ export default function AddSalaryExpensePage() {
 
             <div>
               <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                <Calendar size={12} className="text-slate-200" /> Expense Allocation Date
+                <Calendar size={12} className="text-slate-500" /> Expense Allocation Date
               </label>
               <input
                 type="date"
