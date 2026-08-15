@@ -1,0 +1,298 @@
+"use client";
+
+import React, { useState, useEffect } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { 
+  ArrowLeft, 
+  Building2, 
+  Plus, 
+  User, 
+  Calendar, 
+  Coins, 
+  Trash2, 
+  FileText,
+  Sparkles,
+  Search,
+  Receipt,
+  Loader2
+} from "lucide-react";
+
+interface CapitalExpense {
+  id: number | string;
+  personName: string;
+  date: string;
+  amount: number;
+  description: string;
+}
+
+export default function CapitalExpensesPage() {
+  const params = useParams();
+  const router = useRouter();
+  const id = params.id; // branch ID
+
+  // Form States
+  const [personName, setPersonName] = useState("");
+  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [amount, setAmount] = useState("");
+  const [description, setDescription] = useState("");
+  
+  // App Logic States
+  const [searchQuery, setSearchQuery] = useState("");
+  const [expenses, setExpenses] = useState<CapitalExpense[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+
+  // 1. Database එකෙන් Initial Data Fetch කිරීම
+  useEffect(() => {
+    async function fetchExpenses() {
+      try {
+        setLoading(true);
+        const res = await fetch(`/api/branches/${id}/expenses/capital`);
+        if (res.ok) {
+          const data = await res.json();
+          setExpenses(data);
+        }
+      } catch (err) {
+        console.error("Failed to load records", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchExpenses();
+  }, [id]);
+
+  // 2. API එක හරහා Data Save කිරීම (POST Request)
+  const handleAddExpense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!personName || !date || !amount) return;
+
+    try {
+      setSubmitting(true);
+      const res = await fetch(`/api/branches/${id}/expenses/capital`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          personName,
+          date,
+          amount,
+          description,
+        }),
+      });
+
+      if (res.ok) {
+        const savedExpense = await res.json();
+        setExpenses([savedExpense, ...expenses]); // Local state update
+        
+        // Form Clear
+        setPersonName("");
+        setAmount("");
+        setDescription("");
+      } else {
+        alert("Failed to save transaction.");
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const totalCapitalExpenses = expenses.reduce((sum, item) => sum + Number(item.amount), 0);
+
+  const filteredExpenses = expenses.filter(
+    (item) =>
+      item.personName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
+  return (
+    <div className="min-h-screen bg-[#080d1a] text-slate-100 p-6 md:p-8 relative overflow-hidden">
+      <div className="max-w-7xl mx-auto space-y-8 relative z-10">
+        
+        {/* Header Console */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800/80 pb-6">
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={() => router.push(`/dashboard/branches/${id}/add-expenses`)}
+              className="p-2.5 bg-slate-900/90 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl transition-all border border-slate-800 shadow-sm active:scale-95"
+            >
+              <ArrowLeft size={18} />
+            </button>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                <h1 className="text-xl font-extrabold tracking-wider uppercase text-slate-100 flex items-center gap-2">
+                  <Building2 className="text-emerald-400" size={20} /> Capital Expenses Ledger
+                </h1>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Record fixed assets, infrastructure investments, and machinery details
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4 bg-slate-950/80 border border-emerald-500/30 px-5 py-3 rounded-2xl shadow-lg backdrop-blur-md">
+            <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl">
+              <Receipt size={20} />
+            </div>
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-400 block">
+                Total Capital Spent
+              </span>
+              <span className="text-xl font-black text-slate-100">
+                LKR {totalCapitalExpenses.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Form + Table Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          
+          {/* Form Side */}
+          <div className="lg:col-span-5 bg-slate-950/70 border border-slate-800/80 rounded-2xl p-6 shadow-2xl backdrop-blur-md">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-200 pb-4 border-b border-slate-800/80 mb-5 flex items-center gap-2">
+              <Plus size={16} className="text-emerald-400" /> New Capital Entry
+            </h2>
+
+            <form onSubmit={handleAddExpense} className="space-y-4">
+              <div>
+                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">
+                  Authorized Person Name
+                </label>
+                <div className="relative">
+                  <User size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Nimantha Perera"
+                    value={personName}
+                    onChange={(e) => setPersonName(e.target.value)}
+                    className="w-full bg-slate-900/90 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-xs text-slate-100 focus:outline-none focus:border-emerald-500/60 transition-all"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">
+                  Date
+                </label>
+                <div className="relative">
+                  <Calendar size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                  <input
+                    type="date"
+                    required
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    className="w-full bg-slate-900/90 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-xs text-slate-100 focus:outline-none focus:border-emerald-500/60 transition-all"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">
+                  Amount (LKR)
+                </label>
+                <div className="relative">
+                  <Coins size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    placeholder="0.00"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    className="w-full bg-slate-900/90 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-xs text-slate-100 focus:outline-none focus:border-emerald-500/60 transition-all font-semibold"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">
+                  Description
+                </label>
+                <div className="relative">
+                  <FileText size={16} className="absolute left-3.5 top-3 text-slate-500" />
+                  <textarea
+                    rows={3}
+                    placeholder="Asset details..."
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    className="w-full bg-slate-900/90 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-xs text-slate-100 focus:outline-none focus:border-emerald-500/60 transition-all resize-none"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full mt-2 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg flex items-center justify-center gap-2"
+              >
+                {submitting ? <Loader2 className="animate-spin" size={16} /> : "Save Capital Record"}
+              </button>
+            </form>
+          </div>
+
+          {/* Table Side */}
+          <div className="lg:col-span-7 bg-slate-950/70 border border-slate-800/80 rounded-2xl p-6 shadow-2xl backdrop-blur-md">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800/80 mb-4">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-200">
+                Recorded Transactions ({filteredExpenses.length})
+              </h2>
+              <div className="relative w-48">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-slate-900/90 border border-slate-800 rounded-lg py-1.5 pl-8 pr-2.5 text-[11px] text-slate-200 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            {loading ? (
+              <div className="py-16 text-center text-slate-500 flex items-center justify-center gap-2 text-xs">
+                <Loader2 className="animate-spin text-emerald-400" size={18} /> Loading ledger database...
+              </div>
+            ) : filteredExpenses.length === 0 ? (
+              <div className="py-16 text-center text-slate-500 text-xs font-bold uppercase tracking-wider">
+                No Capital Expenses Logged
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-800/80 text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-slate-900/40">
+                      <th className="p-3">Person / Asset</th>
+                      <th className="p-3">Date</th>
+                      <th className="p-3 text-right">Amount (LKR)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/50 text-xs">
+                    {filteredExpenses.map((item) => (
+                      <tr key={item.id} className="hover:bg-slate-900/50 transition-colors">
+                        <td className="p-3">
+                          <p className="font-bold text-slate-200">{item.personName}</p>
+                          <p className="text-[11px] text-slate-400 line-clamp-1">{item.description}</p>
+                        </td>
+                        <td className="p-3 text-slate-400 text-[11px]">
+                          {new Date(item.date).toLocaleDateString()}
+                        </td>
+                        <td className="p-3 text-right font-black text-emerald-400 text-xs">
+                          {Number(item.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+        </div>
+      </div>
+    </div>
+  );
+}
