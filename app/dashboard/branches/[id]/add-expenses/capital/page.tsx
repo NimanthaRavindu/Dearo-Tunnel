@@ -47,7 +47,7 @@ export default function CapitalExpensesPage() {
     async function fetchExpenses() {
       try {
         setLoading(true);
-        const res = await fetch(`/api/branches/${id}/expenses/capital`);
+        const res = await fetch(`/api/expences/capital`);
         if (res.ok) {
           const data = await res.json();
           setExpenses(data);
