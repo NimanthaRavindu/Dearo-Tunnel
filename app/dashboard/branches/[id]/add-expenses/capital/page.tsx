@@ -68,7 +68,7 @@ export default function CapitalExpensesPage() {
 
     try {
       setSubmitting(true);
-      const res = await fetch(`/api/branches/${id}/expenses/capital`, {
+      const res = await fetch(`/api/expences/capital`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
