@@ -2,23 +2,11 @@
 
 import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { 
-  ArrowLeft, 
-  Building2, 
-  Plus, 
-  User, 
-  Calendar, 
-  Coins, 
-  Trash2, 
-  FileText,
-  Sparkles,
-  Search,
-  Receipt,
-  Loader2
-} from "lucide-react";
+import { ArrowLeft,Building2,Plus,User,Calendar, Coins,Trash2,FileText,Sparkles,Search,Receipt,Loader2} from "lucide-react";
 
 interface CapitalExpense {
   id: number | string;
+  branchId: number;
   personName: string;
   date: string;
   amount: number;
@@ -42,15 +30,22 @@ export default function CapitalExpensesPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  // 1. Database එකෙන් Initial Data Fetch කිරීම
   useEffect(() => {
     async function fetchExpenses() {
+      if (!id) return;
       try {
         setLoading(true);
+<<<<<<< HEAD
         const res = await fetch(`/api/expences/capital`);
+=======
+
+        const res = await fetch(`/api/expences/capital?branchId=${id}`);
+>>>>>>> ed39901 (Fix API route and branchId in capital expenses page)
         if (res.ok) {
           const data = await res.json();
           setExpenses(data);
+        } else {
+          console.error("Failed to fetch expenses:", await res.text());
         }
       } catch (err) {
         console.error("Failed to load records", err);
@@ -61,10 +56,10 @@ export default function CapitalExpensesPage() {
     fetchExpenses();
   }, [id]);
 
-  // 2. API එක හරහා Data Save කිරීම (POST Request)
+
   const handleAddExpense = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!personName || !date || !amount) return;
+    if (!personName || !date || !amount || !id) return;
 
     try {
       setSubmitting(true);
@@ -72,6 +67,7 @@ export default function CapitalExpensesPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          branchId: Number(id),
           personName,
           date,
           amount,
@@ -88,7 +84,8 @@ export default function CapitalExpensesPage() {
         setAmount("");
         setDescription("");
       } else {
-        alert("Failed to save transaction.");
+        const errorData = await res.json();
+        alert(`Failed to save transaction: ${errorData.error || "Unknown error"}`);
       }
     } catch (err) {
       console.error(err);
