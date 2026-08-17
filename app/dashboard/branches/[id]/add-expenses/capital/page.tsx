@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft,Building2,Plus,User,Calendar, Coins,Trash2,FileText,Sparkles,Search,Receipt,Loader2} from "lucide-react";
+import { ArrowLeft,Building2,Plus,User,Calendar,Coins,Trash2,FileText,Sparkles,Search,Receipt,Loader2} from "lucide-react";
 
 interface CapitalExpense {
   id: number | string;
@@ -35,12 +35,7 @@ export default function CapitalExpensesPage() {
       if (!id) return;
       try {
         setLoading(true);
-<<<<<<< HEAD
-        const res = await fetch(`/api/expences/capital`);
-=======
-
         const res = await fetch(`/api/expences/capital?branchId=${id}`);
->>>>>>> ed39901 (Fix API route and branchId in capital expenses page)
         if (res.ok) {
           const data = await res.json();
           setExpenses(data);
@@ -55,7 +50,6 @@ export default function CapitalExpensesPage() {
     }
     fetchExpenses();
   }, [id]);
-
 
   const handleAddExpense = async (e: React.FormEvent) => {
     e.preventDefault();
