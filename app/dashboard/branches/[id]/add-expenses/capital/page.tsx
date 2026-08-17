@@ -2,7 +2,20 @@
 
 import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft,Building2,Plus,User,Calendar,Coins,Trash2,FileText,Sparkles,Search,Receipt,Loader2} from "lucide-react";
+import { 
+  ArrowLeft, 
+  Building2, 
+  Plus, 
+  User, 
+  Calendar, 
+  Coins, 
+  Trash2, 
+  FileText,
+  Sparkles,
+  Search,
+  Receipt,
+  Loader2 
+} from "lucide-react";
 
 interface CapitalExpense {
   id: number | string;
@@ -79,7 +92,7 @@ export default function CapitalExpensesPage() {
         setDescription("");
       } else {
         const errorData = await res.json();
-        alert(`Failed to save transaction: ${errorData.error || "Unknown error"}`);
+        alert(`Failed to save transaction: ${errorData.error || "Unknown error"}\nDetails: ${errorData.details || "No extra details"}`);
       }
     } catch (err) {
       console.error(err);
