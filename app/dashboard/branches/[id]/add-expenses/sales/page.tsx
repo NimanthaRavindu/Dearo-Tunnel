@@ -113,7 +113,7 @@ export default function SalesExpensesPage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-4 border-b border-slate-800/80 gap-4">
           <div className="flex items-center gap-3.5">
             <Link
-              href="/add-expenses"
+              href="/dashboard/branches/${id}/add-expenses"
               className="p-2.5 bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl transition-all border border-slate-800 shadow-sm"
               title="Back to Expenses Overview"
             >
