@@ -120,7 +120,7 @@ export default function SalesExpensesPage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-4 border-b border-slate-800/80 gap-4">
           <div className="flex items-center gap-3.5">
             <Link
-              href="/dashboard/branches"
+              href="/dashboard/branches/${id}/add-expenses"
               className="p-2.5 bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl transition-all border border-slate-800 shadow-sm"
               title="Back to Expenses Overview"
             >
@@ -177,28 +177,7 @@ export default function SalesExpensesPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Branch Selection Field */}
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                  Branch <span className="text-rose-400">*</span>
-                </label>
-                <div className="relative">
-                  <Building2 className="w-4 h-4 absolute left-3 top-2.5 text-slate-500" />
-                  <select
-                    required
-                    value={formData.branch_id}
-                    onChange={(e) =>
-                      setFormData({ ...formData, branch_id: e.target.value })
-                    }
-                    className="w-full bg-slate-950/80 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/50 transition-all"
-                  >
-                    <option value="1">Branch 01</option>
-                    <option value="2">Branch 02</option>
-                    <option value="3">Branch 03</option>
-                  </select>
-                </div>
-              </div>
-
+    
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1.5">
                   Payee / Person Name <span className="text-rose-400">*</span>
