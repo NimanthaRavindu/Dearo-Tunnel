@@ -2,11 +2,28 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { RowDataPacket, ResultSetHeader } from "mysql2";
 
-export async function GET() {
+// 1. GET Request (Branch ID එක අනුව Filter කිරීමේ පහසුකමද සහිතයි)
+export async function GET(req: Request) {
   try {
-    const [rows] = await db.query<RowDataPacket[]>(
-      "SELECT id, personName, amount, date FROM sales_expenses ORDER BY date DESC, id DESC"
-    );
+    const { searchParams } = new URL(req.url);
+    const branch_id = searchParams.get("branch_id");
+
+    let query = `
+      SELECT s.id, s.branch_id, b.branch_name, s.personName, s.amount, s.date 
+      FROM sales_expenses s
+      LEFT JOIN branch b ON s.branch_id = b.id
+    `;
+    const queryParams: any[] = [];
+
+    // URL එකේ branch_id එකක් එවුවොත් ඒ Branch එකේ විතරක් Data ගනී (e.g. /api/expences/sales?branch_id=1)
+    if (branch_id) {
+      query += ` WHERE s.branch_id = ?`;
+      queryParams.push(branch_id);
+    }
+
+    query += ` ORDER BY s.date DESC, s.id DESC`;
+
+    const [rows] = await db.query<RowDataPacket[]>(query, queryParams);
 
     return NextResponse.json(rows, { status: 200 });
   } catch (error) {
@@ -18,16 +35,24 @@ export async function GET() {
   }
 }
 
-
+// 2. POST Request (New Entry)
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { personName, amount, date } = body;
+    const { branch_id, personName, amount, date } = body;
 
     // Data validation
-    if (!personName || !amount || !date) {
+    if (!branch_id || !personName || !amount || !date) {
       return NextResponse.json(
-        { error: "All required fields (personName, amount, date) must be provided" },
+        { error: "All required fields (branch_id, personName, amount, date) must be provided" },
+        { status: 400 }
+      );
+    }
+
+    const parsedBranchId = parseInt(branch_id, 10);
+    if (isNaN(parsedBranchId)) {
+      return NextResponse.json(
+        { error: "Invalid branch_id provided" },
         { status: 400 }
       );
     }
@@ -41,13 +66,14 @@ export async function POST(req: Request) {
     }
 
     const [result] = await db.query<ResultSetHeader>(
-      "INSERT INTO sales_expenses (personName, amount, date) VALUES (?, ?, ?)",
-      [personName.trim(), parsedAmount, date]
+      "INSERT INTO sales_expenses (branch_id, personName, amount, date) VALUES (?, ?, ?, ?)",
+      [parsedBranchId, personName.trim(), parsedAmount, date]
     );
 
     return NextResponse.json(
       {
         id: result.insertId,
+        branch_id: parsedBranchId,
         personName: personName.trim(),
         amount: parsedAmount,
         date,
@@ -63,7 +89,7 @@ export async function POST(req: Request) {
   }
 }
 
-
+// 3. DELETE Request
 export async function DELETE(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
