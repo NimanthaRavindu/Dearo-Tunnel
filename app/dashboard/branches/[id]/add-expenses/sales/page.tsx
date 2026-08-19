@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import {DollarSign,Calendar,User,PlusCircle,TrendingUp,CreditCard,ArrowLeft,Trash2,Loader2,Receipt,Search,Building2} from "lucide-react";
+import React, { useState, useEffect, useCallback } from "react";
+import { useParams } from "next/navigation";
+import { DollarSign,Calendar,User,PlusCircle,TrendingUp,CreditCard,ArrowLeft,Trash2,Loader2,Receipt,Search} from "lucide-react";
 import Link from "next/link";
 
 interface SalesExpense {
@@ -14,23 +15,26 @@ interface SalesExpense {
 }
 
 export default function SalesExpensesPage() {
+  const params = useParams();
+  const branchId = params?.id; 
+
   const [expenses, setExpenses] = useState<SalesExpense[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [searchTerm, setSearchTerm] = useState<string>("");
 
   const [formData, setFormData] = useState({
-    branch_id: "1", // Default branch ID
     personName: "",
     amount: "",
     date: new Date().toISOString().split("T")[0],
   });
 
-  // 1. Fetch Expenses (GET)
-  const fetchExpenses = async () => {
+  // 1. Fetch Expenses for specific Branch (GET)
+  const fetchExpenses = useCallback(async () => {
+    if (!branchId) return;
     try {
       setLoading(true);
-      const res = await fetch("/api/expences/sales");
+      const res = await fetch(`/api/expences/sales?branch_id=${branchId}`);
       if (res.ok) {
         const data = await res.json();
         setExpenses(data);
@@ -42,13 +46,13 @@ export default function SalesExpensesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [branchId]);
 
   useEffect(() => {
     fetchExpenses();
-  }, []);
+  }, [fetchExpenses]);
 
-  // Filtered expenses based on search (by payee or branch)
+  // Filtered expenses based on search
   const filteredExpenses = expenses.filter(
     (item) =>
       item.personName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -65,19 +69,21 @@ export default function SalesExpensesPage() {
   // 2. Submit New Expense (POST)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.branch_id || !formData.personName || !formData.amount) return;
+    if (!formData.personName || !formData.amount || !branchId) return;
 
     try {
       setSubmitting(true);
       const res = await fetch("/api/expences/sales", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          branch_id: branchId, 
+        }),
       });
 
       if (res.ok) {
         setFormData({
-          branch_id: formData.branch_id, // Keep selected branch
           personName: "",
           amount: "",
           date: new Date().toISOString().split("T")[0],
@@ -120,7 +126,7 @@ export default function SalesExpensesPage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-4 border-b border-slate-800/80 gap-4">
           <div className="flex items-center gap-3.5">
             <Link
-              href="/dashboard/branches/${id}/add-expenses"
+              href={`/dashboard/branches/${branchId}/add-expenses`}
               className="p-2.5 bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl transition-all border border-slate-800 shadow-sm"
               title="Back to Expenses Overview"
             >
@@ -177,7 +183,6 @@ export default function SalesExpensesPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
-    
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1.5">
                   Payee / Person Name <span className="text-rose-400">*</span>

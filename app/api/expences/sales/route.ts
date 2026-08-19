@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { RowDataPacket, ResultSetHeader } from "mysql2";
 
-// 1. GET Request (Branch ID එක අනුව Filter කිරීමේ පහසුකමද සහිතයි)
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -15,7 +14,7 @@ export async function GET(req: Request) {
     `;
     const queryParams: any[] = [];
 
-    // URL එකේ branch_id එකක් එවුවොත් ඒ Branch එකේ විතරක් Data ගනී (e.g. /api/expences/sales?branch_id=1)
+ 
     if (branch_id) {
       query += ` WHERE s.branch_id = ?`;
       queryParams.push(branch_id);
