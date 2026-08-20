@@ -29,7 +29,7 @@ export default function TotalExpensesPage() {
       }
     } catch (err) {
       console.error("Failed to load expense breakdown matrix:", err);
-    } fontinally: {
+    } finally {
       setLoading(false);
       setRefreshing(false);
     }
@@ -45,7 +45,6 @@ export default function TotalExpensesPage() {
     const other = Number(branch.other_expenses || 0);
     const rawSales = Number(branch.sales_expenses || 0);
 
-    // Rule: Salary හෝ Other 0 නම් Sales Expenses ගණනය නොවේ
     const effectiveSales = (salary === 0 || other === 0) ? 0 : rawSales;
     
     return acc + salary + other + effectiveSales;
@@ -115,12 +114,10 @@ export default function TotalExpensesPage() {
                 const salary = Number(branch.salary_expenses || 0);
                 const rawSales = Number(branch.sales_expenses || 0);
                 const other = Number(branch.other_expenses || 0);
-                
-                // Salary හෝ Other 0.00 නම් Sales Expense එක ගණනය නොකෙරේ (0 වේ)
+
                 const isSalesIgnored = salary === 0 || other === 0;
                 const effectiveSales = isSalesIgnored ? 0 : rawSales;
 
-                // Combined Gross Total (Effective Sales පමණක් එකතු වේ)
                 const grossTotal = salary + effectiveSales + other;
                 const hasExpenses = grossTotal > 0;
 

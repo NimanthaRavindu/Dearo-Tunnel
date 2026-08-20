@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
-import { DollarSign, Calendar, User, PlusCircle, TrendingUp, CreditCard, ArrowLeft, Trash2, Loader2, Receipt, Search } from "lucide-react";
+import { DollarSign, Calendar, User, PlusCircle, TrendingUp, CreditCard, ArrowLeft, Trash2, Loader2, Receipt, Search, XCircle } from "lucide-react";
 import Link from "next/link";
 
 interface SalesExpense {
@@ -30,7 +30,7 @@ export default function SalesExpensesPage() {
     date: new Date().toISOString().split("T")[0],
   });
 
-  // 1. Fetch Expenses for specific Branch (GET)
+  // Fetch Expenses for specific Branch
   const fetchExpenses = useCallback(async () => {
     if (!branchId) return;
     try {
@@ -64,11 +64,14 @@ export default function SalesExpensesPage() {
     return isCurrentBranch && matchesSearch;
   });
 
-  const displayAmount = selectedId
-    ? Number(expenses.find((item) => item.id === selectedId)?.amount || 0)
+  const selectedRecord = expenses.find((item) => item.id === selectedId);
+
+ 
+  const displayAmount = selectedRecord
+    ? Number(selectedRecord.amount || 0)
     : filteredExpenses.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
 
-  // 2. Submit New Expense (POST)
+  // Submit New Expense
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.personName || !formData.amount || !branchId) return;
@@ -87,7 +90,6 @@ export default function SalesExpensesPage() {
       if (res.ok) {
         const newRecord = await res.json();
 
-        // Reset form inputs & selected item
         setFormData({
           personName: "",
           amount: "",
@@ -111,7 +113,7 @@ export default function SalesExpensesPage() {
     }
   };
 
-  // 3. Delete Expense (DELETE)
+  // Delete Expense
   const handleDelete = async (id: number, e: React.MouseEvent) => {
     e.stopPropagation(); 
     if (!confirm("Are you sure you want to delete this expense entry?")) return;
@@ -124,12 +126,7 @@ export default function SalesExpensesPage() {
       if (res.ok) {
         setExpenses((prev) => prev.filter((item) => item.id !== id));
         if (selectedId === id) {
-          setSelectedId(null);
-          setFormData({
-            personName: "",
-            amount: "",
-            date: new Date().toISOString().split("T")[0],
-          });
+          clearSelection();
         }
       } else {
         alert("Failed to delete expense entry");
@@ -139,16 +136,10 @@ export default function SalesExpensesPage() {
     }
   };
 
-  // 4. Select Row Handler
+  // Select Row Handler
   const handleSelectRow = (item: SalesExpense) => {
     if (selectedId === item.id) {
-      // Unselect if clicking the same item again
-      setSelectedId(null);
-      setFormData({
-        personName: "",
-        amount: "",
-        date: new Date().toISOString().split("T")[0],
-      });
+      clearSelection();
     } else {
       setSelectedId(item.id);
       setFormData({
@@ -157,6 +148,16 @@ export default function SalesExpensesPage() {
         date: item.date ? item.date.split("T")[0] : new Date().toISOString().split("T")[0],
       });
     }
+  };
+
+  // Clear Selection Reset Function
+  const clearSelection = () => {
+    setSelectedId(null);
+    setFormData({
+      personName: "",
+      amount: "",
+      date: new Date().toISOString().split("T")[0],
+    });
   };
 
   return (
@@ -187,31 +188,44 @@ export default function SalesExpensesPage() {
             </div>
           </div>
 
-          {/* Quick Metrics */}
+          {/* Dynamic Selected / Total Metric Card */}
           <div className="flex items-center gap-3">
-            <div className="bg-slate-900/90 border border-slate-800 rounded-xl px-4 py-2 flex items-center gap-3 shadow-sm">
-              <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-lg">
-                <CreditCard className="w-4 h-4" />
+            <div className="bg-slate-900/90 border border-slate-800 rounded-xl px-4 py-2 flex items-center gap-3 shadow-sm min-w-[220px] justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-lg">
+                  <CreditCard className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-medium tracking-wider uppercase text-slate-400">
+                    {selectedRecord ? `Selected: ${selectedRecord.personName}` : "Total Branch Expenses"}
+                  </p>
+                  <p className="text-sm md:text-base font-bold font-mono text-emerald-400">
+                    LKR{" "}
+                    {displayAmount.toLocaleString("en-US", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-[10px] font-medium tracking-wider uppercase text-slate-400">
-                  {selectedId ? "Selected Person Expense" : "Total Branch Expenses"}
-                </p>
-                <p className="text-sm md:text-base font-bold font-mono text-emerald-400">
-                  LKR{" "}
-                  {displayAmount.toLocaleString("en-US", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
-                </p>
-              </div>
+
+              {/* Clear Selection Button */}
+              {selectedId && (
+                <button
+                  onClick={clearSelection}
+                  className="p-1 hover:bg-slate-800 text-slate-400 hover:text-rose-400 rounded-lg transition-colors"
+                  title="Clear selection to show total"
+                >
+                  <XCircle className="w-4 h-4" />
+                </button>
+              )}
             </div>
           </div>
         </div>
 
         {/* Main Grid: Form + Data Log */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Entry Form Component */}
+          {/* Entry Form */}
           <div className="lg:col-span-4 bg-slate-900/70 border border-slate-800/90 rounded-2xl p-5 h-fit shadow-xl backdrop-blur-sm">
             <div className="flex items-center justify-between border-b border-slate-800/80 pb-3 mb-4">
               <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
@@ -299,10 +313,10 @@ export default function SalesExpensesPage() {
             </form>
           </div>
 
-          {/* Expenses Log Table Component */}
+          {/* Expenses Log Table */}
           <div className="lg:col-span-8 bg-slate-900/70 border border-slate-800/90 rounded-2xl p-5 shadow-xl backdrop-blur-sm flex flex-col justify-between">
             <div>
-              {/* Table Header & Search */}
+              {/* Header & Search */}
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-800/80 pb-3 mb-4">
                 <div className="flex items-center gap-2">
                   <Receipt className="w-4 h-4 text-emerald-400" />
@@ -314,7 +328,6 @@ export default function SalesExpensesPage() {
                   </span>
                 </div>
 
-                {/* Search Input */}
                 <div className="relative min-w-[200px]">
                   <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-500" />
                   <input
