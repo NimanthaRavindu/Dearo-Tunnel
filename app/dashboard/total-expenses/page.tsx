@@ -4,12 +4,22 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Coins, FileSpreadsheet, RefreshCw } from "lucide-react";
 
+interface BranchExpense {
+  id: number | string;
+  branch_name: string;
+  branch_code: string;
+  salary_expenses: number;
+  other_expenses: number;
+  sales_expenses?: number;
+  total_expenses: number;
+}
+
 export default function TotalExpensesPage() {
   const router = useRouter();
-  const [branches, setBranches] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [totalSum, setTotalSum] = useState(0);
-  const [refreshing, setRefreshing] = useState(false);
+  const [branches, setBranches] = useState<BranchExpense[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [totalSum, setTotalSum] = useState<number>(0);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
 
   const fetchExpenseBreakdown = async () => {
     try {
@@ -42,8 +52,7 @@ export default function TotalExpensesPage() {
 
   return (
     <div className="p-4 md:p-6 space-y-6 bg-[#070a12] min-h-screen text-slate-300 font-mono text-xs selection:bg-sky-500/20 selection:text-sky-300">
-      
-      {/* 🔹 Navigation & Dynamic Total Card Header */}
+      {/* Navigation & Dynamic Total Card Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-900 pb-4">
         <div className="space-y-1.5">
           <button 
@@ -75,7 +84,7 @@ export default function TotalExpensesPage() {
         </div>
       </div>
 
-      {/* 🔹 Compact Spreadsheet Data Table */}
+      {/* Spreadsheet Data Table */}
       <div className="bg-[#0d1527]/30 border border-slate-900 rounded-xl overflow-hidden shadow-sm">
         <div className="px-4 py-3 bg-[#0a0f1d] border-b border-slate-900 flex items-center gap-1.5 text-slate-400 text-[10px] font-bold uppercase tracking-wider">
           <FileSpreadsheet size={13} className="text-slate-500" /> Infrastructure Financial Auditing Matrix
@@ -85,14 +94,20 @@ export default function TotalExpensesPage() {
             <thead>
               <tr className="border-b border-slate-900 text-slate-500 text-[10px] uppercase font-bold tracking-wider bg-[#090e1a]/30">
                 <th className="py-2.5 px-4">Node / Branch Identity</th>
-                <th className="py-2.5 px-4 text-right">Salary Expenses Component</th>
-                <th className="py-2.5 px-4 text-right">Other Expenses Component</th>
+                <th className="py-2.5 px-4 text-right">Salary Expenses</th>
+                <th className="py-2.5 px-4 text-right">Sales Expenses</th>
+                <th className="py-2.5 px-4 text-right">Other Expenses</th>
                 <th className="py-2.5 px-4 text-right text-sky-400 bg-sky-950/10">Gross Combined Expenses</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-900/40 text-slate-400 font-sans">
-              {branches.map((branch: any) => {
-                const hasExpenses = branch.salary_expenses > 0 || branch.other_expenses > 0;
+              {branches.map((branch) => {
+                const salary = Number(branch.salary_expenses || 0);
+                const sales = Number(branch.sales_expenses || 0);
+                const other = Number(branch.other_expenses || 0);
+                const grossTotal = branch.total_expenses ?? (salary + sales + other);
+                const hasExpenses = salary > 0 || sales > 0 || other > 0;
+
                 return (
                   <tr 
                     key={branch.id} 
@@ -102,13 +117,16 @@ export default function TotalExpensesPage() {
                       {branch.branch_name} <span className="text-slate-600 font-normal text-[10px]">({branch.branch_code})</span>
                     </td>
                     <td className="py-2.5 px-4 text-right font-mono">
-                      {branch.salary_expenses > 0 ? branch.salary_expenses.toLocaleString("en-US", { minimumFractionDigits: 2 }) : "0.00"}
+                      {salary > 0 ? salary.toLocaleString("en-US", { minimumFractionDigits: 2 }) : "0.00"}
+                    </td>
+                    <td className="py-2.5 px-4 text-right font-mono text-emerald-400/90">
+                      {sales > 0 ? sales.toLocaleString("en-US", { minimumFractionDigits: 2 }) : "0.00"}
                     </td>
                     <td className="py-2.5 px-4 text-right font-mono">
-                      {branch.other_expenses > 0 ? branch.other_expenses.toLocaleString("en-US", { minimumFractionDigits: 2 }) : "0.00"}
+                      {other > 0 ? other.toLocaleString("en-US", { minimumFractionDigits: 2 }) : "0.00"}
                     </td>
                     <td className="py-2.5 px-4 text-right font-mono font-bold bg-sky-950/5 text-slate-200">
-                      {branch.total_expenses.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                      {grossTotal.toLocaleString("en-US", { minimumFractionDigits: 2 })}
                     </td>
                   </tr>
                 );
