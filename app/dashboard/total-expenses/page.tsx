@@ -18,7 +18,6 @@ export default function TotalExpensesPage() {
   const router = useRouter();
   const [branches, setBranches] = useState<BranchExpense[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [totalSum, setTotalSum] = useState<number>(0);
   const [refreshing, setRefreshing] = useState<boolean>(false);
 
   const fetchExpenseBreakdown = async () => {
@@ -27,11 +26,10 @@ export default function TotalExpensesPage() {
       if (response.ok) {
         const json = await response.json();
         setBranches(json.branches || []);
-        setTotalSum(json.cards?.totalExpenses || 0);
       }
     } catch (err) {
       console.error("Failed to load expense breakdown matrix:", err);
-    } finally {
+    } fontinally: {
       setLoading(false);
       setRefreshing(false);
     }
@@ -40,6 +38,18 @@ export default function TotalExpensesPage() {
   useEffect(() => {
     fetchExpenseBreakdown();
   }, []);
+
+  // Calculate overall total dynamically based on effective sales rule
+  const calculatedTotalSum = branches.reduce((acc, branch) => {
+    const salary = Number(branch.salary_expenses || 0);
+    const other = Number(branch.other_expenses || 0);
+    const rawSales = Number(branch.sales_expenses || 0);
+
+    // Rule: Salary හෝ Other 0 නම් Sales Expenses ගණනය නොවේ
+    const effectiveSales = (salary === 0 || other === 0) ? 0 : rawSales;
+    
+    return acc + salary + other + effectiveSales;
+  }, 0);
 
   if (loading) {
     return (
@@ -78,7 +88,7 @@ export default function TotalExpensesPage() {
           <div className="text-right bg-sky-950/20 border border-sky-900/40 rounded-xl px-4 py-2 min-w-[180px]">
             <span className="text-[9px] text-sky-400 font-bold uppercase block tracking-wider mb-0.5">Aggregate Gross Expenses</span>
             <span className="text-sm font-bold font-sans text-white">
-              LKR {totalSum.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              LKR {calculatedTotalSum.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </div>
         </div>
@@ -103,11 +113,15 @@ export default function TotalExpensesPage() {
             <tbody className="divide-y divide-slate-900/40 text-slate-400 font-sans">
               {branches.map((branch) => {
                 const salary = Number(branch.salary_expenses || 0);
-                const sales = Number(branch.sales_expenses || 0);
+                const rawSales = Number(branch.sales_expenses || 0);
                 const other = Number(branch.other_expenses || 0);
                 
-                // Fixed: Always sum salary + sales + other
-                const grossTotal = salary + sales + other;
+                // Salary හෝ Other 0.00 නම් Sales Expense එක ගණනය නොකෙරේ (0 වේ)
+                const isSalesIgnored = salary === 0 || other === 0;
+                const effectiveSales = isSalesIgnored ? 0 : rawSales;
+
+                // Combined Gross Total (Effective Sales පමණක් එකතු වේ)
+                const grossTotal = salary + effectiveSales + other;
                 const hasExpenses = grossTotal > 0;
 
                 return (
@@ -122,7 +136,12 @@ export default function TotalExpensesPage() {
                       {salary > 0 ? salary.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}
                     </td>
                     <td className="py-2.5 px-4 text-right font-mono text-emerald-400/90">
-                      {sales > 0 ? sales.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}
+                      {isSalesIgnored && rawSales > 0 ? (
+                        <span className="text-slate-500 line-through text-[10px] mr-1" title="Ignored because Salary or Other Expense is 0.00">
+                          {rawSales.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      ) : null}
+                      {effectiveSales > 0 ? effectiveSales.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}
                     </td>
                     <td className="py-2.5 px-4 text-right font-mono">
                       {other > 0 ? other.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}

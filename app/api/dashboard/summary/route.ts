@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 
 export async function GET() {
   try {
-    // 1. UPDATE branch table with straight total calculation
+    // 1. UPDATE branch table (Sales expense added ONLY IF both salary and other > 0)
     await db.query(`
       UPDATE branch b
       LEFT JOIN (
@@ -19,11 +19,16 @@ export async function GET() {
         FROM other_expenses GROUP BY branch_id
       ) o ON b.id = o.branch_id
       SET 
-        b.total_expenses = COALESCE(s.salary_total, 0) + COALESCE(se.sales_total, 0) + COALESCE(o.other_total, 0),
+        b.total_expenses = COALESCE(s.salary_total, 0) + COALESCE(o.other_total, 0) + 
+          CASE 
+            WHEN COALESCE(s.salary_total, 0) > 0 AND COALESCE(o.other_total, 0) > 0 
+            THEN COALESCE(se.sales_total, 0) 
+            ELSE 0 
+          END,
         b.total_balance = COALESCE(s.salary_balance, 0) + COALESCE(o.other_balance, 0)
     `);
 
-    // 2. Fetch calculated values per branch
+    // 2. Fetch calculated values per branch with conditional sales logic
     const query = `
       SELECT 
         b.id,
@@ -32,7 +37,14 @@ export async function GET() {
         COALESCE(s.salary_total, 0) AS salary_expenses,
         COALESCE(se.sales_total, 0) AS sales_expenses,
         COALESCE(o.other_total, 0) AS other_expenses,
-        (COALESCE(s.salary_total, 0) + COALESCE(se.sales_total, 0) + COALESCE(o.other_total, 0)) AS total_expenses,
+        (
+          COALESCE(s.salary_total, 0) + COALESCE(o.other_total, 0) + 
+          CASE 
+            WHEN COALESCE(s.salary_total, 0) > 0 AND COALESCE(o.other_total, 0) > 0 
+            THEN COALESCE(se.sales_total, 0) 
+            ELSE 0 
+          END
+        ) AS total_expenses,
         COALESCE(s.salary_balance, 0) AS salary_balance,
         COALESCE(o.other_balance, 0) AS other_balance,
         (COALESCE(s.salary_balance, 0) + COALESCE(o.other_balance, 0)) AS total_balance
@@ -61,7 +73,12 @@ export async function GET() {
       b.salary_expenses = Number(b.salary_expenses || 0);
       b.sales_expenses = Number(b.sales_expenses || 0);
       b.other_expenses = Number(b.other_expenses || 0);
-      b.total_expenses = Number(b.total_expenses || 0);
+
+      // Check condition: Salary හෝ Other 0.00 නම් Sales Expense එක 0 ලෙස සලකනු ලැබේ
+      const effectiveSales = (b.salary_expenses > 0 && b.other_expenses > 0) ? b.sales_expenses : 0;
+      
+      // Calculate total expenses for branch
+      b.total_expenses = b.salary_expenses + b.other_expenses + effectiveSales;
       
       b.salary_balance = Number(b.salary_balance || 0);
       b.other_balance = Number(b.other_balance || 0);
