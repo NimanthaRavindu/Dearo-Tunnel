@@ -2,11 +2,46 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { RowDataPacket, ResultSetHeader } from "mysql2";
 
-// 1. GET Request (Fetch expenses by branch_id)
+// 1. GET Request (Fetch expenses or calculate totals by branch_id)
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const branch_id = searchParams.get("branch_id");
+    const mode = searchParams.get("mode"); 
+
+    if (mode === "summary" && branch_id) {
+
+      const [branchRows] = await db.query<RowDataPacket[]>(
+        `SELECT salary_expense, other_expense FROM branch WHERE id = ?`,
+        [branch_id]
+      );
+
+      const salaryExpense = Number(branchRows[0]?.salary_expense || 0);
+      const otherExpense = Number(branchRows[0]?.other_expense || 0);
+
+      const [salesRows] = await db.query<RowDataPacket[]>(
+        `SELECT SUM(amount) AS total_sales FROM sales_expenses WHERE branch_id = ?`,
+        [branch_id]
+      );
+
+      const rawSalesTotal = Number(salesRows[0]?.total_sales || 0);
+
+      const effectiveSalesExpense = (salaryExpense <= 0 || otherExpense <= 0) 
+        ? 0 
+        : rawSalesTotal;
+
+      const grandTotal = salaryExpense + otherExpense + effectiveSalesExpense;
+
+      return NextResponse.json({
+        branch_id: Number(branch_id),
+        salary_expense: salaryExpense,
+        other_expense: otherExpense,
+        raw_sales_expense: rawSalesTotal,
+        effective_sales_expense: effectiveSalesExpense,
+        is_sales_ignored: salaryExpense <= 0 || otherExpense <= 0,
+        grand_total: grandTotal,
+      }, { status: 200 });
+    }
 
     let query = `
       SELECT s.id, s.branch_id, b.branch_name, s.personName, s.amount, s.date 
@@ -34,13 +69,12 @@ export async function GET(req: Request) {
   }
 }
 
-// 2. POST Request (New Entry with branch_name join)
+// 2. POST Request
 export async function POST(req: Request) {
   try {
     const body = await req.json();
     const { branch_id, personName, amount, date } = body;
 
-    // Data validation
     if (!branch_id || !personName || !amount || !date) {
       return NextResponse.json(
         { error: "All required fields (branch_id, personName, amount, date) must be provided" },
@@ -64,13 +98,11 @@ export async function POST(req: Request) {
       );
     }
 
-    // Insert into Database
     const [result] = await db.query<ResultSetHeader>(
       "INSERT INTO sales_expenses (branch_id, personName, amount, date) VALUES (?, ?, ?, ?)",
       [parsedBranchId, personName.trim(), parsedAmount, date]
     );
 
-    // Insert වූ Aluth record එක branch table එක සමඟ Join කර ගෙන UI එකට pass කිරීම
     const [newRows] = await db.query<RowDataPacket[]>(
       `SELECT s.id, s.branch_id, b.branch_name, s.personName, s.amount, s.date 
        FROM sales_expenses s 

@@ -22,6 +22,7 @@ export default function SalesExpensesPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [searchTerm, setSearchTerm] = useState<string>("");
+  const [selectedId, setSelectedId] = useState<number | null>(null);
 
   const [formData, setFormData] = useState({
     personName: "",
@@ -37,7 +38,6 @@ export default function SalesExpensesPage() {
       const res = await fetch(`/api/expences/sales?branch_id=${branchId}`);
       if (res.ok) {
         const data = await res.json();
-       
         setExpenses(Array.isArray(data) ? data : []);
       } else {
         console.error("Failed to fetch expenses");
@@ -64,11 +64,9 @@ export default function SalesExpensesPage() {
     return isCurrentBranch && matchesSearch;
   });
 
-  // Dynamic Total Calculation for current branch only
-  const totalAmount = filteredExpenses.reduce(
-    (acc, curr) => acc + Number(curr.amount || 0),
-    0
-  );
+  const displayAmount = selectedId
+    ? Number(expenses.find((item) => item.id === selectedId)?.amount || 0)
+    : filteredExpenses.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
 
   // 2. Submit New Expense (POST)
   const handleSubmit = async (e: React.FormEvent) => {
@@ -89,14 +87,14 @@ export default function SalesExpensesPage() {
       if (res.ok) {
         const newRecord = await res.json();
 
-        // Form inputs reset කිරීම
+        // Reset form inputs & selected item
         setFormData({
           personName: "",
           amount: "",
           date: new Date().toISOString().split("T")[0],
         });
+        setSelectedId(null);
 
-        
         if (newRecord && newRecord.id) {
           setExpenses((prev) => [newRecord, ...prev]);
         } else {
@@ -114,7 +112,8 @@ export default function SalesExpensesPage() {
   };
 
   // 3. Delete Expense (DELETE)
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: number, e: React.MouseEvent) => {
+    e.stopPropagation(); 
     if (!confirm("Are you sure you want to delete this expense entry?")) return;
 
     try {
@@ -124,11 +123,39 @@ export default function SalesExpensesPage() {
 
       if (res.ok) {
         setExpenses((prev) => prev.filter((item) => item.id !== id));
+        if (selectedId === id) {
+          setSelectedId(null);
+          setFormData({
+            personName: "",
+            amount: "",
+            date: new Date().toISOString().split("T")[0],
+          });
+        }
       } else {
         alert("Failed to delete expense entry");
       }
     } catch (err) {
       console.error("Error deleting item:", err);
+    }
+  };
+
+  // 4. Select Row Handler
+  const handleSelectRow = (item: SalesExpense) => {
+    if (selectedId === item.id) {
+      // Unselect if clicking the same item again
+      setSelectedId(null);
+      setFormData({
+        personName: "",
+        amount: "",
+        date: new Date().toISOString().split("T")[0],
+      });
+    } else {
+      setSelectedId(item.id);
+      setFormData({
+        personName: item.personName,
+        amount: String(item.amount),
+        date: item.date ? item.date.split("T")[0] : new Date().toISOString().split("T")[0],
+      });
     }
   };
 
@@ -168,11 +195,11 @@ export default function SalesExpensesPage() {
               </div>
               <div>
                 <p className="text-[10px] font-medium tracking-wider uppercase text-slate-400">
-                  Total Branch Expenses
+                  {selectedId ? "Selected Person Expense" : "Total Branch Expenses"}
                 </p>
                 <p className="text-sm md:text-base font-bold font-mono text-emerald-400">
                   LKR{" "}
-                  {totalAmount.toLocaleString("en-US", {
+                  {displayAmount.toLocaleString("en-US", {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
                   })}
@@ -189,7 +216,7 @@ export default function SalesExpensesPage() {
             <div className="flex items-center justify-between border-b border-slate-800/80 pb-3 mb-4">
               <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
                 <PlusCircle className="w-4 h-4 text-emerald-400" />
-                New Expense Entry
+                {selectedId ? "Selected Person Details" : "New Expense Entry"}
               </h2>
               <span className="text-[10px] uppercase font-mono tracking-wider bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20">
                 Branch #{branchId}
@@ -337,7 +364,12 @@ export default function SalesExpensesPage() {
                       filteredExpenses.map((item) => (
                         <tr
                           key={item.id}
-                          className="hover:bg-slate-800/40 transition-colors group"
+                          onClick={() => handleSelectRow(item)}
+                          className={`cursor-pointer transition-colors ${
+                            selectedId === item.id
+                              ? "bg-emerald-950/50 border-l-2 border-emerald-500"
+                              : "hover:bg-slate-800/40"
+                          }`}
                         >
                           <td className="py-2.5 px-3 text-slate-400 whitespace-nowrap font-mono">
                             {item.date ? new Date(item.date).toISOString().split("T")[0] : "N/A"}
@@ -356,8 +388,8 @@ export default function SalesExpensesPage() {
                           </td>
                           <td className="py-2.5 px-3 text-center">
                             <button
-                              onClick={() => handleDelete(item.id)}
-                              className="text-slate-500 hover:text-rose-400 p-1 rounded-lg transition-colors group-hover:opacity-100"
+                              onClick={(e) => handleDelete(item.id, e)}
+                              className="text-slate-500 hover:text-rose-400 p-1 rounded-lg transition-colors"
                               title="Delete Record"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
