@@ -105,7 +105,10 @@ export default function TotalExpensesPage() {
                 const salary = Number(branch.salary_expenses || 0);
                 const sales = Number(branch.sales_expenses || 0);
                 const other = Number(branch.other_expenses || 0);
-                const grossTotal = branch.total_expenses ?? (salary + sales + other);
+                
+                // Add sales_expenses ONLY IF salary > 0 OR other > 0
+                const hasPrimaryExpense = salary > 0 || other > 0;
+                const grossTotal = hasPrimaryExpense ? (salary + sales + other) : (salary + other);
                 const hasExpenses = salary > 0 || sales > 0 || other > 0;
 
                 return (

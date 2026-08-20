@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 
 export async function GET() {
   try {
-    // 1. UPDATE branch table with Salary, Sales, and Other expenses totals
+    // 1. UPDATE branch table with conditional logic for total_expenses
     await db.query(`
       UPDATE branch b
       LEFT JOIN (
@@ -30,7 +30,11 @@ export async function GET() {
         GROUP BY branch_id
       ) o ON b.id = o.branch_id
       SET 
-        b.total_expenses = COALESCE(s.salary_total, 0) + COALESCE(se.sales_total, 0) + COALESCE(o.other_total, 0),
+        b.total_expenses = CASE 
+          WHEN COALESCE(s.salary_total, 0) > 0 OR COALESCE(o.other_total, 0) > 0 
+          THEN COALESCE(s.salary_total, 0) + COALESCE(se.sales_total, 0) + COALESCE(o.other_total, 0)
+          ELSE COALESCE(s.salary_total, 0) + COALESCE(o.other_total, 0)
+        END,
         b.total_balance = COALESCE(s.salary_balance, 0) + COALESCE(o.other_balance, 0)
     `);
 
@@ -43,7 +47,11 @@ export async function GET() {
         COALESCE(s.salary_total, 0) AS salary_expenses,
         COALESCE(se.sales_total, 0) AS sales_expenses,
         COALESCE(o.other_total, 0) AS other_expenses,
-        (COALESCE(s.salary_total, 0) + COALESCE(se.sales_total, 0) + COALESCE(o.other_total, 0)) AS total_expenses,
+        CASE 
+          WHEN COALESCE(s.salary_total, 0) > 0 OR COALESCE(o.other_total, 0) > 0 
+          THEN COALESCE(s.salary_total, 0) + COALESCE(se.sales_total, 0) + COALESCE(o.other_total, 0)
+          ELSE COALESCE(s.salary_total, 0) + COALESCE(o.other_total, 0)
+        END AS total_expenses,
         COALESCE(s.salary_balance, 0) AS salary_balance,
         COALESCE(o.other_balance, 0) AS other_balance,
         (COALESCE(s.salary_balance, 0) + COALESCE(o.other_balance, 0)) AS total_balance
