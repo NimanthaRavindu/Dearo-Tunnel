@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { RowDataPacket, ResultSetHeader } from "mysql2";
 
+// 1. GET Request (Fetch expenses by branch_id)
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -14,7 +15,6 @@ export async function GET(req: Request) {
     `;
     const queryParams: any[] = [];
 
- 
     if (branch_id) {
       query += ` WHERE s.branch_id = ?`;
       queryParams.push(branch_id);
@@ -34,7 +34,7 @@ export async function GET(req: Request) {
   }
 }
 
-// 2. POST Request (New Entry)
+// 2. POST Request (New Entry with branch_name join)
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -64,21 +64,22 @@ export async function POST(req: Request) {
       );
     }
 
+    // Insert into Database
     const [result] = await db.query<ResultSetHeader>(
       "INSERT INTO sales_expenses (branch_id, personName, amount, date) VALUES (?, ?, ?, ?)",
       [parsedBranchId, personName.trim(), parsedAmount, date]
     );
 
-    return NextResponse.json(
-      {
-        id: result.insertId,
-        branch_id: parsedBranchId,
-        personName: personName.trim(),
-        amount: parsedAmount,
-        date,
-      },
-      { status: 201 }
+    // Insert වූ Aluth record එක branch table එක සමඟ Join කර ගෙන UI එකට pass කිරීම
+    const [newRows] = await db.query<RowDataPacket[]>(
+      `SELECT s.id, s.branch_id, b.branch_name, s.personName, s.amount, s.date 
+       FROM sales_expenses s 
+       LEFT JOIN branch b ON s.branch_id = b.id 
+       WHERE s.id = ?`,
+      [result.insertId]
     );
+
+    return NextResponse.json(newRows[0], { status: 201 });
   } catch (error) {
     console.error("Database POST Error:", error);
     return NextResponse.json(

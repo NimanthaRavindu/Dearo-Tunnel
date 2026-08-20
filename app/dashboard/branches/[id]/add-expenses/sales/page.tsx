@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
-import { DollarSign,Calendar, User, PlusCircle, TrendingUp, CreditCard, ArrowLeft, Trash2, Loader2, Receipt, Search } from "lucide-react";
+import { DollarSign, Calendar, User, PlusCircle, TrendingUp, CreditCard, ArrowLeft, Trash2, Loader2, Receipt, Search } from "lucide-react";
 import Link from "next/link";
 
 interface SalesExpense {
@@ -37,7 +37,8 @@ export default function SalesExpensesPage() {
       const res = await fetch(`/api/expences/sales?branch_id=${branchId}`);
       if (res.ok) {
         const data = await res.json();
-        setExpenses(data);
+       
+        setExpenses(Array.isArray(data) ? data : []);
       } else {
         console.error("Failed to fetch expenses");
       }
@@ -52,15 +53,18 @@ export default function SalesExpensesPage() {
     fetchExpenses();
   }, [fetchExpenses]);
 
-  // Filtered expenses based on search
-  const filteredExpenses = expenses.filter(
-    (item) =>
-      item.personName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+  // Filtered expenses based on active Branch ID and search term
+  const filteredExpenses = expenses.filter((item) => {
+    const isCurrentBranch = String(item.branch_id) === String(branchId);
+    const matchesSearch =
+      item.personName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (item.branch_name &&
-        item.branch_name.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+        item.branch_name.toLowerCase().includes(searchTerm.toLowerCase()));
 
-  // Dynamic Total Calculation
+    return isCurrentBranch && matchesSearch;
+  });
+
+  // Dynamic Total Calculation for current branch only
   const totalAmount = filteredExpenses.reduce(
     (acc, curr) => acc + Number(curr.amount || 0),
     0
@@ -83,12 +87,21 @@ export default function SalesExpensesPage() {
       });
 
       if (res.ok) {
+        const newRecord = await res.json();
+
+        // Form inputs reset කිරීම
         setFormData({
           personName: "",
           amount: "",
           date: new Date().toISOString().split("T")[0],
         });
-        fetchExpenses();
+
+        
+        if (newRecord && newRecord.id) {
+          setExpenses((prev) => [newRecord, ...prev]);
+        } else {
+          await fetchExpenses();
+        }
       } else {
         const errData = await res.json();
         alert(errData.error || "Failed to record expense");
@@ -142,7 +155,7 @@ export default function SalesExpensesPage() {
                 </h1>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                Log and monitor operational, distribution, and promotional costs.
+                Log and monitor operational, distribution, and promotional costs for Branch #{branchId}.
               </p>
             </div>
           </div>
@@ -155,7 +168,7 @@ export default function SalesExpensesPage() {
               </div>
               <div>
                 <p className="text-[10px] font-medium tracking-wider uppercase text-slate-400">
-                  Total Expenses
+                  Total Branch Expenses
                 </p>
                 <p className="text-sm md:text-base font-bold font-mono text-emerald-400">
                   LKR{" "}
@@ -179,7 +192,7 @@ export default function SalesExpensesPage() {
                 New Expense Entry
               </h2>
               <span className="text-[10px] uppercase font-mono tracking-wider bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20">
-                Active
+                Branch #{branchId}
               </span>
             </div>
 
@@ -267,7 +280,7 @@ export default function SalesExpensesPage() {
                 <div className="flex items-center gap-2">
                   <Receipt className="w-4 h-4 text-emerald-400" />
                   <h2 className="text-sm font-semibold text-slate-200">
-                    Expense Logs
+                    Branch Expense Logs
                   </h2>
                   <span className="text-[10px] font-mono bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full border border-slate-700/50">
                     {filteredExpenses.length} Records
@@ -317,7 +330,7 @@ export default function SalesExpensesPage() {
                           className="text-center py-10 text-slate-500"
                         >
                           <Receipt className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                          No matching expense records found.
+                          No sales expenses found for Branch #{branchId}.
                         </td>
                       </tr>
                     ) : (
