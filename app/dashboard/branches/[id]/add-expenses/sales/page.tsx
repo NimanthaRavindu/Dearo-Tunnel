@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
-import { DollarSign,Calendar,User,PlusCircle,TrendingUp,CreditCard,ArrowLeft,Trash2,Loader2,Receipt,Search} from "lucide-react";
+import { DollarSign,Calendar, User, PlusCircle, TrendingUp, CreditCard, ArrowLeft, Trash2, Loader2, Receipt, Search } from "lucide-react";
 import Link from "next/link";
 
 interface SalesExpense {
@@ -16,7 +16,7 @@ interface SalesExpense {
 
 export default function SalesExpensesPage() {
   const params = useParams();
-  const branchId = params?.id; 
+  const branchId = params?.id;
 
   const [expenses, setExpenses] = useState<SalesExpense[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -62,7 +62,7 @@ export default function SalesExpensesPage() {
 
   // Dynamic Total Calculation
   const totalAmount = filteredExpenses.reduce(
-    (acc, curr) => acc + Number(curr.amount),
+    (acc, curr) => acc + Number(curr.amount || 0),
     0
   );
 
@@ -78,7 +78,7 @@ export default function SalesExpensesPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...formData,
-          branch_id: branchId, 
+          branch_id: branchId,
         }),
       });
 
@@ -161,6 +161,7 @@ export default function SalesExpensesPage() {
                   LKR{" "}
                   {totalAmount.toLocaleString("en-US", {
                     minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
                   })}
                 </p>
               </div>
@@ -326,7 +327,7 @@ export default function SalesExpensesPage() {
                           className="hover:bg-slate-800/40 transition-colors group"
                         >
                           <td className="py-2.5 px-3 text-slate-400 whitespace-nowrap font-mono">
-                            {new Date(item.date).toISOString().split("T")[0]}
+                            {item.date ? new Date(item.date).toISOString().split("T")[0] : "N/A"}
                           </td>
                           <td className="py-2.5 px-3 text-emerald-400/90 whitespace-nowrap font-medium">
                             {item.branch_name || `Branch #${item.branch_id}`}
@@ -335,8 +336,9 @@ export default function SalesExpensesPage() {
                             {item.personName}
                           </td>
                           <td className="py-2.5 px-3 text-right font-medium font-mono text-emerald-400 whitespace-nowrap">
-                            {Number(item.amount).toLocaleString("en-US", {
+                            {Number(item.amount || 0).toLocaleString("en-US", {
                               minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
                             })}
                           </td>
                           <td className="py-2.5 px-3 text-center">

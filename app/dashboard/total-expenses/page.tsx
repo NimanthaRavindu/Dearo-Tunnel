@@ -106,10 +106,9 @@ export default function TotalExpensesPage() {
                 const sales = Number(branch.sales_expenses || 0);
                 const other = Number(branch.other_expenses || 0);
                 
-                // Add sales_expenses ONLY IF salary > 0 OR other > 0
-                const hasPrimaryExpense = salary > 0 || other > 0;
-                const grossTotal = hasPrimaryExpense ? (salary + sales + other) : (salary + other);
-                const hasExpenses = salary > 0 || sales > 0 || other > 0;
+                // Fixed: Always sum salary + sales + other
+                const grossTotal = salary + sales + other;
+                const hasExpenses = grossTotal > 0;
 
                 return (
                   <tr 
@@ -120,16 +119,16 @@ export default function TotalExpensesPage() {
                       {branch.branch_name} <span className="text-slate-600 font-normal text-[10px]">({branch.branch_code})</span>
                     </td>
                     <td className="py-2.5 px-4 text-right font-mono">
-                      {salary > 0 ? salary.toLocaleString("en-US", { minimumFractionDigits: 2 }) : "0.00"}
+                      {salary > 0 ? salary.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}
                     </td>
                     <td className="py-2.5 px-4 text-right font-mono text-emerald-400/90">
-                      {sales > 0 ? sales.toLocaleString("en-US", { minimumFractionDigits: 2 }) : "0.00"}
+                      {sales > 0 ? sales.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}
                     </td>
                     <td className="py-2.5 px-4 text-right font-mono">
-                      {other > 0 ? other.toLocaleString("en-US", { minimumFractionDigits: 2 }) : "0.00"}
+                      {other > 0 ? other.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}
                     </td>
                     <td className="py-2.5 px-4 text-right font-mono font-bold bg-sky-950/5 text-slate-200">
-                      {grossTotal.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                      {grossTotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                   </tr>
                 );
