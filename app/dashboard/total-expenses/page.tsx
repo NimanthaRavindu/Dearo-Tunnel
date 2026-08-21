@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Coins, FileSpreadsheet, RefreshCw } from "lucide-react";
 
@@ -14,7 +14,8 @@ interface BranchExpense {
   total_expenses: number;
 }
 
-export default function TotalExpensesPage() {
+// 1. Core Component containing searchParams logic
+function TotalExpensesContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const selectedSalesId = searchParams.get("selected_sales_id");
@@ -25,7 +26,7 @@ export default function TotalExpensesPage() {
 
   const fetchExpenseBreakdown = useCallback(async () => {
     try {
-      const url = selectedSalesId 
+      const url = selectedSalesId
         ? `/api/dashboard/summary?selected_sales_id=${selectedSalesId}`
         : "/api/dashboard/summary";
 
@@ -51,7 +52,7 @@ export default function TotalExpensesPage() {
     const salary = Number(branch.salary_expenses || 0);
     const sales = Number(branch.sales_expenses || 0);
     const other = Number(branch.other_expenses || 0);
-    
+
     return acc + salary + sales + other;
   }, 0);
 
@@ -59,7 +60,9 @@ export default function TotalExpensesPage() {
     return (
       <div className="h-screen w-full flex flex-col items-center justify-center text-slate-500 bg-[#070a12] font-mono text-xs">
         <div className="h-5 w-5 border-2 border-sky-500 border-t-transparent rounded-full animate-spin mb-2"></div>
-        <p className="uppercase tracking-widest text-[10px]">Compiling Expense Ledger Sheets...</p>
+        <p className="uppercase tracking-widest text-[10px]">
+          Compiling Expense Ledger Sheets...
+        </p>
       </div>
     );
   }
@@ -69,8 +72,8 @@ export default function TotalExpensesPage() {
       {/* Navigation & Dynamic Total Card Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-900 pb-4">
         <div className="space-y-1.5">
-          <button 
-            onClick={() => router.push("/dashboard")} 
+          <button
+            onClick={() => router.push("/dashboard")}
             className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-white uppercase font-bold transition-colors"
           >
             <ArrowLeft size={12} /> Back To Main Control Panel
@@ -79,20 +82,32 @@ export default function TotalExpensesPage() {
             <Coins size={15} className="text-sky-400" /> Gross Expense Breakdown Sub-Ledger
           </h2>
         </div>
-        
+
         <div className="flex items-center gap-4">
-          <button 
-            onClick={() => { setRefreshing(true); fetchExpenseBreakdown(); }}
+          <button
+            onClick={() => {
+              setRefreshing(true);
+              fetchExpenseBreakdown();
+            }}
             disabled={refreshing}
             className="p-2 bg-slate-900 border border-slate-800 rounded-lg hover:border-slate-700 text-slate-400 hover:text-white transition-all disabled:opacity-50"
             title="Refresh Ledger"
           >
-            <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
+            <RefreshCw
+              size={14}
+              className={refreshing ? "animate-spin" : ""}
+            />
           </button>
           <div className="text-right bg-sky-950/20 border border-sky-900/40 rounded-xl px-4 py-2 min-w-[180px]">
-            <span className="text-[9px] text-sky-400 font-bold uppercase block tracking-wider mb-0.5">Aggregate Gross Expenses</span>
+            <span className="text-[9px] text-sky-400 font-bold uppercase block tracking-wider mb-0.5">
+              Aggregate Gross Expenses
+            </span>
             <span className="text-sm font-bold font-sans text-white">
-              LKR {calculatedTotalSum.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              LKR{" "}
+              {calculatedTotalSum.toLocaleString("en-US", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
             </span>
           </div>
         </div>
@@ -111,7 +126,9 @@ export default function TotalExpensesPage() {
                 <th className="py-2.5 px-4 text-right">Salary Expenses</th>
                 <th className="py-2.5 px-4 text-right">Sales Expenses</th>
                 <th className="py-2.5 px-4 text-right">Other Expenses</th>
-                <th className="py-2.5 px-4 text-right text-sky-400 bg-sky-950/10">Gross Combined Expenses</th>
+                <th className="py-2.5 px-4 text-right text-sky-400 bg-sky-950/10">
+                  Gross Combined Expenses
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-900/40 text-slate-400 font-sans">
@@ -124,24 +141,47 @@ export default function TotalExpensesPage() {
                 const hasExpenses = grossTotal > 0;
 
                 return (
-                  <tr 
-                    key={branch.id} 
-                    className={`hover:bg-slate-900/10 transition-all ${!hasExpenses ? "opacity-30 bg-slate-950/5" : ""}`}
+                  <tr
+                    key={branch.id}
+                    className={`hover:bg-slate-900/10 transition-all ${
+                      !hasExpenses ? "opacity-30 bg-slate-950/5" : ""
+                    }`}
                   >
                     <td className="py-2.5 px-4 font-mono font-semibold text-slate-300">
-                      {branch.branch_name} <span className="text-slate-600 font-normal text-[10px]">({branch.branch_code})</span>
+                      {branch.branch_name}{" "}
+                      <span className="text-slate-600 font-normal text-[10px]">
+                        ({branch.branch_code})
+                      </span>
                     </td>
                     <td className="py-2.5 px-4 text-right font-mono">
-                      {salary > 0 ? salary.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}
+                      {salary > 0
+                        ? salary.toLocaleString("en-US", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })
+                        : "0.00"}
                     </td>
                     <td className="py-2.5 px-4 text-right font-mono text-emerald-400/90">
-                      {sales > 0 ? sales.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}
+                      {sales > 0
+                        ? sales.toLocaleString("en-US", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })
+                        : "0.00"}
                     </td>
                     <td className="py-2.5 px-4 text-right font-mono">
-                      {other > 0 ? other.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}
+                      {other > 0
+                        ? other.toLocaleString("en-US", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })
+                        : "0.00"}
                     </td>
                     <td className="py-2.5 px-4 text-right font-mono font-bold bg-sky-950/5 text-slate-200">
-                      {grossTotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {grossTotal.toLocaleString("en-US", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
                     </td>
                   </tr>
                 );
@@ -151,5 +191,23 @@ export default function TotalExpensesPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// 2. Exported Main Page wrapped with Suspense boundary
+export default function TotalExpensesPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="h-screen w-full flex flex-col items-center justify-center text-slate-500 bg-[#070a12] font-mono text-xs">
+          <div className="h-5 w-5 border-2 border-sky-500 border-t-transparent rounded-full animate-spin mb-2"></div>
+          <p className="uppercase tracking-widest text-[10px]">
+            Compiling Expense Ledger Sheets...
+          </p>
+        </div>
+      }
+    >
+      <TotalExpensesContent />
+    </Suspense>
   );
 }
