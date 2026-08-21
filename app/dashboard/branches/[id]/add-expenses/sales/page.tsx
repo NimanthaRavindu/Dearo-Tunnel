@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { useParams } from "next/navigation";
-import { DollarSign, Calendar, User, PlusCircle, TrendingUp, CreditCard, ArrowLeft, Trash2, Loader2, Receipt, Search, XCircle } from "lucide-react";
+import { useParams, useRouter } from "next/navigation";
+import { DollarSign, Calendar, User, PlusCircle, TrendingUp, CreditCard, ArrowLeft, Trash2, Loader2, Receipt, Search, XCircle, ExternalLink } from "lucide-react";
 import Link from "next/link";
 
 interface SalesExpense {
@@ -16,6 +16,7 @@ interface SalesExpense {
 
 export default function SalesExpensesPage() {
   const params = useParams();
+  const router = useRouter();
   const branchId = params?.id;
 
   const [expenses, setExpenses] = useState<SalesExpense[]>([]);
@@ -30,7 +31,6 @@ export default function SalesExpensesPage() {
     date: new Date().toISOString().split("T")[0],
   });
 
-  // Fetch Expenses for specific Branch
   const fetchExpenses = useCallback(async () => {
     if (!branchId) return;
     try {
@@ -53,7 +53,6 @@ export default function SalesExpensesPage() {
     fetchExpenses();
   }, [fetchExpenses]);
 
-  // Filtered expenses based on active Branch ID and search term
   const filteredExpenses = expenses.filter((item) => {
     const isCurrentBranch = String(item.branch_id) === String(branchId);
     const matchesSearch =
@@ -70,7 +69,6 @@ export default function SalesExpensesPage() {
     ? Number(selectedRecord.amount || 0)
     : filteredExpenses.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
 
-  // Submit New Expense
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.personName || !formData.amount || !branchId) return;
@@ -106,7 +104,6 @@ export default function SalesExpensesPage() {
     }
   };
 
-  // Delete Expense
   const handleDelete = async (id: number, e: React.MouseEvent) => {
     e.stopPropagation(); 
     if (!confirm("Are you sure you want to delete this expense entry?")) return;
@@ -129,7 +126,6 @@ export default function SalesExpensesPage() {
     }
   };
 
-  // Select Row Handler
   const handleSelectRow = (item: SalesExpense) => {
     if (selectedId === item.id) {
       clearSelection();
@@ -141,12 +137,10 @@ export default function SalesExpensesPage() {
         date: item.date ? item.date.split("T")[0] : new Date().toISOString().split("T")[0],
       });
 
-      // Update URL Parameter
       window.history.replaceState(null, "", `?selected_sales_id=${item.id}`);
     }
   };
 
-  // Clear Selection Reset Function
   const clearSelection = () => {
     setSelectedId(null);
     setFormData({
@@ -155,7 +149,6 @@ export default function SalesExpensesPage() {
       date: new Date().toISOString().split("T")[0],
     });
 
-    // Remove URL Param
     const url = new URL(window.location.href);
     url.searchParams.delete("selected_sales_id");
     window.history.replaceState(null, "", url.pathname);
@@ -164,7 +157,6 @@ export default function SalesExpensesPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-6 lg:p-8 font-sans antialiased">
       <div className="max-w-7xl mx-auto space-y-6">
-        {/* Top Navigation & Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-4 border-b border-slate-800/80 gap-4">
           <div className="flex items-center gap-3.5">
             <Link
@@ -189,7 +181,6 @@ export default function SalesExpensesPage() {
             </div>
           </div>
 
-          {/* Dynamic Selected / Total Metric Card */}
           <div className="flex items-center gap-3">
             <div className="bg-slate-900/90 border border-slate-800 rounded-xl px-4 py-2 flex items-center gap-3 shadow-sm min-w-[220px] justify-between">
               <div className="flex items-center gap-3">
@@ -210,23 +201,29 @@ export default function SalesExpensesPage() {
                 </div>
               </div>
 
-              {/* Clear Selection Button */}
               {selectedId && (
-                <button
-                  onClick={clearSelection}
-                  className="p-1 hover:bg-slate-800 text-slate-400 hover:text-rose-400 rounded-lg transition-colors"
-                  title="Clear selection to show total"
-                >
-                  <XCircle className="w-4 h-4" />
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => router.push(`/dashboard/total-expenses?selected_sales_id=${selectedId}`)}
+                    className="p-1 hover:bg-slate-800 text-slate-400 hover:text-sky-400 rounded-lg transition-colors"
+                    title="View in Sub-Ledger"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={clearSelection}
+                    className="p-1 hover:bg-slate-800 text-slate-400 hover:text-rose-400 rounded-lg transition-colors"
+                    title="Clear selection to show total"
+                  >
+                    <XCircle className="w-4 h-4" />
+                  </button>
+                </div>
               )}
             </div>
           </div>
         </div>
 
-        {/* Main Grid: Form + Data Log */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Entry Form */}
           <div className="lg:col-span-4 bg-slate-900/70 border border-slate-800/90 rounded-2xl p-5 h-fit shadow-xl backdrop-blur-sm">
             <div className="flex items-center justify-between border-b border-slate-800/80 pb-3 mb-4">
               <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
@@ -314,10 +311,8 @@ export default function SalesExpensesPage() {
             </form>
           </div>
 
-          {/* Expenses Log Table */}
           <div className="lg:col-span-8 bg-slate-900/70 border border-slate-800/90 rounded-2xl p-5 shadow-xl backdrop-blur-sm flex flex-col justify-between">
             <div>
-              {/* Header & Search */}
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-800/80 pb-3 mb-4">
                 <div className="flex items-center gap-2">
                   <Receipt className="w-4 h-4 text-emerald-400" />
@@ -341,7 +336,6 @@ export default function SalesExpensesPage() {
                 </div>
               </div>
 
-              {/* Data Table */}
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead>

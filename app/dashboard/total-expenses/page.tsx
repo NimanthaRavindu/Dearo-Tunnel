@@ -14,7 +14,6 @@ interface BranchExpense {
   total_expenses: number;
 }
 
-// 1. Core Component containing searchParams logic
 function TotalExpensesContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -47,13 +46,9 @@ function TotalExpensesContent() {
     fetchExpenseBreakdown();
   }, [fetchExpenseBreakdown]);
 
-  // Direct sum of all expenses per branch
+  // Aggregate sum calculation strictly using total_expenses from Backend
   const calculatedTotalSum = branches.reduce((acc, branch) => {
-    const salary = Number(branch.salary_expenses || 0);
-    const sales = Number(branch.sales_expenses || 0);
-    const other = Number(branch.other_expenses || 0);
-
-    return acc + salary + sales + other;
+    return acc + Number(branch.total_expenses || 0);
   }, 0);
 
   if (loading) {
@@ -69,7 +64,6 @@ function TotalExpensesContent() {
 
   return (
     <div className="p-4 md:p-6 space-y-6 bg-[#070a12] min-h-screen text-slate-300 font-mono text-xs selection:bg-sky-500/20 selection:text-sky-300">
-      {/* Navigation & Dynamic Total Card Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-900 pb-4">
         <div className="space-y-1.5">
           <button
@@ -113,7 +107,6 @@ function TotalExpensesContent() {
         </div>
       </div>
 
-      {/* Spreadsheet Data Table */}
       <div className="bg-[#0d1527]/30 border border-slate-900 rounded-xl overflow-hidden shadow-sm">
         <div className="px-4 py-3 bg-[#0a0f1d] border-b border-slate-900 flex items-center gap-1.5 text-slate-400 text-[10px] font-bold uppercase tracking-wider">
           <FileSpreadsheet size={13} className="text-slate-500" /> Infrastructure Financial Auditing Matrix
@@ -136,8 +129,7 @@ function TotalExpensesContent() {
                 const salary = Number(branch.salary_expenses || 0);
                 const sales = Number(branch.sales_expenses || 0);
                 const other = Number(branch.other_expenses || 0);
-
-                const grossTotal = salary + sales + other;
+                const grossTotal = Number(branch.total_expenses || 0);
                 const hasExpenses = grossTotal > 0;
 
                 return (
@@ -194,7 +186,6 @@ function TotalExpensesContent() {
   );
 }
 
-// 2. Exported Main Page wrapped with Suspense boundary
 export default function TotalExpensesPage() {
   return (
     <Suspense

@@ -8,7 +8,9 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const branch_id = searchParams.get("branch_id");
     const mode = searchParams.get("mode");
+    const selected_sales_id = searchParams.get("selected_sales_id");
 
+    // Summary mode computation
     if (mode === "summary" && branch_id) {
       const [branchRows] = await db.query<RowDataPacket[]>(
         `SELECT salary_expense, other_expense FROM branch WHERE id = ?`,
@@ -18,13 +20,20 @@ export async function GET(req: Request) {
       const salaryExpense = Number(branchRows[0]?.salary_expense || 0);
       const otherExpense = Number(branchRows[0]?.other_expense || 0);
 
-      const [salesRows] = await db.query<RowDataPacket[]>(
-        `SELECT SUM(amount) AS total_sales FROM sales_expenses WHERE branch_id = ?`,
-        [branch_id]
-      );
+      // Filter sales total by selected_sales_id if provided
+      let salesQuery = `SELECT SUM(amount) AS total_sales FROM sales_expenses WHERE branch_id = ?`;
+      const salesQueryParams: (string | number)[] = [branch_id];
+
+      if (selected_sales_id) {
+        salesQuery += ` AND id = ?`;
+        salesQueryParams.push(selected_sales_id);
+      }
+
+      const [salesRows] = await db.query<RowDataPacket[]>(salesQuery, salesQueryParams);
 
       const rawSalesTotal = Number(salesRows[0]?.total_sales || 0);
 
+      // Rule: Effective sales added ONLY IF both salary & other > 0
       const effectiveSalesExpense =
         salaryExpense <= 0 || otherExpense <= 0 ? 0 : rawSalesTotal;
 
@@ -44,6 +53,7 @@ export async function GET(req: Request) {
       );
     }
 
+    // Default Fetch Records mode
     let query = `
       SELECT s.id, s.branch_id, b.branch_name, s.personName, s.amount, s.date 
       FROM sales_expenses s
@@ -99,7 +109,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // Ensure date string is properly formatted YYYY-MM-DD
     const formattedDate = new Date(date).toISOString().split("T")[0];
 
     const [result] = await db.query<ResultSetHeader>(
