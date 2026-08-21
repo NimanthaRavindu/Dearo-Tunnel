@@ -6,7 +6,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const selectedSalesId = searchParams.get("selected_sales_id");
 
-    // Dynamic Sales JOIN Query handling optional selected_sales_id safely
+    // Dynamic Sales JOIN Query
     let salesSubQuery = `SELECT branch_id, SUM(COALESCE(amount, 0)) AS sales_total FROM sales_expenses GROUP BY branch_id`;
     
     if (selectedSalesId) {
@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 1. UPDATE branch table safely (Fixed: other_expenses uses 'amount')
+    // 1. UPDATE branch table (uses total_payable for other_expenses)
     await db.query(`
       UPDATE branch b
       LEFT JOIN (
@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
       ) s ON b.id = s.branch_id
       LEFT JOIN (${salesSubQuery}) se ON b.id = se.branch_id
       LEFT JOIN (
-        SELECT branch_id, SUM(COALESCE(amount, 0)) AS other_total, SUM(COALESCE(balance, 0)) AS other_balance
+        SELECT branch_id, SUM(COALESCE(total_payable, 0)) AS other_total, SUM(COALESCE(balance, 0)) AS other_balance
         FROM other_expenses GROUP BY branch_id
       ) o ON b.id = o.branch_id
       SET 
@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
       ) s ON b.id = s.branch_id
       LEFT JOIN (${salesSubQuery}) se ON b.id = se.branch_id
       LEFT JOIN (
-        SELECT branch_id, SUM(COALESCE(amount, 0)) AS other_total, SUM(COALESCE(balance, 0)) AS other_balance 
+        SELECT branch_id, SUM(COALESCE(total_payable, 0)) AS other_total, SUM(COALESCE(balance, 0)) AS other_balance 
         FROM other_expenses GROUP BY branch_id
       ) o ON b.id = o.branch_id
     `;
