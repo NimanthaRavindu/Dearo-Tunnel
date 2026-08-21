@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 1. UPDATE branch table safely
+    // 1. UPDATE branch table safely (Fixed: other_expenses uses 'amount')
     await db.query(`
       UPDATE branch b
       LEFT JOIN (
@@ -60,38 +60,40 @@ export async function GET(req: NextRequest) {
         (COALESCE(s.salary_balance, 0) + COALESCE(o.other_balance, 0)) AS total_balance
       FROM branch b
       LEFT JOIN (
-        SELECT branch_id, SUM(total_payable) AS salary_total, SUM(balance) AS salary_balance 
+        SELECT branch_id, SUM(COALESCE(total_payable, 0)) AS salary_total, SUM(COALESCE(balance, 0)) AS salary_balance 
         FROM salary_expenses GROUP BY branch_id
       ) s ON b.id = s.branch_id
       LEFT JOIN (${salesSubQuery}) se ON b.id = se.branch_id
       LEFT JOIN (
-        SELECT branch_id, SUM(amount) AS other_total, SUM(balance) AS other_balance 
+        SELECT branch_id, SUM(COALESCE(amount, 0)) AS other_total, SUM(COALESCE(balance, 0)) AS other_balance 
         FROM other_expenses GROUP BY branch_id
       ) o ON b.id = o.branch_id
     `;
 
-    const [branches]: any = await db.execute(query);
+    const [branches]: any = await db.query(query);
 
-    let totalBranches = branches.length;
+    let totalBranches = Array.isArray(branches) ? branches.length : 0;
     let totalExpenses = 0;
     let totalRemaining = 0;
 
-    branches.forEach((b: any) => {
-      b.salary_expenses = Number(b.salary_expenses || 0);
-      b.sales_expenses = Number(b.sales_expenses || 0);
-      b.other_expenses = Number(b.other_expenses || 0);
+    if (Array.isArray(branches)) {
+      branches.forEach((b: any) => {
+        b.salary_expenses = Number(b.salary_expenses || 0);
+        b.sales_expenses = Number(b.sales_expenses || 0);
+        b.other_expenses = Number(b.other_expenses || 0);
 
-      // Condition: Salary සහ Other දෙකම > 0 නම් පමණක් Sales Expense එකතු වේ
-      const effectiveSales = (b.salary_expenses > 0 && b.other_expenses > 0) ? b.sales_expenses : 0;
-      
-      b.total_expenses = b.salary_expenses + b.other_expenses + effectiveSales;
-      b.salary_balance = Number(b.salary_balance || 0);
-      b.other_balance = Number(b.other_balance || 0);
-      b.total_balance = Number(b.total_balance || 0);
+        // Condition: Salary සහ Other දෙකම > 0 නම් පමණක් Sales Expense එකතු වේ
+        const effectiveSales = (b.salary_expenses > 0 && b.other_expenses > 0) ? b.sales_expenses : 0;
+        
+        b.total_expenses = b.salary_expenses + b.other_expenses + effectiveSales;
+        b.salary_balance = Number(b.salary_balance || 0);
+        b.other_balance = Number(b.other_balance || 0);
+        b.total_balance = Number(b.total_balance || 0);
 
-      totalExpenses += b.total_expenses;
-      totalRemaining += b.total_balance;
-    });
+        totalExpenses += b.total_expenses;
+        totalRemaining += b.total_balance;
+      });
+    }
 
     return NextResponse.json({
       cards: {
@@ -99,7 +101,7 @@ export async function GET(req: NextRequest) {
         totalExpenses,
         totalRemaining,
       },
-      branches,
+      branches: branches || [],
     });
   } catch (error: any) {
     console.error("Dashboard Summary API Error:", error.message);
