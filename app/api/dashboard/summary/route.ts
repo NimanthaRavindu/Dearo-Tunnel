@@ -1,21 +1,31 @@
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { db } from "@/lib/db"; 
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    // 1. UPDATE branch table (Sales expense added ONLY IF both salary and other > 0)
+    const { searchParams } = new URL(req.url);
+    const selectedSalesId = searchParams.get("selected_sales_id");
+
+    // Dynamic Sales JOIN Query handling optional selected_sales_id safely
+    let salesSubQuery = `SELECT branch_id, SUM(COALESCE(amount, 0)) AS sales_total FROM sales_expenses GROUP BY branch_id`;
+    
+    if (selectedSalesId) {
+      const parsedId = Number(selectedSalesId);
+      if (!isNaN(parsedId)) {
+        salesSubQuery = `SELECT branch_id, SUM(COALESCE(amount, 0)) AS sales_total FROM sales_expenses WHERE id = ${parsedId} GROUP BY branch_id`;
+      }
+    }
+
+    // 1. UPDATE branch table safely
     await db.query(`
       UPDATE branch b
       LEFT JOIN (
         SELECT branch_id, SUM(COALESCE(total_payable, 0)) AS salary_total, SUM(COALESCE(balance, 0)) AS salary_balance
         FROM salary_expenses GROUP BY branch_id
       ) s ON b.id = s.branch_id
+      LEFT JOIN (${salesSubQuery}) se ON b.id = se.branch_id
       LEFT JOIN (
-        SELECT branch_id, SUM(COALESCE(amount, 0)) AS sales_total
-        FROM sales_expenses GROUP BY branch_id
-      ) se ON b.id = se.branch_id
-      LEFT JOIN (
-        SELECT branch_id, SUM(COALESCE(total_payable, 0)) AS other_total, SUM(COALESCE(balance, 0)) AS other_balance
+        SELECT branch_id, SUM(COALESCE(amount, 0)) AS other_total, SUM(COALESCE(balance, 0)) AS other_balance
         FROM other_expenses GROUP BY branch_id
       ) o ON b.id = o.branch_id
       SET 
@@ -28,7 +38,7 @@ export async function GET() {
         b.total_balance = COALESCE(s.salary_balance, 0) + COALESCE(o.other_balance, 0)
     `);
 
-    // 2. Fetch calculated values per branch with conditional sales logic
+    // 2. Fetch calculated values per branch
     const query = `
       SELECT 
         b.id,
@@ -53,12 +63,9 @@ export async function GET() {
         SELECT branch_id, SUM(total_payable) AS salary_total, SUM(balance) AS salary_balance 
         FROM salary_expenses GROUP BY branch_id
       ) s ON b.id = s.branch_id
+      LEFT JOIN (${salesSubQuery}) se ON b.id = se.branch_id
       LEFT JOIN (
-        SELECT branch_id, SUM(amount) AS sales_total 
-        FROM sales_expenses GROUP BY branch_id
-      ) se ON b.id = se.branch_id
-      LEFT JOIN (
-        SELECT branch_id, SUM(total_payable) AS other_total, SUM(balance) AS other_balance 
+        SELECT branch_id, SUM(amount) AS other_total, SUM(balance) AS other_balance 
         FROM other_expenses GROUP BY branch_id
       ) o ON b.id = o.branch_id
     `;
@@ -74,12 +81,10 @@ export async function GET() {
       b.sales_expenses = Number(b.sales_expenses || 0);
       b.other_expenses = Number(b.other_expenses || 0);
 
-      // Check condition: Salary හෝ Other 0.00 නම් Sales Expense එක 0 ලෙස සලකනු ලැබේ
+      // Condition: Salary සහ Other දෙකම > 0 නම් පමණක් Sales Expense එකතු වේ
       const effectiveSales = (b.salary_expenses > 0 && b.other_expenses > 0) ? b.sales_expenses : 0;
       
-      // Calculate total expenses for branch
       b.total_expenses = b.salary_expenses + b.other_expenses + effectiveSales;
-      
       b.salary_balance = Number(b.salary_balance || 0);
       b.other_balance = Number(b.other_balance || 0);
       b.total_balance = Number(b.total_balance || 0);
@@ -97,6 +102,7 @@ export async function GET() {
       branches,
     });
   } catch (error: any) {
+    console.error("Dashboard Summary API Error:", error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
