@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, useEffect, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Coins, FileSpreadsheet, RefreshCw } from "lucide-react";
 
 interface BranchExpense {
@@ -16,13 +16,20 @@ interface BranchExpense {
 
 export default function TotalExpensesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const selectedSalesId = searchParams.get("selected_sales_id");
+
   const [branches, setBranches] = useState<BranchExpense[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
 
-  const fetchExpenseBreakdown = async () => {
+  const fetchExpenseBreakdown = useCallback(async () => {
     try {
-      const response = await fetch("/api/dashboard/summary");
+      const url = selectedSalesId 
+        ? `/api/dashboard/summary?selected_sales_id=${selectedSalesId}`
+        : "/api/dashboard/summary";
+
+      const response = await fetch(url);
       if (response.ok) {
         const json = await response.json();
         setBranches(json.branches || []);
@@ -33,21 +40,19 @@ export default function TotalExpensesPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [selectedSalesId]);
 
   useEffect(() => {
     fetchExpenseBreakdown();
-  }, []);
+  }, [fetchExpenseBreakdown]);
 
-  // Calculate overall total dynamically based on effective sales rule
+  // Direct sum of all expenses per branch
   const calculatedTotalSum = branches.reduce((acc, branch) => {
     const salary = Number(branch.salary_expenses || 0);
+    const sales = Number(branch.sales_expenses || 0);
     const other = Number(branch.other_expenses || 0);
-    const rawSales = Number(branch.sales_expenses || 0);
-
-    const effectiveSales = (salary === 0 || other === 0) ? 0 : rawSales;
     
-    return acc + salary + other + effectiveSales;
+    return acc + salary + sales + other;
   }, 0);
 
   if (loading) {
@@ -112,13 +117,10 @@ export default function TotalExpensesPage() {
             <tbody className="divide-y divide-slate-900/40 text-slate-400 font-sans">
               {branches.map((branch) => {
                 const salary = Number(branch.salary_expenses || 0);
-                const rawSales = Number(branch.sales_expenses || 0);
+                const sales = Number(branch.sales_expenses || 0);
                 const other = Number(branch.other_expenses || 0);
 
-                const isSalesIgnored = salary === 0 || other === 0;
-                const effectiveSales = isSalesIgnored ? 0 : rawSales;
-
-                const grossTotal = salary + effectiveSales + other;
+                const grossTotal = salary + sales + other;
                 const hasExpenses = grossTotal > 0;
 
                 return (
@@ -133,12 +135,7 @@ export default function TotalExpensesPage() {
                       {salary > 0 ? salary.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}
                     </td>
                     <td className="py-2.5 px-4 text-right font-mono text-emerald-400/90">
-                      {isSalesIgnored && rawSales > 0 ? (
-                        <span className="text-slate-500 line-through text-[10px] mr-1" title="Ignored because Salary or Other Expense is 0.00">
-                          {rawSales.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </span>
-                      ) : null}
-                      {effectiveSales > 0 ? effectiveSales.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}
+                      {sales > 0 ? sales.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}
                     </td>
                     <td className="py-2.5 px-4 text-right font-mono">
                       {other > 0 ? other.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}

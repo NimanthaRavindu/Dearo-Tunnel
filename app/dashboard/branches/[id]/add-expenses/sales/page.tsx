@@ -66,7 +66,6 @@ export default function SalesExpensesPage() {
 
   const selectedRecord = expenses.find((item) => item.id === selectedId);
 
- 
   const displayAmount = selectedRecord
     ? Number(selectedRecord.amount || 0)
     : filteredExpenses.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
@@ -89,13 +88,7 @@ export default function SalesExpensesPage() {
 
       if (res.ok) {
         const newRecord = await res.json();
-
-        setFormData({
-          personName: "",
-          amount: "",
-          date: new Date().toISOString().split("T")[0],
-        });
-        setSelectedId(null);
+        clearSelection();
 
         if (newRecord && newRecord.id) {
           setExpenses((prev) => [newRecord, ...prev]);
@@ -147,6 +140,9 @@ export default function SalesExpensesPage() {
         amount: String(item.amount),
         date: item.date ? item.date.split("T")[0] : new Date().toISOString().split("T")[0],
       });
+
+      // Update URL Parameter
+      window.history.replaceState(null, "", `?selected_sales_id=${item.id}`);
     }
   };
 
@@ -158,6 +154,11 @@ export default function SalesExpensesPage() {
       amount: "",
       date: new Date().toISOString().split("T")[0],
     });
+
+    // Remove URL Param
+    const url = new URL(window.location.href);
+    url.searchParams.delete("selected_sales_id");
+    window.history.replaceState(null, "", url.pathname);
   };
 
   return (

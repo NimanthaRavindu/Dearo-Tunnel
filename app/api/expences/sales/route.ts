@@ -2,15 +2,14 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { RowDataPacket, ResultSetHeader } from "mysql2";
 
-// 1. GET Request (Fetch expenses or calculate totals by branch_id)
+// 1. GET Request
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const branch_id = searchParams.get("branch_id");
-    const mode = searchParams.get("mode"); 
+    const mode = searchParams.get("mode");
 
     if (mode === "summary" && branch_id) {
-
       const [branchRows] = await db.query<RowDataPacket[]>(
         `SELECT salary_expense, other_expense FROM branch WHERE id = ?`,
         [branch_id]
@@ -26,21 +25,23 @@ export async function GET(req: Request) {
 
       const rawSalesTotal = Number(salesRows[0]?.total_sales || 0);
 
-      const effectiveSalesExpense = (salaryExpense <= 0 || otherExpense <= 0) 
-        ? 0 
-        : rawSalesTotal;
+      const effectiveSalesExpense =
+        salaryExpense <= 0 || otherExpense <= 0 ? 0 : rawSalesTotal;
 
       const grandTotal = salaryExpense + otherExpense + effectiveSalesExpense;
 
-      return NextResponse.json({
-        branch_id: Number(branch_id),
-        salary_expense: salaryExpense,
-        other_expense: otherExpense,
-        raw_sales_expense: rawSalesTotal,
-        effective_sales_expense: effectiveSalesExpense,
-        is_sales_ignored: salaryExpense <= 0 || otherExpense <= 0,
-        grand_total: grandTotal,
-      }, { status: 200 });
+      return NextResponse.json(
+        {
+          branch_id: Number(branch_id),
+          salary_expense: salaryExpense,
+          other_expense: otherExpense,
+          raw_sales_expense: rawSalesTotal,
+          effective_sales_expense: effectiveSalesExpense,
+          is_sales_ignored: salaryExpense <= 0 || otherExpense <= 0,
+          grand_total: grandTotal,
+        },
+        { status: 200 }
+      );
     }
 
     let query = `
@@ -48,7 +49,7 @@ export async function GET(req: Request) {
       FROM sales_expenses s
       LEFT JOIN branch b ON s.branch_id = b.id
     `;
-    const queryParams: any[] = [];
+    const queryParams: (string | number)[] = [];
 
     if (branch_id) {
       query += ` WHERE s.branch_id = ?`;
@@ -98,9 +99,12 @@ export async function POST(req: Request) {
       );
     }
 
+    // Ensure date string is properly formatted YYYY-MM-DD
+    const formattedDate = new Date(date).toISOString().split("T")[0];
+
     const [result] = await db.query<ResultSetHeader>(
       "INSERT INTO sales_expenses (branch_id, personName, amount, date) VALUES (?, ?, ?, ?)",
-      [parsedBranchId, personName.trim(), parsedAmount, date]
+      [parsedBranchId, personName.trim(), parsedAmount, formattedDate]
     );
 
     const [newRows] = await db.query<RowDataPacket[]>(
@@ -134,9 +138,17 @@ export async function DELETE(req: Request) {
       );
     }
 
+    const parsedId = parseInt(id, 10);
+    if (isNaN(parsedId)) {
+      return NextResponse.json(
+        { error: "Invalid ID format" },
+        { status: 400 }
+      );
+    }
+
     const [result] = await db.query<ResultSetHeader>(
       "DELETE FROM sales_expenses WHERE id = ?",
-      [id]
+      [parsedId]
     );
 
     if (result.affectedRows === 0) {
