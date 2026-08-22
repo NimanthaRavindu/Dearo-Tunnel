@@ -142,7 +142,9 @@ function TotalExpensesContent() {
                 const salary = Number(branch.salary_expenses || 0);
                 const sales = Number(branch.sales_expenses || 0);
                 const other = Number(branch.other_expenses || 0);
-                const grossTotal = Number(branch.total_expenses || 0);
+                
+                // grossTotal එක branch එකේ ගෙනෙන අගය නැතහොත් dynamic එකතුව සකස් කිරීම
+                const grossTotal = Number(branch.total_expenses || (salary + sales + other));
                 const hasExpenses = grossTotal > 0;
 
                 return (
@@ -166,7 +168,7 @@ function TotalExpensesContent() {
                           })
                         : "0.00"}
                     </td>
-                    <td className="py-2.5 px-4 text-right font-mono text-emerald-400/90">
+                    <td className="py-2.5 px-4 text-right font-mono text-emerald-400/90 font-semibold">
                       {sales > 0
                         ? sales.toLocaleString("en-US", {
                             minimumFractionDigits: 2,

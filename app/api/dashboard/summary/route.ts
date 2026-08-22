@@ -9,33 +9,30 @@ export async function GET(req: NextRequest) {
     // Dynamic Sales JOIN Query
     let salesSubQuery = `SELECT branch_id, SUM(COALESCE(amount, 0)) AS sales_total FROM sales_expenses GROUP BY branch_id`;
     
-    if (selectedSalesId) {
-      const parsedId = Number(selectedSalesId);
-      if (!isNaN(parsedId)) {
-        salesSubQuery = `SELECT branch_id, SUM(COALESCE(amount, 0)) AS sales_total FROM sales_expenses WHERE id = ${parsedId} GROUP BY branch_id`;
-      }
+    const parsedId = selectedSalesId ? Number(selectedSalesId) : null;
+    const isFiltered = parsedId !== null && !isNaN(parsedId);
+
+    if (isFiltered) {
+      salesSubQuery = `SELECT branch_id, SUM(COALESCE(amount, 0)) AS sales_total FROM sales_expenses WHERE id = ${parsedId} GROUP BY branch_id`;
     }
-    
-    await db.query(`
-      UPDATE branch b
-      LEFT JOIN (
-        SELECT branch_id, SUM(COALESCE(total_payable, 0)) AS salary_total, SUM(COALESCE(balance, 0)) AS salary_balance
-        FROM salary_expenses GROUP BY branch_id
-      ) s ON b.id = s.branch_id
-      LEFT JOIN (${salesSubQuery}) se ON b.id = se.branch_id
-      LEFT JOIN (
-        SELECT branch_id, SUM(COALESCE(total_payable, 0)) AS other_total, SUM(COALESCE(balance, 0)) AS other_balance
-        FROM other_expenses GROUP BY branch_id
-      ) o ON b.id = o.branch_id
-      SET 
-        b.total_expenses = COALESCE(s.salary_total, 0) + COALESCE(o.other_total, 0) + 
-          CASE 
-            WHEN COALESCE(s.salary_total, 0) > 0 OR COALESCE(o.other_total, 0) > 0 
-            THEN COALESCE(se.sales_total, 0) 
-            ELSE 0 
-          END,
-        b.total_balance = COALESCE(s.salary_balance, 0) + COALESCE(o.other_balance, 0)
-    `);
+
+    if (!isFiltered) {
+      await db.query(`
+        UPDATE branch b
+        LEFT JOIN (
+          SELECT branch_id, SUM(COALESCE(total_payable, 0)) AS salary_total, SUM(COALESCE(balance, 0)) AS salary_balance
+          FROM salary_expenses GROUP BY branch_id
+        ) s ON b.id = s.branch_id
+        LEFT JOIN (${salesSubQuery}) se ON b.id = se.branch_id
+        LEFT JOIN (
+          SELECT branch_id, SUM(COALESCE(total_payable, 0)) AS other_total, SUM(COALESCE(balance, 0)) AS other_balance
+          FROM other_expenses GROUP BY branch_id
+        ) o ON b.id = o.branch_id
+        SET 
+          b.total_expenses = COALESCE(s.salary_total, 0) + COALESCE(o.other_total, 0) + COALESCE(se.sales_total, 0),
+          b.total_balance = COALESCE(s.salary_balance, 0) + COALESCE(o.other_balance, 0)
+      `);
+    }
 
     // 2. Fetch calculated values per branch
     const query = `
@@ -73,10 +70,8 @@ export async function GET(req: NextRequest) {
         b.sales_expenses = Number(b.sales_expenses || 0);
         b.other_expenses = Number(b.other_expenses || 0);
 
-        const hasBaseExpense = b.salary_expenses > 0 || b.other_expenses > 0;
-        const effectiveSales = hasBaseExpense ? b.sales_expenses : 0;
+        b.total_expenses = b.salary_expenses + b.other_expenses + b.sales_expenses;
         
-        b.total_expenses = b.salary_expenses + b.other_expenses + effectiveSales;
         b.salary_balance = Number(b.salary_balance || 0);
         b.other_balance = Number(b.other_balance || 0);
         b.total_balance = Number(b.total_balance || 0);
