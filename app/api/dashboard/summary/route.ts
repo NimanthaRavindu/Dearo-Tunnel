@@ -15,8 +15,7 @@ export async function GET(req: NextRequest) {
         salesSubQuery = `SELECT branch_id, SUM(COALESCE(amount, 0)) AS sales_total FROM sales_expenses WHERE id = ${parsedId} GROUP BY branch_id`;
       }
     }
-
-    // 1. UPDATE branch table (uses total_payable for other_expenses)
+    
     await db.query(`
       UPDATE branch b
       LEFT JOIN (
@@ -31,7 +30,7 @@ export async function GET(req: NextRequest) {
       SET 
         b.total_expenses = COALESCE(s.salary_total, 0) + COALESCE(o.other_total, 0) + 
           CASE 
-            WHEN COALESCE(s.salary_total, 0) > 0 AND COALESCE(o.other_total, 0) > 0 
+            WHEN COALESCE(s.salary_total, 0) > 0 OR COALESCE(o.other_total, 0) > 0 
             THEN COALESCE(se.sales_total, 0) 
             ELSE 0 
           END,
@@ -47,14 +46,6 @@ export async function GET(req: NextRequest) {
         COALESCE(s.salary_total, 0) AS salary_expenses,
         COALESCE(se.sales_total, 0) AS sales_expenses,
         COALESCE(o.other_total, 0) AS other_expenses,
-        (
-          COALESCE(s.salary_total, 0) + COALESCE(o.other_total, 0) + 
-          CASE 
-            WHEN COALESCE(s.salary_total, 0) > 0 AND COALESCE(o.other_total, 0) > 0 
-            THEN COALESCE(se.sales_total, 0) 
-            ELSE 0 
-          END
-        ) AS total_expenses,
         COALESCE(s.salary_balance, 0) AS salary_balance,
         COALESCE(o.other_balance, 0) AS other_balance,
         (COALESCE(s.salary_balance, 0) + COALESCE(o.other_balance, 0)) AS total_balance
@@ -82,8 +73,8 @@ export async function GET(req: NextRequest) {
         b.sales_expenses = Number(b.sales_expenses || 0);
         b.other_expenses = Number(b.other_expenses || 0);
 
-        // Condition: Salary සහ Other දෙකම > 0 නම් පමණක් Sales Expense එකතු වේ
-        const effectiveSales = (b.salary_expenses > 0 && b.other_expenses > 0) ? b.sales_expenses : 0;
+        const hasBaseExpense = b.salary_expenses > 0 || b.other_expenses > 0;
+        const effectiveSales = hasBaseExpense ? b.sales_expenses : 0;
         
         b.total_expenses = b.salary_expenses + b.other_expenses + effectiveSales;
         b.salary_balance = Number(b.salary_balance || 0);
