@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { DollarSign, Calendar, User, PlusCircle, TrendingUp, CreditCard, ArrowLeft, Trash2, Loader2, Receipt, Search, XCircle, ExternalLink, Save } from "lucide-react";
 import Link from "next/link";
 
@@ -17,6 +17,7 @@ interface SalesExpense {
 export default function SalesExpensesPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const branchId = params?.id;
 
   const [expenses, setExpenses] = useState<SalesExpense[]>([]);
@@ -38,7 +39,22 @@ export default function SalesExpensesPage() {
       const res = await fetch(`/api/expences/sales?branch_id=${branchId}`);
       if (res.ok) {
         const data = await res.json();
-        setExpenses(Array.isArray(data) ? data : []);
+        const list = Array.isArray(data) ? data : [];
+        setExpenses(list);
+
+        // URL query param එකෙන් ස්වයංක්‍රීයව Row එක Select කර ගැනීම
+        const urlSelectedId = searchParams.get("selected_sales_id");
+        if (urlSelectedId) {
+          const found = list.find((item) => String(item.id) === urlSelectedId);
+          if (found) {
+            setSelectedId(found.id);
+            setFormData({
+              personName: found.personName,
+              amount: String(found.amount),
+              date: found.date ? found.date.split("T")[0] : new Date().toISOString().split("T")[0],
+            });
+          }
+        }
       } else {
         console.error("Failed to fetch expenses");
       }
@@ -47,7 +63,7 @@ export default function SalesExpensesPage() {
     } finally {
       setLoading(false);
     }
-  }, [branchId]);
+  }, [branchId, searchParams]);
 
   useEffect(() => {
     fetchExpenses();
@@ -133,7 +149,8 @@ export default function SalesExpensesPage() {
         date: item.date ? item.date.split("T")[0] : new Date().toISOString().split("T")[0],
       });
 
-      window.history.replaceState(null, "", `?selected_sales_id=${item.id}`);
+      // Next.js Router මගින් URL එක Update කිරීම
+      router.replace(`/dashboard/branches/${branchId}/sales?selected_sales_id=${item.id}`, { scroll: false });
     }
   };
 
@@ -145,9 +162,7 @@ export default function SalesExpensesPage() {
       date: new Date().toISOString().split("T")[0],
     });
 
-    const url = new URL(window.location.href);
-    url.searchParams.delete("selected_sales_id");
-    window.history.replaceState(null, "", url.pathname);
+    router.replace(`/dashboard/branches/${branchId}/sales`, { scroll: false });
   };
 
   return (
@@ -199,13 +214,14 @@ export default function SalesExpensesPage() {
 
               {selectedId && (
                 <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => router.push(`/dashboard/total-expenses?selected_sales_id=${selectedId}`)}
-                    className="p-1 hover:bg-slate-800 text-slate-400 hover:text-sky-400 rounded-lg transition-colors"
+                  {/* External Link Redirect Fix */}
+                  <Link
+                    href={`/dashboard/branches/${branchId}/total-expenses?selected_sales_id=${selectedId}`}
+                    className="p-1 hover:bg-slate-800 text-slate-400 hover:text-sky-400 rounded-lg transition-colors flex items-center justify-center"
                     title="View in Sub-Ledger"
                   >
                     <ExternalLink className="w-4 h-4" />
-                  </button>
+                  </Link>
                   <button
                     onClick={clearSelection}
                     className="p-1 hover:bg-slate-800 text-slate-400 hover:text-rose-400 rounded-lg transition-colors"
