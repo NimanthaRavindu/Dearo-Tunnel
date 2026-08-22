@@ -10,7 +10,7 @@ export async function GET(req: Request) {
     const mode = searchParams.get("mode");
     const selected_sales_id = searchParams.get("selected_sales_id");
 
-    // Summary mode computation
+    // Summary mode computation for single branch
     if (mode === "summary" && branch_id) {
       const [branchRows] = await db.query<RowDataPacket[]>(
         `SELECT salary_expense, other_expense FROM branch WHERE id = ?`,
@@ -20,7 +20,6 @@ export async function GET(req: Request) {
       const salaryExpense = Number(branchRows[0]?.salary_expense || 0);
       const otherExpense = Number(branchRows[0]?.other_expense || 0);
 
-      // Filter sales total by selected_sales_id if provided
       let salesQuery = `SELECT SUM(amount) AS total_sales FROM sales_expenses WHERE branch_id = ?`;
       const salesQueryParams: (string | number)[] = [branch_id];
 
@@ -30,7 +29,6 @@ export async function GET(req: Request) {
       }
 
       const [salesRows] = await db.query<RowDataPacket[]>(salesQuery, salesQueryParams);
-
       const rawSalesTotal = Number(salesRows[0]?.total_sales || 0);
 
       // Rule: Effective sales added ONLY IF both salary & other > 0
@@ -55,7 +53,7 @@ export async function GET(req: Request) {
 
     // Default Fetch Records mode
     let query = `
-      SELECT s.id, s.branch_id, b.branch_name, s.personName, s.amount, s.date 
+      SELECT s.id, s.branch_id, b.branch_name, s.personName, s.amount, DATE_FORMAT(s.date, '%Y-%m-%d') as date 
       FROM sales_expenses s
       LEFT JOIN branch b ON s.branch_id = b.id
     `;
@@ -94,30 +92,25 @@ export async function POST(req: Request) {
     }
 
     const parsedBranchId = parseInt(branch_id, 10);
-    if (isNaN(parsedBranchId)) {
-      return NextResponse.json(
-        { error: "Invalid branch_id provided" },
-        { status: 400 }
-      );
-    }
-
     const parsedAmount = parseFloat(amount);
-    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+
+    if (isNaN(parsedBranchId) || isNaN(parsedAmount) || parsedAmount <= 0) {
       return NextResponse.json(
-        { error: "Invalid amount provided" },
+        { error: "Invalid branch_id or amount provided" },
         { status: 400 }
       );
     }
 
-    const formattedDate = new Date(date).toISOString().split("T")[0];
+    // Ensure valid YYYY-MM-DD string without UTC shift issues
+    const cleanDate = date.split("T")[0];
 
     const [result] = await db.query<ResultSetHeader>(
       "INSERT INTO sales_expenses (branch_id, personName, amount, date) VALUES (?, ?, ?, ?)",
-      [parsedBranchId, personName.trim(), parsedAmount, formattedDate]
+      [parsedBranchId, personName.trim(), parsedAmount, cleanDate]
     );
 
     const [newRows] = await db.query<RowDataPacket[]>(
-      `SELECT s.id, s.branch_id, b.branch_name, s.personName, s.amount, s.date 
+      `SELECT s.id, s.branch_id, b.branch_name, s.personName, s.amount, DATE_FORMAT(s.date, '%Y-%m-%d') as date 
        FROM sales_expenses s 
        LEFT JOIN branch b ON s.branch_id = b.id 
        WHERE s.id = ?`,
@@ -140,24 +133,16 @@ export async function DELETE(req: Request) {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
 
-    if (!id) {
+    if (!id || isNaN(parseInt(id, 10))) {
       return NextResponse.json(
-        { error: "Expense record ID is required" },
-        { status: 400 }
-      );
-    }
-
-    const parsedId = parseInt(id, 10);
-    if (isNaN(parsedId)) {
-      return NextResponse.json(
-        { error: "Invalid ID format" },
+        { error: "Valid expense record ID is required" },
         { status: 400 }
       );
     }
 
     const [result] = await db.query<ResultSetHeader>(
       "DELETE FROM sales_expenses WHERE id = ?",
-      [parsedId]
+      [parseInt(id, 10)]
     );
 
     if (result.affectedRows === 0) {

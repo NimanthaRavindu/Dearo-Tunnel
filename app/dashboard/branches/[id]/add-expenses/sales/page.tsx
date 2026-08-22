@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { DollarSign, Calendar, User, PlusCircle, TrendingUp, CreditCard, ArrowLeft, Trash2, Loader2, Receipt, Search, XCircle, ExternalLink } from "lucide-react";
 import Link from "next/link";
 
@@ -17,6 +17,7 @@ interface SalesExpense {
 export default function SalesExpensesPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const branchId = params?.id;
 
   const [expenses, setExpenses] = useState<SalesExpense[]>([]);
@@ -25,17 +26,26 @@ export default function SalesExpensesPage() {
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
+  const todayStr = new Date().toISOString().split("T")[0];
+
   const [formData, setFormData] = useState({
     personName: "",
     amount: "",
-    date: new Date().toISOString().split("T")[0],
+    date: todayStr,
   });
+
+  useEffect(() => {
+    const urlSelectedId = searchParams.get("selected_sales_id");
+    if (urlSelectedId) {
+      setSelectedId(Number(urlSelectedId));
+    }
+  }, [searchParams]);
 
   const fetchExpenses = useCallback(async () => {
     if (!branchId) return;
     try {
       setLoading(true);
-      const res = await fetch(`/api/expences/sales?branch_id=${branchId}`);
+      const res = await fetch(`/api/sales?branch_id=${branchId}`);
       if (res.ok) {
         const data = await res.json();
         setExpenses(Array.isArray(data) ? data : []);
@@ -75,7 +85,7 @@ export default function SalesExpensesPage() {
 
     try {
       setSubmitting(true);
-      const res = await fetch("/api/expences/sales", {
+      const res = await fetch("/api/sales", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -105,11 +115,11 @@ export default function SalesExpensesPage() {
   };
 
   const handleDelete = async (id: number, e: React.MouseEvent) => {
-    e.stopPropagation(); 
+    e.stopPropagation();
     if (!confirm("Are you sure you want to delete this expense entry?")) return;
 
     try {
-      const res = await fetch(`/api/expences/sales?id=${id}`, {
+      const res = await fetch(`/api/sales?id=${id}`, {
         method: "DELETE",
       });
 
@@ -134,7 +144,7 @@ export default function SalesExpensesPage() {
       setFormData({
         personName: item.personName,
         amount: String(item.amount),
-        date: item.date ? item.date.split("T")[0] : new Date().toISOString().split("T")[0],
+        date: item.date ? item.date.split("T")[0] : todayStr,
       });
 
       window.history.replaceState(null, "", `?selected_sales_id=${item.id}`);
@@ -146,7 +156,7 @@ export default function SalesExpensesPage() {
     setFormData({
       personName: "",
       amount: "",
-      date: new Date().toISOString().split("T")[0],
+      date: todayStr,
     });
 
     const url = new URL(window.location.href);
@@ -204,7 +214,7 @@ export default function SalesExpensesPage() {
               {selectedId && (
                 <div className="flex items-center gap-1">
                   <button
-                    onClick={() => router.push(`/dashboard/total-expenses?selected_sales_id=${selectedId}`)}
+                    onClick={() => router.push(`/dashboard/total-expenses?branch_id=${branchId}&selected_sales_id=${selectedId}`)}
                     className="p-1 hover:bg-slate-800 text-slate-400 hover:text-sky-400 rounded-lg transition-colors"
                     title="View in Sub-Ledger"
                   >
@@ -317,7 +327,7 @@ export default function SalesExpensesPage() {
                 <div className="flex items-center gap-2">
                   <Receipt className="w-4 h-4 text-emerald-400" />
                   <h2 className="text-sm font-semibold text-slate-200">
-                    Branch Expense Logs
+                    Expense Logs
                   </h2>
                   <span className="text-[10px] font-mono bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full border border-slate-700/50">
                     {filteredExpenses.length} Records
@@ -380,7 +390,7 @@ export default function SalesExpensesPage() {
                           }`}
                         >
                           <td className="py-2.5 px-3 text-slate-400 whitespace-nowrap font-mono">
-                            {item.date ? new Date(item.date).toISOString().split("T")[0] : "N/A"}
+                            {item.date ? item.date.split("T")[0] : "N/A"}
                           </td>
                           <td className="py-2.5 px-3 text-emerald-400/90 whitespace-nowrap font-medium">
                             {item.branch_name || `Branch #${item.branch_id}`}
