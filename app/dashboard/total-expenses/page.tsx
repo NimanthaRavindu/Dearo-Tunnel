@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Coins, FileSpreadsheet, RefreshCw } from "lucide-react";
+import { ArrowLeft, Coins, FileSpreadsheet, RefreshCw, Filter, X } from "lucide-react";
 
 interface BranchExpense {
   id: number | string;
@@ -46,7 +46,10 @@ function TotalExpensesContent() {
     fetchExpenseBreakdown();
   }, [fetchExpenseBreakdown]);
 
-  // Aggregate sum calculation strictly using total_expenses from Backend
+  const clearFilter = () => {
+    router.push("/dashboard/total-expenses");
+  };
+
   const calculatedTotalSum = branches.reduce((acc, branch) => {
     return acc + Number(branch.total_expenses || 0);
   }, 0);
@@ -72,9 +75,19 @@ function TotalExpensesContent() {
           >
             <ArrowLeft size={12} /> Back To Main Control Panel
           </button>
-          <h2 className="text-base font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <Coins size={15} className="text-sky-400" /> Gross Expense Breakdown Sub-Ledger
-          </h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-base font-bold text-white uppercase tracking-wider flex items-center gap-2">
+              <Coins size={15} className="text-sky-400" /> Gross Expense Breakdown Sub-Ledger
+            </h2>
+            {selectedSalesId && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-sky-950 text-sky-400 border border-sky-800 text-[10px]">
+                <Filter size={10} /> Filtered Entry #{selectedSalesId}
+                <button onClick={clearFilter} className="hover:text-white ml-1">
+                  <X size={10} />
+                </button>
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-4">

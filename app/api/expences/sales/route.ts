@@ -29,7 +29,10 @@ export async function GET(req: Request) {
         salesQueryParams.push(selected_sales_id);
       }
 
-      const [salesRows] = await db.query<RowDataPacket[]>(salesQuery, salesQueryParams);
+      const [salesRows] = await db.query<RowDataPacket[]>(
+        salesQuery,
+        salesQueryParams
+      );
 
       const rawSalesTotal = Number(salesRows[0]?.total_sales || 0);
 
@@ -88,7 +91,10 @@ export async function POST(req: Request) {
 
     if (!branch_id || !personName || !amount || !date) {
       return NextResponse.json(
-        { error: "All required fields (branch_id, personName, amount, date) must be provided" },
+        {
+          error:
+            "All required fields (branch_id, personName, amount, date) must be provided",
+        },
         { status: 400 }
       );
     }
@@ -134,7 +140,60 @@ export async function POST(req: Request) {
   }
 }
 
-// 3. DELETE Request
+// 3. PUT Request (UPDATE Record)
+export async function PUT(req: Request) {
+  try {
+    const body = await req.json();
+    const { id, branch_id, personName, amount, date } = body;
+
+    if (!id || !branch_id || !personName || !amount || !date) {
+      return NextResponse.json(
+        { error: "Missing required fields for update" },
+        { status: 400 }
+      );
+    }
+
+    const parsedId = parseInt(id, 10);
+    const parsedBranchId = parseInt(branch_id, 10);
+    const parsedAmount = parseFloat(amount);
+
+    if (isNaN(parsedId) || isNaN(parsedBranchId) || isNaN(parsedAmount)) {
+      return NextResponse.json(
+        { error: "Invalid payload parameters" },
+        { status: 400 }
+      );
+    }
+
+    const formattedDate = new Date(date).toISOString().split("T")[0];
+
+    const [result] = await db.query<ResultSetHeader>(
+      `UPDATE sales_expenses 
+       SET branch_id = ?, personName = ?, amount = ?, date = ? 
+       WHERE id = ?`,
+      [parsedBranchId, personName.trim(), parsedAmount, formattedDate, parsedId]
+    );
+
+    if (result.affectedRows === 0) {
+      return NextResponse.json(
+        { error: "Record not found or no changes made" },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json(
+      { message: "Expense record updated successfully" },
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error("Database PUT Error:", error);
+    return NextResponse.json(
+      { error: "Failed to update sales expense record" },
+      { status: 500 }
+    );
+  }
+}
+
+// 4. DELETE Request
 export async function DELETE(req: Request) {
   try {
     const { searchParams } = new URL(req.url);

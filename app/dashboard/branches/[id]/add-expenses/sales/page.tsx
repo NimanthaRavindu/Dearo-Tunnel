@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { DollarSign, Calendar, User, PlusCircle, TrendingUp, CreditCard, ArrowLeft, Trash2, Loader2, Receipt, Search, XCircle, ExternalLink } from "lucide-react";
+import { DollarSign, Calendar, User, PlusCircle, TrendingUp, CreditCard, ArrowLeft, Trash2, Loader2, Receipt, Search, XCircle, ExternalLink, Save } from "lucide-react";
 import Link from "next/link";
 
 interface SalesExpense {
@@ -75,27 +75,23 @@ export default function SalesExpensesPage() {
 
     try {
       setSubmitting(true);
+      const method = selectedId ? "PUT" : "POST";
+      const payload = selectedId
+        ? { id: selectedId, ...formData, branch_id: branchId }
+        : { ...formData, branch_id: branchId };
+
       const res = await fetch("/api/expences/sales", {
-        method: "POST",
+        method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...formData,
-          branch_id: branchId,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (res.ok) {
-        const newRecord = await res.json();
         clearSelection();
-
-        if (newRecord && newRecord.id) {
-          setExpenses((prev) => [newRecord, ...prev]);
-        } else {
-          await fetchExpenses();
-        }
+        await fetchExpenses();
       } else {
         const errData = await res.json();
-        alert(errData.error || "Failed to record expense");
+        alert(errData.error || "Failed to process expense entry");
       }
     } catch (err) {
       console.error("Error submitting data:", err);
@@ -105,7 +101,7 @@ export default function SalesExpensesPage() {
   };
 
   const handleDelete = async (id: number, e: React.MouseEvent) => {
-    e.stopPropagation(); 
+    e.stopPropagation();
     if (!confirm("Are you sure you want to delete this expense entry?")) return;
 
     try {
@@ -228,7 +224,7 @@ export default function SalesExpensesPage() {
             <div className="flex items-center justify-between border-b border-slate-800/80 pb-3 mb-4">
               <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
                 <PlusCircle className="w-4 h-4 text-emerald-400" />
-                {selectedId ? "Selected Person Details" : "New Expense Entry"}
+                {selectedId ? "Edit Expense Details" : "New Expense Entry"}
               </h2>
               <span className="text-[10px] uppercase font-mono tracking-wider bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20">
                 Branch #{branchId}
@@ -294,20 +290,36 @@ export default function SalesExpensesPage() {
                 </div>
               </div>
 
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 disabled:opacity-50 text-white font-medium py-2 px-4 rounded-xl text-xs transition duration-150 ease-in-out shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-2 mt-2"
-              >
-                {submitting ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <>
-                    <PlusCircle className="w-4 h-4" />
-                    Save Record
-                  </>
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 disabled:opacity-50 text-white font-medium py-2 px-4 rounded-xl text-xs transition duration-150 ease-in-out shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-2"
+                >
+                  {submitting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : selectedId ? (
+                    <>
+                      <Save className="w-4 h-4" />
+                      Update Record
+                    </>
+                  ) : (
+                    <>
+                      <PlusCircle className="w-4 h-4" />
+                      Save Record
+                    </>
+                  )}
+                </button>
+                {selectedId && (
+                  <button
+                    type="button"
+                    onClick={clearSelection}
+                    className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium py-2 px-3 rounded-xl text-xs transition duration-150 ease-in-out"
+                  >
+                    Cancel
+                  </button>
                 )}
-              </button>
+              </div>
             </form>
           </div>
 
