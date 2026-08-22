@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { DollarSign, Calendar, User, PlusCircle, TrendingUp, CreditCard, ArrowLeft, Trash2, Loader2, Receipt, Search, XCircle, ExternalLink, Save } from "lucide-react";
+import { useParams, useRouter } from "next/navigation";
+import { DollarSign, Calendar, User, PlusCircle, TrendingUp, CreditCard, ArrowLeft, Trash2, Loader2, Receipt, Search, XCircle, ExternalLink } from "lucide-react";
 import Link from "next/link";
 
 interface SalesExpense {
@@ -17,7 +17,6 @@ interface SalesExpense {
 export default function SalesExpensesPage() {
   const params = useParams();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const branchId = params?.id;
 
   const [expenses, setExpenses] = useState<SalesExpense[]>([]);
@@ -39,22 +38,7 @@ export default function SalesExpensesPage() {
       const res = await fetch(`/api/expences/sales?branch_id=${branchId}`);
       if (res.ok) {
         const data = await res.json();
-        const list = Array.isArray(data) ? data : [];
-        setExpenses(list);
-
-        // URL query param එකෙන් ස්වයංක්‍රීයව Row එක Select කර ගැනීම
-        const urlSelectedId = searchParams.get("selected_sales_id");
-        if (urlSelectedId) {
-          const found = list.find((item) => String(item.id) === urlSelectedId);
-          if (found) {
-            setSelectedId(found.id);
-            setFormData({
-              personName: found.personName,
-              amount: String(found.amount),
-              date: found.date ? found.date.split("T")[0] : new Date().toISOString().split("T")[0],
-            });
-          }
-        }
+        setExpenses(Array.isArray(data) ? data : []);
       } else {
         console.error("Failed to fetch expenses");
       }
@@ -63,7 +47,7 @@ export default function SalesExpensesPage() {
     } finally {
       setLoading(false);
     }
-  }, [branchId, searchParams]);
+  }, [branchId]);
 
   useEffect(() => {
     fetchExpenses();
@@ -91,23 +75,27 @@ export default function SalesExpensesPage() {
 
     try {
       setSubmitting(true);
-      const method = selectedId ? "PUT" : "POST";
-      const payload = selectedId
-        ? { id: selectedId, ...formData, branch_id: branchId }
-        : { ...formData, branch_id: branchId };
-
       const res = await fetch("/api/expences/sales", {
-        method,
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          ...formData,
+          branch_id: branchId,
+        }),
       });
 
       if (res.ok) {
+        const newRecord = await res.json();
         clearSelection();
-        await fetchExpenses();
+
+        if (newRecord && newRecord.id) {
+          setExpenses((prev) => [newRecord, ...prev]);
+        } else {
+          await fetchExpenses();
+        }
       } else {
         const errData = await res.json();
-        alert(errData.error || "Failed to process expense entry");
+        alert(errData.error || "Failed to record expense");
       }
     } catch (err) {
       console.error("Error submitting data:", err);
@@ -117,7 +105,7 @@ export default function SalesExpensesPage() {
   };
 
   const handleDelete = async (id: number, e: React.MouseEvent) => {
-    e.stopPropagation();
+    e.stopPropagation(); 
     if (!confirm("Are you sure you want to delete this expense entry?")) return;
 
     try {
@@ -149,8 +137,7 @@ export default function SalesExpensesPage() {
         date: item.date ? item.date.split("T")[0] : new Date().toISOString().split("T")[0],
       });
 
-      // Next.js Router මගින් URL එක Update කිරීම
-      router.replace(`/dashboard/branches/${branchId}/sales?selected_sales_id=${item.id}`, { scroll: false });
+      window.history.replaceState(null, "", `?selected_sales_id=${item.id}`);
     }
   };
 
@@ -162,7 +149,9 @@ export default function SalesExpensesPage() {
       date: new Date().toISOString().split("T")[0],
     });
 
-    router.replace(`/dashboard/branches/${branchId}/sales`, { scroll: false });
+    const url = new URL(window.location.href);
+    url.searchParams.delete("selected_sales_id");
+    window.history.replaceState(null, "", url.pathname);
   };
 
   return (
@@ -214,14 +203,13 @@ export default function SalesExpensesPage() {
 
               {selectedId && (
                 <div className="flex items-center gap-1">
-                  {/* External Link Redirect Fix */}
-                  <Link
-                    href={`/dashboard/branches/${branchId}/total-expenses?selected_sales_id=${selectedId}`}
-                    className="p-1 hover:bg-slate-800 text-slate-400 hover:text-sky-400 rounded-lg transition-colors flex items-center justify-center"
+                  <button
+                    onClick={() => router.push(`/dashboard/total-expenses?selected_sales_id=${selectedId}`)}
+                    className="p-1 hover:bg-slate-800 text-slate-400 hover:text-sky-400 rounded-lg transition-colors"
                     title="View in Sub-Ledger"
                   >
                     <ExternalLink className="w-4 h-4" />
-                  </Link>
+                  </button>
                   <button
                     onClick={clearSelection}
                     className="p-1 hover:bg-slate-800 text-slate-400 hover:text-rose-400 rounded-lg transition-colors"
@@ -240,7 +228,7 @@ export default function SalesExpensesPage() {
             <div className="flex items-center justify-between border-b border-slate-800/80 pb-3 mb-4">
               <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
                 <PlusCircle className="w-4 h-4 text-emerald-400" />
-                {selectedId ? "Edit Expense Details" : "New Expense Entry"}
+                {selectedId ? "Selected Person Details" : "New Expense Entry"}
               </h2>
               <span className="text-[10px] uppercase font-mono tracking-wider bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20">
                 Branch #{branchId}
@@ -306,36 +294,20 @@ export default function SalesExpensesPage() {
                 </div>
               </div>
 
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 disabled:opacity-50 text-white font-medium py-2 px-4 rounded-xl text-xs transition duration-150 ease-in-out shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-2"
-                >
-                  {submitting ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : selectedId ? (
-                    <>
-                      <Save className="w-4 h-4" />
-                      Update Record
-                    </>
-                  ) : (
-                    <>
-                      <PlusCircle className="w-4 h-4" />
-                      Save Record
-                    </>
-                  )}
-                </button>
-                {selectedId && (
-                  <button
-                    type="button"
-                    onClick={clearSelection}
-                    className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium py-2 px-3 rounded-xl text-xs transition duration-150 ease-in-out"
-                  >
-                    Cancel
-                  </button>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 disabled:opacity-50 text-white font-medium py-2 px-4 rounded-xl text-xs transition duration-150 ease-in-out shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-2 mt-2"
+              >
+                {submitting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <>
+                    <PlusCircle className="w-4 h-4" />
+                    Save Record
+                  </>
                 )}
-              </div>
+              </button>
             </form>
           </div>
 
