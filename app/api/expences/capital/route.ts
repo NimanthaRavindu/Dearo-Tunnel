@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db"; 
 
-
+// GET Method
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -15,7 +15,6 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Direct Database Query Execution
     const [rows] = await db.query(
       `SELECT 
         id, 
@@ -47,7 +46,6 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { branchId, personName, date, amount, description } = body;
 
-    // Validation
     if (!branchId || !personName || !date || !amount) {
       return NextResponse.json(
         { error: "Missing required fields (branchId, personName, date, amount)" },
@@ -55,7 +53,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Direct SQL Insert Query
     const [result]: any = await db.query(
       `INSERT INTO capital_expenses (branch_id, person_name, date, amount, description) 
        VALUES (?, ?, ?, ?, ?)`,
@@ -76,6 +73,28 @@ export async function POST(req: NextRequest) {
     console.error("Database Insert Error:", error);
     return NextResponse.json(
       { error: "Failed to insert record into database", details: error.message },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE Method
+export async function DELETE(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const recordId = searchParams.get("id");
+
+    if (!recordId) {
+      return NextResponse.json({ error: "Missing Record ID" }, { status: 400 });
+    }
+
+    await db.query(`DELETE FROM capital_expenses WHERE id = ?`, [Number(recordId)]);
+
+    return NextResponse.json({ message: "Record deleted successfully" }, { status: 200 });
+  } catch (error: any) {
+    console.error("Database Delete Error:", error);
+    return NextResponse.json(
+      { error: "Failed to delete record", details: error.message },
       { status: 500 }
     );
   }

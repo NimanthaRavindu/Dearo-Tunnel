@@ -9,7 +9,6 @@ export async function GET(req: NextRequest) {
     const parsedId = selectedSalesId ? Number(selectedSalesId) : null;
     const isFiltered = parsedId !== null && !isNaN(parsedId);
 
-    // Filter එකක් ඇති විට id එකෙන් පමණක් safe එකේ filter කිරීම
     let salesSubQuery = `
       SELECT branch_id, SUM(COALESCE(amount, 0)) AS sales_total 
       FROM sales_expenses 
@@ -32,6 +31,7 @@ export async function GET(req: NextRequest) {
         b.branch_code,
         COALESCE(s.salary_total, 0) AS salary_expenses,
         COALESCE(se.sales_total, 0) AS sales_expenses,
+        COALESCE(c.capital_total, 0) AS capital_expenses,
         COALESCE(o.other_total, 0) AS other_expenses,
         COALESCE(s.salary_balance, 0) AS salary_balance,
         COALESCE(o.other_balance, 0) AS other_balance
@@ -41,6 +41,10 @@ export async function GET(req: NextRequest) {
         FROM salary_expenses GROUP BY branch_id
       ) s ON b.id = s.branch_id
       LEFT JOIN (${salesSubQuery}) se ON b.id = se.branch_id
+      LEFT JOIN (
+        SELECT branch_id, SUM(COALESCE(amount, 0)) AS capital_total 
+        FROM capital_expenses GROUP BY branch_id
+      ) c ON b.id = c.branch_id
       LEFT JOIN (
         SELECT branch_id, SUM(COALESCE(total_payable, 0)) AS other_total, SUM(COALESCE(balance, 0)) AS other_balance 
         FROM other_expenses GROUP BY branch_id
@@ -57,9 +61,10 @@ export async function GET(req: NextRequest) {
       branches.forEach((b: any) => {
         b.salary_expenses = Number(b.salary_expenses || 0);
         b.sales_expenses = Number(b.sales_expenses || 0);
+        b.capital_expenses = Number(b.capital_expenses || 0);
         b.other_expenses = Number(b.other_expenses || 0);
 
-        b.total_expenses = b.salary_expenses + b.other_expenses + b.sales_expenses;
+        b.total_expenses = b.salary_expenses + b.other_expenses + b.sales_expenses + b.capital_expenses;
         
         b.salary_balance = Number(b.salary_balance || 0);
         b.other_balance = Number(b.other_balance || 0);

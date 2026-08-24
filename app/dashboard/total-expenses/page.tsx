@@ -11,6 +11,7 @@ interface BranchExpense {
   salary_expenses: number;
   other_expenses: number;
   sales_expenses?: number;
+  capital_expenses?: number;
   total_expenses: number;
 }
 
@@ -50,12 +51,13 @@ function TotalExpensesContent() {
     router.push("/dashboard/total-expenses");
   };
 
-  // Direct dynamic sum calculation based on individual values
+  // Direct dynamic sum calculation incorporating capital expenses
   const calculatedTotalSum = branches.reduce((acc, branch) => {
     const salary = Number(branch.salary_expenses || 0);
     const sales = Number(branch.sales_expenses || 0);
+    const capital = Number(branch.capital_expenses || 0);
     const other = Number(branch.other_expenses || 0);
-    return acc + (salary + sales + other);
+    return acc + (salary + sales + capital + other);
   }, 0);
 
   if (loading) {
@@ -73,7 +75,6 @@ function TotalExpensesContent() {
     <div className="p-4 md:p-6 space-y-6 bg-[#070a12] min-h-screen text-slate-300 font-mono text-xs selection:bg-sky-500/20 selection:text-sky-300">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-900 pb-4">
         <div className="space-y-1.5">
-          {/* Dashboard එකට යන විට selected_sales_id එක pass කිරීම */}
           <button
             onClick={() =>
               router.push(
@@ -142,6 +143,7 @@ function TotalExpensesContent() {
                 <th className="py-2.5 px-4">Node / Branch Identity</th>
                 <th className="py-2.5 px-4 text-right">Salary Expenses</th>
                 <th className="py-2.5 px-4 text-right">Sales Expenses</th>
+                <th className="py-2.5 px-4 text-right">Capital Expenses</th>
                 <th className="py-2.5 px-4 text-right">Other Expenses</th>
                 <th className="py-2.5 px-4 text-right text-sky-400 bg-sky-950/10">
                   Gross Combined Expenses
@@ -152,9 +154,10 @@ function TotalExpensesContent() {
               {branches.map((branch) => {
                 const salary = Number(branch.salary_expenses || 0);
                 const sales = Number(branch.sales_expenses || 0);
+                const capital = Number(branch.capital_expenses || 0);
                 const other = Number(branch.other_expenses || 0);
                 
-                const grossTotal = salary + sales + other;
+                const grossTotal = salary + sales + capital + other;
                 const hasExpenses = grossTotal > 0;
 
                 return (
@@ -181,6 +184,14 @@ function TotalExpensesContent() {
                     <td className="py-2.5 px-4 text-right font-mono text-emerald-400/90 font-semibold">
                       {sales > 0
                         ? sales.toLocaleString("en-US", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })
+                        : "0.00"}
+                    </td>
+                    <td className="py-2.5 px-4 text-right font-mono text-amber-400/90 font-semibold">
+                      {capital > 0
+                        ? capital.toLocaleString("en-US", {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 2,
                           })

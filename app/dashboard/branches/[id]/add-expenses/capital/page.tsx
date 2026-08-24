@@ -2,20 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { 
-  ArrowLeft, 
-  Building2, 
-  Plus, 
-  User, 
-  Calendar, 
-  Coins, 
-  Trash2, 
-  FileText,
-  Sparkles,
-  Search,
-  Receipt,
-  Loader2 
-} from "lucide-react";
+import { ArrowLeft, Building2, Plus, User, Calendar, Coins, Trash2, FileText, Search, Receipt, Loader2 } from "lucide-react";
 
 interface CapitalExpense {
   id: number | string;
@@ -29,7 +16,7 @@ interface CapitalExpense {
 export default function CapitalExpensesPage() {
   const params = useParams();
   const router = useRouter();
-  const id = params.id; // branch ID
+  const id = params.id;
 
   // Form States
   const [personName, setPersonName] = useState("");
@@ -42,6 +29,7 @@ export default function CapitalExpensesPage() {
   const [expenses, setExpenses] = useState<CapitalExpense[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | string | null>(null);
 
   useEffect(() => {
     async function fetchExpenses() {
@@ -84,20 +72,40 @@ export default function CapitalExpensesPage() {
 
       if (res.ok) {
         const savedExpense = await res.json();
-        setExpenses([savedExpense, ...expenses]); // Local state update
+        setExpenses([savedExpense, ...expenses]);
         
-        // Form Clear
         setPersonName("");
         setAmount("");
         setDescription("");
       } else {
         const errorData = await res.json();
-        alert(`Failed to save transaction: ${errorData.error || "Unknown error"}\nDetails: ${errorData.details || "No extra details"}`);
+        alert(`Failed to save transaction: ${errorData.error || "Unknown error"}`);
       }
     } catch (err) {
       console.error(err);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleDeleteExpense = async (expenseId: number | string) => {
+    if (!confirm("Are you sure you want to delete this capital record?")) return;
+
+    try {
+      setDeletingId(expenseId);
+      const res = await fetch(`/api/expences/capital?id=${expenseId}`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        setExpenses(expenses.filter((e) => e.id !== expenseId));
+      } else {
+        alert("Failed to delete record");
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -110,7 +118,7 @@ export default function CapitalExpensesPage() {
   );
 
   return (
-    <div className="min-h-screen bg-[#080d1a] text-slate-100 p-6 md:p-8 relative overflow-hidden">
+    <div className="min-h-screen bg-[#080d1a] text-slate-100 p-6 md:p-8 relative overflow-hidden font-sans">
       <div className="max-w-7xl mx-auto space-y-8 relative z-10">
         
         {/* Header Console */}
@@ -126,7 +134,7 @@ export default function CapitalExpensesPage() {
             <div>
               <div className="flex items-center gap-2">
                 <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                <h1 className="text-xl font-extrabold tracking-wider uppercase text-slate-100 flex items-center gap-2">
+                <h1 className="text-xl font-extrabold tracking-wider uppercase text-slate-100 flex items-center gap-2 font-mono">
                   <Building2 className="text-emerald-400" size={20} /> Capital Expenses Ledger
                 </h1>
               </div>
@@ -141,10 +149,10 @@ export default function CapitalExpensesPage() {
               <Receipt size={20} />
             </div>
             <div>
-              <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-400 block">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-400 block font-mono">
                 Total Capital Spent
               </span>
-              <span className="text-xl font-black text-slate-100">
+              <span className="text-xl font-black text-slate-100 font-mono">
                 LKR {totalCapitalExpenses.toLocaleString("en-US", { minimumFractionDigits: 2 })}
               </span>
             </div>
@@ -156,13 +164,13 @@ export default function CapitalExpensesPage() {
           
           {/* Form Side */}
           <div className="lg:col-span-5 bg-slate-950/70 border border-slate-800/80 rounded-2xl p-6 shadow-2xl backdrop-blur-md">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-200 pb-4 border-b border-slate-800/80 mb-5 flex items-center gap-2">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-200 pb-4 border-b border-slate-800/80 mb-5 flex items-center gap-2 font-mono">
               <Plus size={16} className="text-emerald-400" /> New Capital Entry
             </h2>
 
             <form onSubmit={handleAddExpense} className="space-y-4">
               <div>
-                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">
+                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block font-mono">
                   Authorized Person Name
                 </label>
                 <div className="relative">
@@ -179,7 +187,7 @@ export default function CapitalExpensesPage() {
               </div>
 
               <div>
-                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">
+                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block font-mono">
                   Date
                 </label>
                 <div className="relative">
@@ -189,13 +197,13 @@ export default function CapitalExpensesPage() {
                     required
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
-                    className="w-full bg-slate-900/90 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-xs text-slate-100 focus:outline-none focus:border-emerald-500/60 transition-all"
+                    className="w-full bg-slate-900/90 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-xs text-slate-100 focus:outline-none focus:border-emerald-500/60 transition-all font-mono"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">
+                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block font-mono">
                   Amount (LKR)
                 </label>
                 <div className="relative">
@@ -207,13 +215,13 @@ export default function CapitalExpensesPage() {
                     placeholder="0.00"
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
-                    className="w-full bg-slate-900/90 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-xs text-slate-100 focus:outline-none focus:border-emerald-500/60 transition-all font-semibold"
+                    className="w-full bg-slate-900/90 border border-slate-800 rounded-xl py-2.5 pl-10 pr-3 text-xs text-slate-100 focus:outline-none focus:border-emerald-500/60 transition-all font-mono font-semibold"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">
+                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block font-mono">
                   Description
                 </label>
                 <div className="relative">
@@ -231,7 +239,7 @@ export default function CapitalExpensesPage() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full mt-2 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg flex items-center justify-center gap-2"
+                className="w-full mt-2 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 font-mono"
               >
                 {submitting ? <Loader2 className="animate-spin" size={16} /> : "Save Capital Record"}
               </button>
@@ -241,7 +249,7 @@ export default function CapitalExpensesPage() {
           {/* Table Side */}
           <div className="lg:col-span-7 bg-slate-950/70 border border-slate-800/80 rounded-2xl p-6 shadow-2xl backdrop-blur-md">
             <div className="flex items-center justify-between pb-4 border-b border-slate-800/80 mb-4">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-200">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-200 font-mono">
                 Recorded Transactions ({filteredExpenses.length})
               </h2>
               <div className="relative w-48">
@@ -257,21 +265,22 @@ export default function CapitalExpensesPage() {
             </div>
 
             {loading ? (
-              <div className="py-16 text-center text-slate-500 flex items-center justify-center gap-2 text-xs">
+              <div className="py-16 text-center text-slate-500 flex items-center justify-center gap-2 text-xs font-mono">
                 <Loader2 className="animate-spin text-emerald-400" size={18} /> Loading ledger database...
               </div>
             ) : filteredExpenses.length === 0 ? (
-              <div className="py-16 text-center text-slate-500 text-xs font-bold uppercase tracking-wider">
+              <div className="py-16 text-center text-slate-500 text-xs font-bold uppercase tracking-wider font-mono">
                 No Capital Expenses Logged
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="border-b border-slate-800/80 text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-slate-900/40">
+                    <tr className="border-b border-slate-800/80 text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-slate-900/40 font-mono">
                       <th className="p-3">Person / Asset</th>
                       <th className="p-3">Date</th>
                       <th className="p-3 text-right">Amount (LKR)</th>
+                      <th className="p-3 text-center">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/50 text-xs">
@@ -281,11 +290,25 @@ export default function CapitalExpensesPage() {
                           <p className="font-bold text-slate-200">{item.personName}</p>
                           <p className="text-[11px] text-slate-400 line-clamp-1">{item.description}</p>
                         </td>
-                        <td className="p-3 text-slate-400 text-[11px]">
-                          {new Date(item.date).toLocaleDateString()}
+                        <td className="p-3 text-slate-400 text-[11px] font-mono">
+                          {String(item.date).split("T")[0]}
                         </td>
-                        <td className="p-3 text-right font-black text-emerald-400 text-xs">
+                        <td className="p-3 text-right font-black text-emerald-400 text-xs font-mono">
                           {Number(item.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="p-3 text-center">
+                          <button
+                            onClick={() => handleDeleteExpense(item.id)}
+                            disabled={deletingId === item.id}
+                            className="p-1.5 hover:bg-rose-950/40 text-slate-500 hover:text-rose-400 rounded-lg transition-colors disabled:opacity-50"
+                            title="Delete Record"
+                          >
+                            {deletingId === item.id ? (
+                              <Loader2 size={13} className="animate-spin" />
+                            ) : (
+                              <Trash2 size={13} />
+                            )}
+                          </button>
                         </td>
                       </tr>
                     ))}
