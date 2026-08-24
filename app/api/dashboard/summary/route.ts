@@ -9,6 +9,7 @@ export async function GET(req: NextRequest) {
     const parsedId = selectedSalesId ? Number(selectedSalesId) : null;
     const isFiltered = parsedId !== null && !isNaN(parsedId);
 
+    // Filter එකක් ඇති විට id එකෙන් පමණක් safe එකේ filter කිරීම
     let salesSubQuery = `
       SELECT branch_id, SUM(COALESCE(amount, 0)) AS sales_total 
       FROM sales_expenses 
@@ -19,7 +20,7 @@ export async function GET(req: NextRequest) {
       salesSubQuery = `
         SELECT branch_id, SUM(COALESCE(amount, 0)) AS sales_total 
         FROM sales_expenses 
-        WHERE id = ${parsedId} OR sales_id = ${parsedId}
+        WHERE id = ${parsedId}
         GROUP BY branch_id
       `;
     }
