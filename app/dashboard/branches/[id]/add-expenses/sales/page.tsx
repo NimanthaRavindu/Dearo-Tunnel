@@ -39,8 +39,6 @@ export default function SalesExpensesPage() {
       if (res.ok) {
         const data = await res.json();
         setExpenses(Array.isArray(data) ? data : []);
-      } else {
-        console.error("Failed to fetch expenses");
       }
     } catch (err) {
       console.error("Error fetching data:", err);
@@ -206,14 +204,14 @@ export default function SalesExpensesPage() {
                   <button
                     onClick={() => router.push(`/dashboard/total-expenses?selected_sales_id=${selectedId}`)}
                     className="p-1 hover:bg-slate-800 text-slate-400 hover:text-sky-400 rounded-lg transition-colors"
-                    title="View in Sub-Ledger"
+                    title="View Filtered Record in Total Expenses"
                   >
                     <ExternalLink className="w-4 h-4" />
                   </button>
                   <button
                     onClick={clearSelection}
                     className="p-1 hover:bg-slate-800 text-slate-400 hover:text-rose-400 rounded-lg transition-colors"
-                    title="Clear selection to show total"
+                    title="Clear selection"
                   >
                     <XCircle className="w-4 h-4" />
                   </button>
@@ -350,20 +348,14 @@ export default function SalesExpensesPage() {
                   <tbody className="divide-y divide-slate-800/50">
                     {loading ? (
                       <tr>
-                        <td
-                          colSpan={5}
-                          className="text-center py-10 text-slate-500"
-                        >
+                        <td colSpan={5} className="text-center py-10 text-slate-500">
                           <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-emerald-400" />
                           Fetching record entries...
                         </td>
                       </tr>
                     ) : filteredExpenses.length === 0 ? (
                       <tr>
-                        <td
-                          colSpan={5}
-                          className="text-center py-10 text-slate-500"
-                        >
+                        <td colSpan={5} className="text-center py-10 text-slate-500">
                           <Receipt className="w-8 h-8 mx-auto mb-2 opacity-30" />
                           No sales expenses found for Branch #{branchId}.
                         </td>
