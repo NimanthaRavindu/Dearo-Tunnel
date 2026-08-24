@@ -5,11 +5,11 @@ import { db } from "@/lib/db";
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const branchIdParam = searchParams.get("branchId");
-    const capitalIdParam = searchParams.get("capitalId") || searchParams.get("id");
+    const branchIdParam = searchParams.get("branchId") || searchParams.get("branch_id");
+    const capitalIdParam = searchParams.get("capitalId") || searchParams.get("capital_id") || searchParams.get("id");
 
-    // 1. Single Capital Record query
-    if (capitalIdParam && !branchIdParam) {
+    // 1. Single Capital Record query by ID
+    if (capitalIdParam) {
       const capitalId = Number(capitalIdParam);
       if (isNaN(capitalId)) {
         return NextResponse.json(
@@ -35,15 +35,35 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(rows[0] || null, { status: 200 });
     }
 
-    // 2. Branch Capital Records query
-    const branchId = Number(branchIdParam);
-    if (!branchIdParam || isNaN(branchId)) {
-      return NextResponse.json(
-        { error: "Invalid or missing Branch ID parameter" },
-        { status: 400 }
+    // 2. Branch-specific Capital Records query
+    if (branchIdParam) {
+      const branchId = Number(branchIdParam);
+      if (isNaN(branchId)) {
+        return NextResponse.json(
+          { error: "Invalid Branch ID parameter" },
+          { status: 400 }
+        );
+      }
+
+      const [rows]: any = await db.query(
+        `SELECT 
+          id, 
+          branch_id AS branchId,
+          person_name AS personName, 
+          date, 
+          amount, 
+          description, 
+          created_at AS createdAt 
+         FROM capital_expenses 
+         WHERE branch_id = ? 
+         ORDER BY created_at DESC`,
+        [branchId]
       );
+
+      return NextResponse.json(rows, { status: 200 });
     }
 
+    // 3. Fallback: Get all capital expenses if no specific filters are passed
     const [rows]: any = await db.query(
       `SELECT 
         id, 
@@ -54,9 +74,7 @@ export async function GET(req: NextRequest) {
         description, 
         created_at AS createdAt 
        FROM capital_expenses 
-       WHERE branch_id = ? 
-       ORDER BY created_at DESC`,
-      [branchId]
+       ORDER BY created_at DESC`
     );
 
     return NextResponse.json(rows, { status: 200 });
@@ -73,9 +91,12 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { branchId, personName, date, amount, description } = body;
+    const { branchId, branch_id, personName, person_name, date, amount, description } = body;
+    
+    const targetBranchId = branchId || branch_id;
+    const targetPersonName = personName || person_name;
 
-    if (!branchId || !personName || !date || amount === undefined || amount === null) {
+    if (!targetBranchId || !targetPersonName || !date || amount === undefined || amount === null) {
       return NextResponse.json(
         { error: "Missing required fields (branchId, personName, date, amount)" },
         { status: 400 }
@@ -93,13 +114,13 @@ export async function POST(req: NextRequest) {
     const [result]: any = await db.query(
       `INSERT INTO capital_expenses (branch_id, person_name, date, amount, description) 
        VALUES (?, ?, ?, ?, ?)`,
-      [Number(branchId), personName, date, parsedAmount, description || ""]
+      [Number(targetBranchId), targetPersonName, date, parsedAmount, description || ""]
     );
 
     const newRecord = {
       id: result.insertId,
-      branchId: Number(branchId),
-      personName,
+      branchId: Number(targetBranchId),
+      personName: targetPersonName,
       date,
       amount: parsedAmount,
       description: description || "",

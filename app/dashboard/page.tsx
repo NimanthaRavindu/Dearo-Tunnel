@@ -71,23 +71,23 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
 
   if (loading) {
     return (
-      <div className="h-screen w-full flex flex-col items-center justify-center text-slate-500 bg-[#070a12] font-mono text-xs">
-        <div className="h-5 w-5 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin mb-2"></div>
-        <p className="uppercase tracking-widest text-[10px]">Initializing Operational Ledger Matrices...</p>
+      <div className="h-screen w-full flex flex-col items-center justify-center text-emerald-400 bg-slate-950 font-sans text-xs">
+        <div className="h-5 w-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mb-2"></div>
+        <p className="uppercase tracking-widest text-[10px]">Loading Dashboard Matrices...</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="h-screen w-full flex flex-col items-center justify-center text-red-400 bg-[#070a12] font-mono p-4 space-y-3">
-        <div className="flex items-center gap-2 bg-red-950/30 border border-red-900/50 px-4 py-2.5 rounded-lg text-xs">
+      <div className="h-screen w-full flex flex-col items-center justify-center text-red-400 bg-slate-950 font-sans p-4 space-y-3">
+        <div className="flex items-center gap-2 bg-red-950/40 border border-red-900/50 px-4 py-2.5 rounded-lg text-xs">
           <AlertCircle size={14} />
-          <span>Gateway Sync Error: {error}</span>
+          <span>Sync Error: {error}</span>
         </div>
         <button 
           onClick={() => { setLoading(true); fetchDashboardData(); }}
-          className="text-[10px] uppercase font-bold text-slate-400 hover:text-white bg-slate-900 border border-slate-800 px-3 py-1.5 rounded transition-all"
+          className="text-[10px] uppercase font-bold text-slate-300 hover:text-white bg-emerald-900/60 border border-emerald-700 px-3 py-1.5 rounded transition-all"
         >
           Re-establish Data Pipeline
         </button>
@@ -103,10 +103,10 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
     labels: filteredBranches.map((b: any) => b.branch_name),
     datasets: [
       {
-        label: "Total Expenses (Rs.)",
+        label: "Total Expenses (LKR)",
         data: filteredBranches.map((b: any) => Number(b.total_expenses || 0)),
-        backgroundColor: "rgba(59, 130, 246, 0.8)",
-        borderColor: "#3b82f6",
+        backgroundColor: "rgba(16, 185, 129, 0.75)",
+        borderColor: "#059669",
         borderWidth: 1,
         borderRadius: 4,
         barThickness: 16,
@@ -127,42 +127,45 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
   };
 
   return (
-    <div className="p-6 md:p-8 space-y-6 bg-[#070a12] min-h-screen text-slate-300 font-mono text-xs selection:bg-cyan-500/20 selection:text-cyan-300">
+    <div className="p-4 md:p-6 space-y-5 bg-slate-950 min-h-screen text-slate-200 font-sans text-xs selection:bg-emerald-500/20 selection:text-emerald-300">
       
       {/* Dynamic Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-white">Financial & Tunnel Logistics</h2>
-          <p className="text-xs text-slate-500 mt-0.5">Real-time centralized ledger for all active infrastructure branches.</p>
+          <h2 className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            Financial & Operational Dashboard
+          </h2>
+          <p className="text-[11px] text-slate-400 mt-0.5">Real-time centralized ledger for active branch infrastructure.</p>
         </div>
 
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2.5 flex-wrap">
           {/* Capital Filter Badge */}
           {selectedCapitalId && (
-            <div className="flex items-center gap-2 bg-amber-950/40 border border-amber-500/30 px-3 py-1.5 rounded-lg text-amber-400 text-[11px]">
+            <div className="flex items-center gap-1.5 bg-emerald-950/60 border border-emerald-500/30 px-2.5 py-1 rounded-md text-emerald-400 text-[11px]">
               <Filter size={12} />
-              <span>Capital Record #{selectedCapitalId}</span>
+              <span>Capital #{selectedCapitalId}</span>
               <button 
                 onClick={() => clearFilter("capital")} 
                 className="hover:text-white p-0.5 rounded transition-colors"
                 title="Clear Capital Filter"
               >
-                <X size={13} />
+                <X size={12} />
               </button>
             </div>
           )}
 
           {/* Sales Filter Badge */}
           {selectedSalesId && (
-            <div className="flex items-center gap-2 bg-cyan-950/40 border border-cyan-500/30 px-3 py-1.5 rounded-lg text-cyan-400 text-[11px]">
+            <div className="flex items-center gap-1.5 bg-emerald-950/60 border border-emerald-500/30 px-2.5 py-1 rounded-md text-emerald-400 text-[11px]">
               <Filter size={12} />
-              <span>Sales Record #{selectedSalesId}</span>
+              <span>Sales #{selectedSalesId}</span>
               <button 
                 onClick={() => clearFilter("sales")} 
                 className="hover:text-white p-0.5 rounded transition-colors"
                 title="Clear Sales Filter"
               >
-                <X size={13} />
+                <X size={12} />
               </button>
             </div>
           )}
@@ -170,87 +173,87 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
           <button
             onClick={() => { setRefreshing(true); fetchDashboardData(); }}
             disabled={refreshing}
-            className="flex items-center gap-2 px-3 py-1.5 bg-[#0d1527]/80 border border-slate-800 rounded-lg hover:border-slate-700 hover:text-white transition-all text-[11px]"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-md hover:border-emerald-600/50 hover:text-emerald-400 transition-all text-[11px] font-medium"
           >
-            <RefreshCw size={13} className={`text-cyan-400 ${refreshing ? "animate-spin" : ""}`} />
-            {refreshing ? "FETCHING" : "REFRESH DATA"}
+            <RefreshCw size={12} className={`text-emerald-500 ${refreshing ? "animate-spin" : ""}`} />
+            {refreshing ? "FETCHING" : "REFRESH"}
           </button>
         </div>
       </div>
 
       <div className="relative z-40">
-        <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <section className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
           
-          {/* Card 1: Total Tunnels */}
+          {/* Card 1: Total Tunnels / Branches */}
           <div 
             onClick={() => setIsTunnelDropdownOpen(!isTunnelDropdownOpen)}
-            className={`bg-[#0d1527]/60 border rounded-xl p-4 flex items-center justify-between cursor-pointer transition-all active:scale-[0.99] shadow-sm select-none group relative overflow-hidden ${
-              isTunnelDropdownOpen ? "border-cyan-500/60 bg-[#0f1b35]/80" : "border-slate-800 hover:border-cyan-500/30"
+            className={`bg-slate-900/70 border rounded-lg p-3.5 flex items-center justify-between cursor-pointer transition-all shadow-sm select-none group relative overflow-hidden ${
+              isTunnelDropdownOpen ? "border-emerald-500/60 bg-slate-900" : "border-slate-800 hover:border-emerald-500/40"
             }`}>
             <div className="z-10">
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
-                Total Tunnels
-                {isTunnelDropdownOpen ? <ChevronUp size={12} className="text-cyan-400" /> : <ChevronDown size={12} className="text-slate-500 group-hover:text-cyan-400" />}
+                Total Branches
+                {isTunnelDropdownOpen ? <ChevronUp size={12} className="text-emerald-400" /> : <ChevronDown size={12} className="text-slate-500 group-hover:text-emerald-400" />}
               </p>
-              <p className="text-2xl font-mono font-bold text-white mt-1">
+              <p className="text-xl font-bold text-white mt-1">
                 {data?.cards?.totalBranches || filteredBranches.length || 0}
               </p>
             </div>
-            <div className={`p-2 bg-slate-900/80 border border-slate-800 text-slate-400 rounded-lg transition-all z-10 ${
-              isTunnelDropdownOpen ? "bg-cyan-500/10 border-cyan-500/40 text-cyan-400" : "group-hover:bg-cyan-500/10 group-hover:border-cyan-500/30"
+            <div className={`p-2 bg-slate-950 border border-slate-800 text-slate-400 rounded-md transition-all z-10 ${
+              isTunnelDropdownOpen ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-400" : "group-hover:bg-emerald-500/10 group-hover:border-emerald-500/30 group-hover:text-emerald-400"
             }`}>
-              <Building2 size={18} />
+              <Building2 size={16} />
             </div>
           </div>
 
           {/* Card 2: Total Expenses Matrix */}
           <div
             onClick={handleTotalExpensesClick} 
-            className="bg-[#0d1527]/60 border border-slate-800/60 rounded-xl p-4 flex items-center justify-between cursor-pointer hover:border-blue-500/40 transition-all"
+            className="bg-slate-900/70 border border-slate-800 rounded-lg p-3.5 flex items-center justify-between cursor-pointer hover:border-emerald-500/40 transition-all group"
           >
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Expenses</p>
-              <p className="text-2xl font-mono font-bold text-blue-400 mt-1">
+              <p className="text-xl font-bold text-emerald-400 mt-1">
                 LKR {Number(data?.cards?.totalExpenses || 0).toLocaleString("en-US")}
               </p>
             </div>
-            <div className="p-2.5 bg-blue-500/10 text-blue-400 rounded-lg">
-              <span className="text-sm font-bold">$</span>
+            <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-md group-hover:bg-emerald-500/20">
+              <TrendingUp size={16} />
             </div>
           </div>
 
           {/* Card 3: Remaining Balance */}
           <div 
             onClick={() => router.push("/dashboard/remaining-balance")}
-            className="bg-[#0d1527]/60 border border-slate-800/60 rounded-xl p-4 flex items-center justify-between cursor-pointer hover:border-amber-500/40 transition-all"
+            className="bg-slate-900/70 border border-slate-800 rounded-lg p-3.5 flex items-center justify-between cursor-pointer hover:border-emerald-500/40 transition-all group"
           >
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Remaining Balance</p>
-              <p className="text-2xl font-mono font-bold text-amber-500 mt-1">
+              <p className="text-xl font-bold text-emerald-300 mt-1">
                 LKR {Number(data?.cards?.totalRemaining || 0).toLocaleString("en-US")}
               </p>
             </div>
-            <div className="p-2.5 bg-amber-500/10 text-amber-400 rounded-lg">
-              <TrendingUp size={18} />
+            <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-md group-hover:bg-emerald-500/20">
+              <span className="text-xs font-bold">LKR</span>
             </div>
           </div>
 
         </section>
 
         {isTunnelDropdownOpen && (
-          <div className="absolute left-0 mt-2 w-full bg-[#0a101f] border border-cyan-500/40 rounded-xl p-5 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150">
-            <div className="text-[10px] font-bold text-cyan-400 uppercase tracking-widest border-b border-slate-800/80 pb-2.5 mb-4 flex items-center justify-between">
-              <span>Active Node Branches List ({filteredBranches.length} Records Located)</span>
+          <div className="absolute left-0 mt-2 w-full bg-slate-900 border border-emerald-500/40 rounded-lg p-4 shadow-xl z-50">
+            <div className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest border-b border-slate-800 pb-2 mb-3 flex items-center justify-between">
+              <span>Branch Nodes Directory ({filteredBranches.length} Records Located)</span>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-h-[250px] overflow-y-auto pr-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 max-h-[220px] overflow-y-auto pr-2">
               {filteredBranches.map((branch: any) => (
                 <div
                   key={branch.id}
                   onClick={() => router.push(`/dashboard/branches/${branch.id}`)} 
-                  className="flex items-center gap-3 p-2.5 bg-[#0e1626] border border-slate-900 rounded-lg hover:border-cyan-500/30 cursor-pointer"
+                  className="flex items-center gap-2 p-2 bg-slate-950 border border-slate-800/80 rounded-md hover:border-emerald-500/40 cursor-pointer transition-colors"
                 >
-                  <MapPin size={12} className="text-slate-500"/>
-                  <span className="text-[11px] font-bold text-slate-200 truncate">{branch.branch_name}</span>
+                  <MapPin size={12} className="text-emerald-500"/>
+                  <span className="text-[11px] font-medium text-slate-200 truncate">{branch.branch_name}</span>
                 </div>
               ))}
             </div>
@@ -259,11 +262,12 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
       </div>
 
       {/* Analytics Chart */}
-      <section className="bg-[#0d1527]/40 border border-slate-800/60 rounded-xl p-5">
-        <div className="mb-4">
+      <section className="bg-slate-900/60 border border-slate-800/80 rounded-lg p-4">
+        <div className="mb-3 flex items-center justify-between">
           <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">Branch Expense Distribution</h3>
+          <span className="text-[10px] text-emerald-400 bg-emerald-950/50 border border-emerald-500/30 px-2 py-0.5 rounded">Live Metrics</span>
         </div>
-        <div className="h-72 w-full relative">
+        <div className="h-64 w-full relative">
           <Bar data={chartData} options={chartOptions as any} />
         </div>
       </section>
@@ -274,9 +278,9 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
 
 function DashboardFallback() {
   return (
-    <div className="h-screen w-full flex flex-col items-center justify-center text-slate-500 bg-[#070a12] font-mono text-xs">
-      <div className="h-5 w-5 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin mb-2"></div>
-      <p className="uppercase tracking-widest text-[10px]">Initializing Operational Ledger Matrices...</p>
+    <div className="h-screen w-full flex flex-col items-center justify-center text-emerald-400 bg-slate-950 font-sans text-xs">
+      <div className="h-5 w-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mb-2"></div>
+      <p className="uppercase tracking-widest text-[10px]">Loading Dashboard Matrices...</p>
     </div>
   );
 }

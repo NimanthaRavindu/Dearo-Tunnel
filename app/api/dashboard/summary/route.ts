@@ -13,6 +13,7 @@ export async function GET(req: NextRequest) {
     const parsedCapitalId = selectedCapitalId ? Number(selectedCapitalId) : null;
     const isCapitalFiltered = parsedCapitalId !== null && !isNaN(parsedCapitalId);
 
+    // Arrays to hold parameters strictly in the order they appear in the final query
     const queryParams: any[] = [];
 
     // Sales Expenses Subquery
@@ -46,7 +47,7 @@ export async function GET(req: NextRequest) {
         WHERE id = ?
         GROUP BY branch_id
       `;
-      queryParams.push(parsedCapitalId);
+      queryParams.push(parsedCapitalId); // Note: Correctly pushed after sales param if both exist
     }
 
     const query = `
