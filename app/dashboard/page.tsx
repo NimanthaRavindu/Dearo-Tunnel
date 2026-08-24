@@ -16,7 +16,9 @@ interface PageProps {
 function DashboardContent({ searchQuery = "" }: PageProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  
   const selectedSalesId = searchParams.get("selected_sales_id");
+  const selectedCapitalId = searchParams.get("selected_capital_id");
 
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -27,10 +29,12 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
 
   const fetchDashboardData = useCallback(async () => {
     try {
-      let url = "/api/dashboard/summary";
-      if (selectedSalesId) {
-        url += `?selected_sales_id=${selectedSalesId}`;
-      }
+      const params = new URLSearchParams();
+      if (selectedSalesId) params.append("selected_sales_id", selectedSalesId);
+      if (selectedCapitalId) params.append("selected_capital_id", selectedCapitalId);
+
+      const queryString = params.toString();
+      const url = `/api/dashboard/summary${queryString ? `?${queryString}` : ""}`;
 
       const response = await fetch(url);
       if (!response.ok) throw new Error("Failed to synchronize infrastructure core metrics.");
@@ -42,14 +46,23 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [selectedSalesId]);
+  }, [selectedSalesId, selectedCapitalId]);
 
   useEffect(() => {
     fetchDashboardData();
   }, [fetchDashboardData]);
 
-  const clearFilter = () => {
-    router.push("/dashboard");
+  // Filter එක ඉවත් කිරීමේ Function එක
+  const clearFilter = (type: "sales" | "capital" | "all") => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (type === "sales" || type === "all") {
+      params.delete("selected_sales_id");
+    }
+    if (type === "capital" || type === "all") {
+      params.delete("selected_capital_id");
+    }
+    const query = params.toString();
+    router.push(`/dashboard${query ? `?${query}` : ""}`);
   };
 
   if (loading) {
@@ -109,6 +122,15 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
     },
   };
 
+  // Card Navigation URL සමඟ Active Filters යැවීම
+  const handleTotalExpensesClick = () => {
+    const params = new URLSearchParams();
+    if (selectedSalesId) params.append("selected_sales_id", selectedSalesId);
+    if (selectedCapitalId) params.append("selected_capital_id", selectedCapitalId);
+    const query = params.toString();
+    router.push(`/dashboard/total-expenses${query ? `?${query}` : ""}`);
+  };
+
   return (
     <div className="p-6 md:p-8 space-y-6 bg-[#070a12] min-h-screen text-slate-300 font-mono text-xs selection:bg-cyan-500/20 selection:text-cyan-300">
       
@@ -119,15 +141,30 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
           <p className="text-xs text-slate-500 mt-0.5">Real-time centralized ledger for all active infrastructure branches.</p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Active Filter Badges */}
+          {selectedCapitalId && (
+            <div className="flex items-center gap-2 bg-amber-950/40 border border-amber-500/30 px-3 py-1.5 rounded-lg text-amber-400 text-[11px]">
+              <Filter size={12} />
+              <span>Capital Record #{selectedCapitalId}</span>
+              <button 
+                onClick={() => clearFilter("capital")} 
+                className="hover:text-white p-0.5 rounded transition-colors"
+                title="Clear Capital Filter"
+              >
+                <X size={13} />
+              </button>
+            </div>
+          )}
+
           {selectedSalesId && (
             <div className="flex items-center gap-2 bg-cyan-950/40 border border-cyan-500/30 px-3 py-1.5 rounded-lg text-cyan-400 text-[11px]">
               <Filter size={12} />
-              <span>Filtered Record #{selectedSalesId}</span>
+              <span>Sales Record #{selectedSalesId}</span>
               <button 
-                onClick={clearFilter} 
+                onClick={() => clearFilter("sales")} 
                 className="hover:text-white p-0.5 rounded transition-colors"
-                title="Clear Filter"
+                title="Clear Sales Filter"
               >
                 <X size={13} />
               </button>
@@ -172,11 +209,13 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
 
           {/* Card 2: Total Expenses Matrix */}
           <div
-            onClick={() => router.push(selectedSalesId ? `/dashboard/total-expenses?selected_sales_id=${selectedSalesId}` : "/dashboard/total-expenses")} 
+            onClick={handleTotalExpensesClick} 
             className="bg-[#0d1527]/60 border border-slate-800/60 rounded-xl p-4 flex items-center justify-between cursor-pointer hover:border-blue-500/40 transition-all"
           >
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Expenses</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                {selectedSalesId || selectedCapitalId ? "Filtered Expenses" : "Total Expenses"}
+              </p>
               <p className="text-2xl font-mono font-bold text-blue-400 mt-1">
                 LKR {Number(data?.cards?.totalExpenses || 0).toLocaleString("en-US")}
               </p>
