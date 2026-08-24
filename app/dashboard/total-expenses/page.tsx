@@ -50,8 +50,12 @@ function TotalExpensesContent() {
     router.push("/dashboard/total-expenses");
   };
 
+  // Direct dynamic sum calculation based on individual values
   const calculatedTotalSum = branches.reduce((acc, branch) => {
-    return acc + Number(branch.total_expenses || 0);
+    const salary = Number(branch.salary_expenses || 0);
+    const sales = Number(branch.sales_expenses || 0);
+    const other = Number(branch.other_expenses || 0);
+    return acc + (salary + sales + other);
   }, 0);
 
   if (loading) {
@@ -69,8 +73,15 @@ function TotalExpensesContent() {
     <div className="p-4 md:p-6 space-y-6 bg-[#070a12] min-h-screen text-slate-300 font-mono text-xs selection:bg-sky-500/20 selection:text-sky-300">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-900 pb-4">
         <div className="space-y-1.5">
+          {/* Dashboard එකට යන විට selected_sales_id එක pass කිරීම */}
           <button
-            onClick={() => router.push("/dashboard")}
+            onClick={() =>
+              router.push(
+                selectedSalesId
+                  ? `/dashboard?selected_sales_id=${selectedSalesId}`
+                  : "/dashboard"
+              )
+            }
             className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-white uppercase font-bold transition-colors"
           >
             <ArrowLeft size={12} /> Back To Main Control Panel
@@ -143,8 +154,7 @@ function TotalExpensesContent() {
                 const sales = Number(branch.sales_expenses || 0);
                 const other = Number(branch.other_expenses || 0);
                 
-                // grossTotal එක branch එකේ ගෙනෙන අගය නැතහොත් dynamic එකතුව සකස් කිරීම
-                const grossTotal = Number(branch.total_expenses || (salary + sales + other));
+                const grossTotal = salary + sales + other;
                 const hasExpenses = grossTotal > 0;
 
                 return (

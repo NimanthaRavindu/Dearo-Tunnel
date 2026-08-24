@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
       salesSubQuery = `
         SELECT branch_id, SUM(COALESCE(amount, 0)) AS sales_total 
         FROM sales_expenses 
-        WHERE id = ${parsedId} 
+        WHERE id = ${parsedId} OR sales_id = ${parsedId}
         GROUP BY branch_id
       `;
     }
