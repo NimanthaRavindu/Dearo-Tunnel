@@ -6,9 +6,9 @@ import { RowDataPacket, ResultSetHeader } from "mysql2";
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const branch_id = searchParams.get("branch_id") || searchParams.get("branchId");
+    const branch_id = searchParams.get("branch_id");
     const mode = searchParams.get("mode");
-    const selected_sales_id = searchParams.get("selected_sales_id") || searchParams.get("salesId");
+    const selected_sales_id = searchParams.get("selected_sales_id");
 
     // Summary mode computation
     if (mode === "summary" && branch_id) {
@@ -56,27 +56,17 @@ export async function GET(req: Request) {
       );
     }
 
-    // Default Fetch Records mode (With support for specific selected_sales_id filter)
+    // Default Fetch Records mode
     let query = `
       SELECT s.id, s.branch_id, b.branch_name, s.personName, s.amount, s.date 
       FROM sales_expenses s
       LEFT JOIN branch b ON s.branch_id = b.id
     `;
     const queryParams: (string | number)[] = [];
-    const conditions: string[] = [];
 
     if (branch_id) {
-      conditions.push(`s.branch_id = ?`);
+      query += ` WHERE s.branch_id = ?`;
       queryParams.push(branch_id);
-    }
-
-    if (selected_sales_id) {
-      conditions.push(`s.id = ?`);
-      queryParams.push(selected_sales_id);
-    }
-
-    if (conditions.length > 0) {
-      query += ` WHERE ` + conditions.join(" AND ");
     }
 
     query += ` ORDER BY s.date DESC, s.id DESC`;
@@ -97,20 +87,19 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { branch_id, branchId, personName, amount, date } = body;
-    const resolvedBranchId = branch_id || branchId;
+    const { branch_id, personName, amount, date } = body;
 
-    if (!resolvedBranchId || !personName || !amount || !date) {
+    if (!branch_id || !personName || !amount || !date) {
       return NextResponse.json(
         {
           error:
-            "All required fields (branch_id/branchId, personName, amount, date) must be provided",
+            "All required fields (branch_id, personName, amount, date) must be provided",
         },
         { status: 400 }
       );
     }
 
-    const parsedBranchId = parseInt(resolvedBranchId, 10);
+    const parsedBranchId = parseInt(branch_id, 10);
     if (isNaN(parsedBranchId)) {
       return NextResponse.json(
         { error: "Invalid branch_id provided" },
@@ -155,10 +144,9 @@ export async function POST(req: Request) {
 export async function PUT(req: Request) {
   try {
     const body = await req.json();
-    const { id, branch_id, branchId, personName, amount, date } = body;
-    const resolvedBranchId = branch_id || branchId;
+    const { id, branch_id, personName, amount, date } = body;
 
-    if (!id || !resolvedBranchId || !personName || !amount || !date) {
+    if (!id || !branch_id || !personName || !amount || !date) {
       return NextResponse.json(
         { error: "Missing required fields for update" },
         { status: 400 }
@@ -166,7 +154,7 @@ export async function PUT(req: Request) {
     }
 
     const parsedId = parseInt(id, 10);
-    const parsedBranchId = parseInt(resolvedBranchId, 10);
+    const parsedBranchId = parseInt(branch_id, 10);
     const parsedAmount = parseFloat(amount);
 
     if (isNaN(parsedId) || isNaN(parsedBranchId) || isNaN(parsedAmount)) {
