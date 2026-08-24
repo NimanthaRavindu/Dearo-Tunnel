@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from "chart.js";
 import { Bar } from "react-chartjs-2";
-import { Building2, TrendingUp, AlertCircle, Coins, Layers, RefreshCw, ArrowRight, ChevronUp, ChevronDown, MapPin, Filter, X } from "lucide-react";
+import { Building2, TrendingUp, AlertCircle, RefreshCw, ChevronUp, ChevronDown, MapPin, Filter, X } from "lucide-react";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
@@ -12,7 +12,8 @@ interface PageProps {
   searchQuery?: string;
 }
 
-export default function DashboardPage({ searchQuery = "" }: PageProps) {
+// 1. Inner Component handling useSearchParams and API logic
+function DashboardContent({ searchQuery = "" }: PageProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const selectedSalesId = searchParams.get("selected_sales_id");
@@ -24,7 +25,6 @@ export default function DashboardPage({ searchQuery = "" }: PageProps) {
   
   const [isTunnelDropdownOpen, setIsTunnelDropdownOpen] = useState(false);
 
-  // URL Query Params එක අනුව API Call එක හැදීම
   const fetchDashboardData = useCallback(async () => {
     try {
       let url = "/api/dashboard/summary";
@@ -261,5 +261,24 @@ export default function DashboardPage({ searchQuery = "" }: PageProps) {
       </section>
 
     </div>
+  );
+}
+
+// 2. Loading Fallback UI during SSG Prerendering
+function DashboardFallback() {
+  return (
+    <div className="h-screen w-full flex flex-col items-center justify-center text-slate-500 bg-[#070a12] font-mono text-xs">
+      <div className="h-5 w-5 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin mb-2"></div>
+      <p className="uppercase tracking-widest text-[10px]">Initializing Operational Ledger Matrices...</p>
+    </div>
+  );
+}
+
+// 3. Exported Component wrapped with Suspense Boundary
+export default function DashboardPage(props: PageProps) {
+  return (
+    <Suspense fallback={<DashboardFallback />}>
+      <DashboardContent {...props} />
+    </Suspense>
   );
 }
