@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { DollarSign, Calendar, User, PlusCircle, TrendingUp, CreditCard, ArrowLeft, Trash2, Loader2, Receipt, Search, XCircle, ExternalLink } from "lucide-react";
 import Link from "next/link";
 
@@ -17,6 +17,7 @@ interface SalesExpense {
 export default function SalesExpensesPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const branchId = params?.id;
 
   const [expenses, setExpenses] = useState<SalesExpense[]>([]);
@@ -38,14 +39,30 @@ export default function SalesExpensesPage() {
       const res = await fetch(`/api/expences/sales?branch_id=${branchId}`);
       if (res.ok) {
         const data = await res.json();
-        setExpenses(Array.isArray(data) ? data : []);
+        const list = Array.isArray(data) ? data : [];
+        setExpenses(list);
+
+        // Check URL query param for initial selection after data loads
+        const urlSalesId = searchParams.get("selected_sales_id");
+        if (urlSalesId) {
+          const numId = Number(urlSalesId);
+          const found = list.find((item: SalesExpense) => item.id === numId);
+          if (found) {
+            setSelectedId(found.id);
+            setFormData({
+              personName: found.personName,
+              amount: String(found.amount),
+              date: found.date ? found.date.split("T")[0] : new Date().toISOString().split("T")[0],
+            });
+          }
+        }
       }
     } catch (err) {
       console.error("Error fetching data:", err);
     } finally {
       setLoading(false);
     }
-  }, [branchId]);
+  }, [branchId, searchParams]);
 
   useEffect(() => {
     fetchExpenses();

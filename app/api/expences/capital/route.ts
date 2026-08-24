@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(rows[0] || null, { status: 200 });
     }
 
-    // 2. Branch Capital Records query
+    // 2. Branch Capital Records query with optional specific capitalId filter support
     const branchId = Number(branchIdParam);
     if (!branchIdParam || isNaN(branchId)) {
       return NextResponse.json(
@@ -44,8 +44,8 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const [rows]: any = await db.query(
-      `SELECT 
+    let query = `
+      SELECT 
         id, 
         branch_id AS branchId,
         person_name AS personName, 
@@ -54,11 +54,20 @@ export async function GET(req: NextRequest) {
         description, 
         created_at AS createdAt 
        FROM capital_expenses 
-       WHERE branch_id = ? 
-       ORDER BY created_at DESC`,
-      [branchId]
-    );
+       WHERE branch_id = ?
+    `;
+    const queryParams: any[] = [branchId];
 
+    if (capitalIdParam) {
+      query += ` AND id = ?`;
+      queryParams.push(Number(capitalIdParam));
+    }
+
+    query += ` ORDER BY created_at DESC`;
+
+    const [rows]: any = await db.query(query, queryParams);
+
+    // If a specific capitalId was filtered and array is expected, return it
     return NextResponse.json(rows, { status: 200 });
   } catch (error: any) {
     console.error("Database Fetch Error:", error);

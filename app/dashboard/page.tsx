@@ -12,7 +12,6 @@ interface PageProps {
   searchQuery?: string;
 }
 
-// 1. Inner Component handling useSearchParams and API logic
 function DashboardContent({ searchQuery = "" }: PageProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -24,7 +23,6 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
-  
   const [isTunnelDropdownOpen, setIsTunnelDropdownOpen] = useState(false);
 
   const fetchDashboardData = useCallback(async () => {
@@ -52,17 +50,23 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
     fetchDashboardData();
   }, [fetchDashboardData]);
 
-  // Filter එක ඉවත් කිරීමේ Function එක
-  const clearFilter = (type: "sales" | "capital" | "all") => {
+  // තනි Filter එකක් ඉවත් කරද්දී අනෙක තබා ගැනීම
+  const clearFilter = (type: "sales" | "capital") => {
     const params = new URLSearchParams(searchParams.toString());
-    if (type === "sales" || type === "all") {
-      params.delete("selected_sales_id");
-    }
-    if (type === "capital" || type === "all") {
-      params.delete("selected_capital_id");
-    }
+    if (type === "sales") params.delete("selected_sales_id");
+    if (type === "capital") params.delete("selected_capital_id");
+    
     const query = params.toString();
     router.push(`/dashboard${query ? `?${query}` : ""}`);
+  };
+
+  // Total Expenses Card එකට යද්දී parameters දෙකම රැගෙන යාම
+  const handleTotalExpensesClick = () => {
+    const params = new URLSearchParams();
+    if (selectedSalesId) params.append("selected_sales_id", selectedSalesId);
+    if (selectedCapitalId) params.append("selected_capital_id", selectedCapitalId);
+    const query = params.toString();
+    router.push(`/dashboard/total-expenses${query ? `?${query}` : ""}`);
   };
 
   if (loading) {
@@ -122,15 +126,6 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
     },
   };
 
-  // Card Navigation URL සමඟ Active Filters යැවීම
-  const handleTotalExpensesClick = () => {
-    const params = new URLSearchParams();
-    if (selectedSalesId) params.append("selected_sales_id", selectedSalesId);
-    if (selectedCapitalId) params.append("selected_capital_id", selectedCapitalId);
-    const query = params.toString();
-    router.push(`/dashboard/total-expenses${query ? `?${query}` : ""}`);
-  };
-
   return (
     <div className="p-6 md:p-8 space-y-6 bg-[#070a12] min-h-screen text-slate-300 font-mono text-xs selection:bg-cyan-500/20 selection:text-cyan-300">
       
@@ -142,7 +137,7 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
-          {/* Active Filter Badges */}
+          {/* Capital Filter Badge */}
           {selectedCapitalId && (
             <div className="flex items-center gap-2 bg-amber-950/40 border border-amber-500/30 px-3 py-1.5 rounded-lg text-amber-400 text-[11px]">
               <Filter size={12} />
@@ -157,6 +152,7 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
             </div>
           )}
 
+          {/* Sales Filter Badge */}
           {selectedSalesId && (
             <div className="flex items-center gap-2 bg-cyan-950/40 border border-cyan-500/30 px-3 py-1.5 rounded-lg text-cyan-400 text-[11px]">
               <Filter size={12} />
@@ -183,9 +179,9 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
       </div>
 
       <div className="relative z-40">
-        {/* Grid Content Information Cards */}
         <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {/* Card 1: Total Branches */}
+          
+          {/* Card 1: Total Tunnels */}
           <div 
             onClick={() => setIsTunnelDropdownOpen(!isTunnelDropdownOpen)}
             className={`bg-[#0d1527]/60 border rounded-xl p-4 flex items-center justify-between cursor-pointer transition-all active:scale-[0.99] shadow-sm select-none group relative overflow-hidden ${
@@ -213,9 +209,7 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
             className="bg-[#0d1527]/60 border border-slate-800/60 rounded-xl p-4 flex items-center justify-between cursor-pointer hover:border-blue-500/40 transition-all"
           >
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                {selectedSalesId || selectedCapitalId ? "Filtered Expenses" : "Total Expenses"}
-              </p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Expenses</p>
               <p className="text-2xl font-mono font-bold text-blue-400 mt-1">
                 LKR {Number(data?.cards?.totalExpenses || 0).toLocaleString("en-US")}
               </p>
@@ -225,7 +219,7 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
             </div>
           </div>
 
-          {/* Card 3: Remaining Due Balance Matrix */}
+          {/* Card 3: Remaining Balance */}
           <div 
             onClick={() => router.push("/dashboard/remaining-balance")}
             className="bg-[#0d1527]/60 border border-slate-800/60 rounded-xl p-4 flex items-center justify-between cursor-pointer hover:border-amber-500/40 transition-all"
@@ -247,55 +241,30 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
           <div className="absolute left-0 mt-2 w-full bg-[#0a101f] border border-cyan-500/40 rounded-xl p-5 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150">
             <div className="text-[10px] font-bold text-cyan-400 uppercase tracking-widest border-b border-slate-800/80 pb-2.5 mb-4 flex items-center justify-between">
               <span>Active Node Branches List ({filteredBranches.length} Records Located)</span>
-              {searchQuery && <span className="text-[9px] text-slate-500 font-normal lowercase font-sans">filtered by:"{searchQuery}"</span>}
             </div>
-            {filteredBranches.length === 0 ? (
-              <div className="py-8 text-center text-slate-500 flex items-center justify-center gap-2">
-                <AlertCircle size={14} className="text-slate-600"/>System database returned empty branch record matrix.
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-h-[250px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent">
-                {filteredBranches.map((branch: any) => (
-                  <div
-                    key={branch.id}
-                    onClick={() => {
-                      router.push(`/dashboard/branches/${branch.id}`);
-                    }} 
-                    className="flex items-center gap-3 p-2.5 bg-[#0e1626] border border-slate-900 rounded-lg hover:border-cyan-500/30 hover:bg-[#111c34]/50 transition-all group cursor-pointer"
-                  >
-                    <div className="p-2 bg-slate-900 rounded border border-slate-800 text-slate-500 group-hover:text-cyan-400 group-hover:border-cyan-500/20 transition-all">
-                      <MapPin size={12}/>
-                    </div>
-                    <div className="truncate">
-                      <p className="text-[11px] font-bold text-slate-200 truncate group-hover:text-white transition-colors">
-                        {branch.branch_name}
-                      </p>
-                      <p className="text-[9px] text-slate-500 font-mono tracking-wider mt-0.5">
-                        {branch.branch_code || `CODE-${branch.id}`}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-h-[250px] overflow-y-auto pr-2">
+              {filteredBranches.map((branch: any) => (
+                <div
+                  key={branch.id}
+                  onClick={() => router.push(`/dashboard/branches/${branch.id}`)} 
+                  className="flex items-center gap-3 p-2.5 bg-[#0e1626] border border-slate-900 rounded-lg hover:border-cyan-500/30 cursor-pointer"
+                >
+                  <MapPin size={12} className="text-slate-500"/>
+                  <span className="text-[11px] font-bold text-slate-200 truncate">{branch.branch_name}</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
 
-      {/* Analytics Chart Container */}
+      {/* Analytics Chart */}
       <section className="bg-[#0d1527]/40 border border-slate-800/60 rounded-xl p-5">
         <div className="mb-4">
           <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">Branch Expense Distribution</h3>
         </div>
-        
         <div className="h-72 w-full relative">
-          {filteredBranches.length > 0 ? (
-            <Bar data={chartData} options={chartOptions as any} />
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center text-xs text-slate-500 font-mono gap-2">
-              <AlertCircle size={14} /> NO BRANCH MATCHES FOUND
-            </div>
-          )}
+          <Bar data={chartData} options={chartOptions as any} />
         </div>
       </section>
 
@@ -303,7 +272,6 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
   );
 }
 
-// 2. Loading Fallback UI during SSG Prerendering
 function DashboardFallback() {
   return (
     <div className="h-screen w-full flex flex-col items-center justify-center text-slate-500 bg-[#070a12] font-mono text-xs">
@@ -313,7 +281,6 @@ function DashboardFallback() {
   );
 }
 
-// 3. Exported Component wrapped with Suspense Boundary
 export default function DashboardPage(props: PageProps) {
   return (
     <Suspense fallback={<DashboardFallback />}>

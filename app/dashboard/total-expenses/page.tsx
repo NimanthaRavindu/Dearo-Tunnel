@@ -15,7 +15,6 @@ interface BranchExpense {
   total_expenses: number;
 }
 
-// Currency formatting helper
 const formatCurrency = (val: number) =>
   Number(val || 0).toLocaleString("en-US", {
     minimumFractionDigits: 2,
@@ -26,7 +25,6 @@ function TotalExpensesContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // Extract both filter params
   const selectedSalesId = searchParams.get("selected_sales_id");
   const selectedCapitalId = searchParams.get("selected_capital_id");
 
@@ -62,7 +60,6 @@ function TotalExpensesContent() {
     fetchExpenseBreakdown();
   }, [fetchExpenseBreakdown]);
 
-  // Specific filter clear logic
   const clearSalesFilter = () => {
     const params = new URLSearchParams(searchParams.toString());
     params.delete("selected_sales_id");
@@ -77,7 +74,6 @@ function TotalExpensesContent() {
     router.push(qs ? `/dashboard/total-expenses?${qs}` : "/dashboard/total-expenses");
   };
 
-  // Direct dynamic sum calculation incorporating capital expenses
   const calculatedTotalSum = branches.reduce((acc, branch) => {
     const salary = Number(branch.salary_expenses || 0);
     const sales = Number(branch.sales_expenses || 0);

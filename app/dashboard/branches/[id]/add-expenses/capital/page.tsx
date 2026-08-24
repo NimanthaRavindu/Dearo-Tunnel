@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Building2, Plus, User, Calendar, Coins, Trash2, FileText, Search, Receipt, Loader2, Filter } from "lucide-react";
+import React, { useState, useEffect, Suspense } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { ArrowLeft, Building2, Plus, User, Calendar, Coins, Trash2, FileText, Search, Receipt, Loader2, Filter, X } from "lucide-react";
 
 interface CapitalExpense {
   id: number | string;
@@ -13,10 +13,14 @@ interface CapitalExpense {
   description: string;
 }
 
-export default function CapitalExpensesPage() {
+function CapitalContent() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const id = params?.id;
+
+  const selectedCapitalId = searchParams.get("selected_capital_id");
+  const selectedSalesId = searchParams.get("selected_sales_id");
 
   // Form States
   const [personName, setPersonName] = useState("");
@@ -36,22 +40,32 @@ export default function CapitalExpensesPage() {
       if (!id) return;
       try {
         setLoading(true);
-        const res = await fetch(`/api/expences/capital?branchId=${id}`);
+        let url = `/api/expences/capital?branchId=${id}`;
+        if (selectedCapitalId) {
+          url += `&capitalId=${selectedCapitalId}`;
+        }
+        const res = await fetch(url);
         if (res.ok) {
           const data = await res.json();
-          setExpenses(data);
+          // Backend එකෙන් single object හෝ array එකක් එන්න පුළුවන් නිසා එක icheck කරන්න
+          if (Array.isArray(data)) {
+            setExpenses(data);
+          } else if (data) {
+            setExpenses([data]);
+          } else {
+            setExpenses([]);
+          }
         } else {
           console.error("Failed to fetch expenses:", await res.text());
         }
       } catch (err) {
         console.error("Failed to load records", err);
-      } 
-      finally {
+      } finally {
         setLoading(false);
       }
     }
     fetchExpenses();
-  }, [id]);
+  }, [id, selectedCapitalId]);
 
   const handleAddExpense = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -110,15 +124,18 @@ export default function CapitalExpensesPage() {
     }
   };
 
-  const handleViewBreakdown = (capitalId: number | string) => {
-    router.push(`/dashboard/total-expenses?selected_capital_id=${capitalId}`);
+  const clearCapitalFilter = () => {
+    const paramsCopy = new URLSearchParams(searchParams.toString());
+    paramsCopy.delete("selected_capital_id");
+    const qs = paramsCopy.toString();
+    router.push(qs ? `/dashboard/branches/${id}/capital?${qs}` : `/dashboard/branches/${id}/capital`);
   };
 
   const totalCapitalExpenses = expenses.reduce((sum, item) => sum + Number(item.amount), 0);
 
   const filteredExpenses = expenses.filter(
     (item) =>
-      item.personName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (item.personName && item.personName.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
@@ -136,11 +153,21 @@ export default function CapitalExpensesPage() {
               <ArrowLeft size={18} />
             </button>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
                 <h1 className="text-xl font-extrabold tracking-wider uppercase text-slate-100 flex items-center gap-2 font-mono">
                   <Building2 className="text-emerald-400" size={20} /> Capital Expenses Ledger
                 </h1>
+
+                {/* Capital Filter Active Tag */}
+                {selectedCapitalId && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-emerald-950 text-emerald-400 border border-emerald-800 text-[11px] font-mono">
+                    <Filter size={12} /> Filtered ID: #{selectedCapitalId}
+                    <button onClick={clearCapitalFilter} className="hover:text-white ml-1.5">
+                      <X size={12} />
+                    </button>
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
                 Record fixed assets, infrastructure investments, and machinery details
@@ -287,45 +314,44 @@ export default function CapitalExpensesPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/50 text-xs">
-                    {filteredExpenses.map((item) => (
-                      <tr key={item.id} className="hover:bg-slate-900/50 transition-colors">
-                        <td className="p-3">
-                          <p className="font-bold text-slate-200">{item.personName}</p>
-                          <p className="text-[11px] text-slate-400 line-clamp-1">{item.description}</p>
-                        </td>
-                        <td className="p-3 text-slate-400 text-[11px] font-mono">
-                          {String(item.date).split("T")[0]}
-                        </td>
-                        <td className="p-3 text-right font-black text-emerald-400 text-xs font-mono">
-                          {Number(item.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                        </td>
-                        <td className="p-3 text-center">
-                          <div className="flex items-center justify-center gap-1.5">
-                            <button
-                              onClick={() => handleViewBreakdown(item.id)}
-                              className="p-1.5 bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-400 hover:text-emerald-300 border border-emerald-800/60 rounded-lg transition-all flex items-center gap-1 text-[10px] font-mono"
-                              title="Filter Breakdown in Total Expenses"
-                            >
-                              <Filter size={12} />
-                              <span className="hidden sm:inline">Filter</span>
-                            </button>
-
-                            <button
-                              onClick={() => handleDeleteExpense(item.id)}
-                              disabled={deletingId === item.id}
-                              className="p-1.5 hover:bg-rose-950/40 text-slate-500 hover:text-rose-400 rounded-lg transition-colors disabled:opacity-50"
-                              title="Delete Record"
-                            >
-                              {deletingId === item.id ? (
-                                <Loader2 size={13} className="animate-spin" />
-                              ) : (
-                                <Trash2 size={13} />
-                              )}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                    {filteredExpenses.map((item) => {
+                      const isHighlighted = selectedCapitalId && String(item.id) === String(selectedCapitalId);
+                      return (
+                        <tr
+                          key={item.id}
+                          className={`transition-colors ${
+                            isHighlighted ? "bg-emerald-950/40 border-l-2 border-emerald-400" : "hover:bg-slate-900/50"
+                          }`}
+                        >
+                          <td className="p-3">
+                            <p className="font-bold text-slate-200">{item.personName}</p>
+                            <p className="text-[11px] text-slate-400 line-clamp-1">{item.description}</p>
+                          </td>
+                          <td className="p-3 text-slate-400 text-[11px] font-mono">
+                            {String(item.date).split("T")[0]}
+                          </td>
+                          <td className="p-3 text-right font-black text-emerald-400 text-xs font-mono">
+                            {Number(item.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="p-3 text-center">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                onClick={() => handleDeleteExpense(item.id)}
+                                disabled={deletingId === item.id}
+                                className="p-1.5 hover:bg-rose-950/40 text-slate-500 hover:text-rose-400 rounded-lg transition-colors disabled:opacity-50"
+                                title="Delete Record"
+                              >
+                                {deletingId === item.id ? (
+                                  <Loader2 size={13} className="animate-spin" />
+                                ) : (
+                                  <Trash2 size={13} />
+                                )}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -334,5 +360,17 @@ export default function CapitalExpensesPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function CapitalExpensesPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#080d1a] text-slate-500 flex items-center justify-center font-mono text-xs">
+        <Loader2 className="animate-spin text-emerald-400 mr-2" size={16} /> Loading Capital Matrix...
+      </div>
+    }>
+      <CapitalContent />
+    </Suspense>
   );
 }
