@@ -273,7 +273,6 @@ function DashboardFallback() {
     </div>
   );
 }
-
 // 3. Exported Component wrapped with Suspense Boundary
 export default function DashboardPage(props: PageProps) {
   return (
