@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft,Building2,Plus,User,Calendar,Coins,Trash2,FileText,Search,Receipt,Loader2,Filter,ExternalLink} from "lucide-react";
+import { ArrowLeft, Building2, Plus, User, Calendar, Coins, Trash2, FileText, Search, Receipt, Loader2, Filter } from "lucide-react";
 
 interface CapitalExpense {
   id: number | string;
@@ -16,7 +16,7 @@ interface CapitalExpense {
 export default function CapitalExpensesPage() {
   const params = useParams();
   const router = useRouter();
-  const id = params.id;
+  const id = params?.id;
 
   // Form States
   const [personName, setPersonName] = useState("");
@@ -45,7 +45,8 @@ export default function CapitalExpensesPage() {
         }
       } catch (err) {
         console.error("Failed to load records", err);
-      } finally {
+      } 
+      finally {
         setLoading(false);
       }
     }
@@ -109,7 +110,6 @@ export default function CapitalExpensesPage() {
     }
   };
 
-  // Total Expenses Page එකට selected_capital_id එක යවන function එක
   const handleViewBreakdown = (capitalId: number | string) => {
     router.push(`/dashboard/total-expenses?selected_capital_id=${capitalId}`);
   };
@@ -301,7 +301,6 @@ export default function CapitalExpensesPage() {
                         </td>
                         <td className="p-3 text-center">
                           <div className="flex items-center justify-center gap-1.5">
-                            {/* Filter/View Breakdown Button */}
                             <button
                               onClick={() => handleViewBreakdown(item.id)}
                               className="p-1.5 bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-400 hover:text-emerald-300 border border-emerald-800/60 rounded-lg transition-all flex items-center gap-1 text-[10px] font-mono"
@@ -311,7 +310,6 @@ export default function CapitalExpensesPage() {
                               <span className="hidden sm:inline">Filter</span>
                             </button>
 
-                            {/* Delete Button */}
                             <button
                               onClick={() => handleDeleteExpense(item.id)}
                               disabled={deletingId === item.id}

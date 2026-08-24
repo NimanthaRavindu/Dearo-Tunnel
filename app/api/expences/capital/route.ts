@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
     const branchIdParam = searchParams.get("branchId");
     const capitalIdParam = searchParams.get("capitalId") || searchParams.get("id");
 
-    // 1. Single Capital Record query (If searching specifically by Capital Record ID)
+    // 1. Single Capital Record query
     if (capitalIdParam && !branchIdParam) {
       const capitalId = Number(capitalIdParam);
       if (isNaN(capitalId)) {
