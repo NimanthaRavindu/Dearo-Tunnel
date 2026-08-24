@@ -9,19 +9,22 @@ export async function GET(req: NextRequest) {
     const parsedId = selectedSalesId ? Number(selectedSalesId) : null;
     const isFiltered = parsedId !== null && !isNaN(parsedId);
 
+    // SQL Injection වැලැක්වීම සඳහා Prepared Statements සහ Parameter Arrays භාවිතා කර ඇත
     let salesSubQuery = `
       SELECT branch_id, SUM(COALESCE(amount, 0)) AS sales_total 
       FROM sales_expenses 
       GROUP BY branch_id
     `;
-    
+    const queryParams: any[] = [];
+
     if (isFiltered) {
       salesSubQuery = `
         SELECT branch_id, SUM(COALESCE(amount, 0)) AS sales_total 
         FROM sales_expenses 
-        WHERE id = ${parsedId}
+        WHERE id = ?
         GROUP BY branch_id
       `;
+      queryParams.push(parsedId);
     }
 
     const query = `
@@ -51,7 +54,8 @@ export async function GET(req: NextRequest) {
       ) o ON b.id = o.branch_id
     `;
 
-    const [branches]: any = await db.query(query);
+    // db.query එකට queryParams pass කිරීම
+    const [branches]: any = await db.query(query, queryParams);
 
     let totalBranches = Array.isArray(branches) ? branches.length : 0;
     let totalExpenses = 0;

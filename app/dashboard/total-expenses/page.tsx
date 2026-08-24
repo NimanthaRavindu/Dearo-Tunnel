@@ -15,10 +15,20 @@ interface BranchExpense {
   total_expenses: number;
 }
 
+// Currency formatting helper
+const formatCurrency = (val: number) =>
+  Number(val || 0).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
 function TotalExpensesContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  // Extract both filter params
   const selectedSalesId = searchParams.get("selected_sales_id");
+  const selectedCapitalId = searchParams.get("selected_capital_id");
 
   const [branches, setBranches] = useState<BranchExpense[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -26,8 +36,13 @@ function TotalExpensesContent() {
 
   const fetchExpenseBreakdown = useCallback(async () => {
     try {
-      const url = selectedSalesId
-        ? `/api/dashboard/summary?selected_sales_id=${selectedSalesId}`
+      const params = new URLSearchParams();
+      if (selectedSalesId) params.append("selected_sales_id", selectedSalesId);
+      if (selectedCapitalId) params.append("selected_capital_id", selectedCapitalId);
+
+      const queryString = params.toString();
+      const url = queryString
+        ? `/api/dashboard/summary?${queryString}`
         : "/api/dashboard/summary";
 
       const response = await fetch(url);
@@ -41,14 +56,25 @@ function TotalExpensesContent() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [selectedSalesId]);
+  }, [selectedSalesId, selectedCapitalId]);
 
   useEffect(() => {
     fetchExpenseBreakdown();
   }, [fetchExpenseBreakdown]);
 
-  const clearFilter = () => {
-    router.push("/dashboard/total-expenses");
+  // Specific filter clear logic
+  const clearSalesFilter = () => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("selected_sales_id");
+    const qs = params.toString();
+    router.push(qs ? `/dashboard/total-expenses?${qs}` : "/dashboard/total-expenses");
+  };
+
+  const clearCapitalFilter = () => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("selected_capital_id");
+    const qs = params.toString();
+    router.push(qs ? `/dashboard/total-expenses?${qs}` : "/dashboard/total-expenses");
   };
 
   // Direct dynamic sum calculation incorporating capital expenses
@@ -76,25 +102,35 @@ function TotalExpensesContent() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-900 pb-4">
         <div className="space-y-1.5">
           <button
-            onClick={() =>
-              router.push(
-                selectedSalesId
-                  ? `/dashboard?selected_sales_id=${selectedSalesId}`
-                  : "/dashboard"
-              )
-            }
+            onClick={() => {
+              const qs = searchParams.toString();
+              router.push(qs ? `/dashboard?${qs}` : "/dashboard");
+            }}
             className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-white uppercase font-bold transition-colors"
           >
             <ArrowLeft size={12} /> Back To Main Control Panel
           </button>
-          <div className="flex items-center gap-3">
+          
+          <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-base font-bold text-white uppercase tracking-wider flex items-center gap-2">
               <Coins size={15} className="text-sky-400" /> Gross Expense Breakdown Sub-Ledger
             </h2>
+
+            {/* Sales Expense Filter Tag */}
             {selectedSalesId && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-sky-950 text-sky-400 border border-sky-800 text-[10px]">
-                <Filter size={10} /> Filtered Entry #{selectedSalesId}
-                <button onClick={clearFilter} className="hover:text-white ml-1">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-800 text-[10px]">
+                <Filter size={10} /> Sales Entry #{selectedSalesId}
+                <button onClick={clearSalesFilter} className="hover:text-white ml-1">
+                  <X size={10} />
+                </button>
+              </span>
+            )}
+
+            {/* Capital Expense Filter Tag */}
+            {selectedCapitalId && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-950/80 text-amber-400 border border-amber-800 text-[10px]">
+                <Filter size={10} /> Capital Entry #{selectedCapitalId}
+                <button onClick={clearCapitalFilter} className="hover:text-white ml-1">
                   <X size={10} />
                 </button>
               </span>
@@ -122,11 +158,7 @@ function TotalExpensesContent() {
               Aggregate Gross Expenses
             </span>
             <span className="text-sm font-bold font-sans text-white">
-              LKR{" "}
-              {calculatedTotalSum.toLocaleString("en-US", {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}
+              LKR {formatCurrency(calculatedTotalSum)}
             </span>
           </div>
         </div>
@@ -142,8 +174,8 @@ function TotalExpensesContent() {
               <tr className="border-b border-slate-900 text-slate-500 text-[10px] uppercase font-bold tracking-wider bg-[#090e1a]/30">
                 <th className="py-2.5 px-4">Node / Branch Identity</th>
                 <th className="py-2.5 px-4 text-right">Salary Expenses</th>
-                <th className="py-2.5 px-4 text-right">Sales Expenses</th>
-                <th className="py-2.5 px-4 text-right">Capital Expenses</th>
+                <th className="py-2.5 px-4 text-right text-emerald-400/90">Sales Expenses</th>
+                <th className="py-2.5 px-4 text-right text-amber-400/90">Capital Expenses</th>
                 <th className="py-2.5 px-4 text-right">Other Expenses</th>
                 <th className="py-2.5 px-4 text-right text-sky-400 bg-sky-950/10">
                   Gross Combined Expenses
@@ -151,70 +183,77 @@ function TotalExpensesContent() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-900/40 text-slate-400 font-sans">
-              {branches.map((branch) => {
-                const salary = Number(branch.salary_expenses || 0);
-                const sales = Number(branch.sales_expenses || 0);
-                const capital = Number(branch.capital_expenses || 0);
-                const other = Number(branch.other_expenses || 0);
-                
-                const grossTotal = salary + sales + capital + other;
-                const hasExpenses = grossTotal > 0;
+              {branches.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-8 text-center text-slate-500 font-mono uppercase tracking-widest text-[10px]">
+                    No Expense Records Found
+                  </td>
+                </tr>
+              ) : (
+                branches.map((branch) => {
+                  const salary = Number(branch.salary_expenses || 0);
+                  const sales = Number(branch.sales_expenses || 0);
+                  const capital = Number(branch.capital_expenses || 0);
+                  const other = Number(branch.other_expenses || 0);
 
-                return (
-                  <tr
-                    key={branch.id}
-                    className={`hover:bg-slate-900/10 transition-all ${
-                      !hasExpenses ? "opacity-30 bg-slate-950/5" : ""
-                    }`}
-                  >
-                    <td className="py-2.5 px-4 font-mono font-semibold text-slate-300">
-                      {branch.branch_name}{" "}
-                      <span className="text-slate-600 font-normal text-[10px]">
-                        ({branch.branch_code})
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-4 text-right font-mono">
-                      {salary > 0
-                        ? salary.toLocaleString("en-US", {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })
-                        : "0.00"}
-                    </td>
-                    <td className="py-2.5 px-4 text-right font-mono text-emerald-400/90 font-semibold">
-                      {sales > 0
-                        ? sales.toLocaleString("en-US", {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })
-                        : "0.00"}
-                    </td>
-                    <td className="py-2.5 px-4 text-right font-mono text-amber-400/90 font-semibold">
-                      {capital > 0
-                        ? capital.toLocaleString("en-US", {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })
-                        : "0.00"}
-                    </td>
-                    <td className="py-2.5 px-4 text-right font-mono">
-                      {other > 0
-                        ? other.toLocaleString("en-US", {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })
-                        : "0.00"}
-                    </td>
-                    <td className="py-2.5 px-4 text-right font-mono font-bold bg-sky-950/5 text-slate-200">
-                      {grossTotal.toLocaleString("en-US", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
-                    </td>
-                  </tr>
-                );
-              })}
+                  const grossTotal = salary + sales + capital + other;
+                  const hasExpenses = grossTotal > 0;
+
+                  return (
+                    <tr
+                      key={branch.id}
+                      className={`hover:bg-slate-900/10 transition-all ${
+                        !hasExpenses ? "opacity-30 bg-slate-950/5" : ""
+                      }`}
+                    >
+                      <td className="py-2.5 px-4 font-mono font-semibold text-slate-300">
+                        {branch.branch_name}{" "}
+                        <span className="text-slate-600 font-normal text-[10px]">
+                          ({branch.branch_code})
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-4 text-right font-mono">
+                        {formatCurrency(salary)}
+                      </td>
+                      <td className="py-2.5 px-4 text-right font-mono text-emerald-400/90 font-semibold">
+                        {formatCurrency(sales)}
+                      </td>
+                      <td className="py-2.5 px-4 text-right font-mono text-amber-400/90 font-semibold">
+                        {formatCurrency(capital)}
+                      </td>
+                      <td className="py-2.5 px-4 text-right font-mono">
+                        {formatCurrency(other)}
+                      </td>
+                      <td className="py-2.5 px-4 text-right font-mono font-bold bg-sky-950/5 text-slate-200">
+                        {formatCurrency(grossTotal)}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
+            {branches.length > 0 && (
+              <tfoot className="border-t-2 border-slate-900 bg-[#0a0f1d] font-mono font-bold text-slate-200">
+                <tr>
+                  <td className="py-3 px-4 uppercase text-[10px] text-slate-400">Total Matrix Expenses</td>
+                  <td className="py-3 px-4 text-right">
+                    {formatCurrency(branches.reduce((acc, b) => acc + Number(b.salary_expenses || 0), 0))}
+                  </td>
+                  <td className="py-3 px-4 text-right text-emerald-400">
+                    {formatCurrency(branches.reduce((acc, b) => acc + Number(b.sales_expenses || 0), 0))}
+                  </td>
+                  <td className="py-3 px-4 text-right text-amber-400">
+                    {formatCurrency(branches.reduce((acc, b) => acc + Number(b.capital_expenses || 0), 0))}
+                  </td>
+                  <td className="py-3 px-4 text-right">
+                    {formatCurrency(branches.reduce((acc, b) => acc + Number(b.other_expenses || 0), 0))}
+                  </td>
+                  <td className="py-3 px-4 text-right text-sky-400 bg-sky-950/20">
+                    {formatCurrency(calculatedTotalSum)}
+                  </td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       </div>

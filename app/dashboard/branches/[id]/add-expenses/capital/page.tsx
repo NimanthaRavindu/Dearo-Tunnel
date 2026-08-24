@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Building2, Plus, User, Calendar, Coins, Trash2, FileText, Search, Receipt, Loader2 } from "lucide-react";
+import { ArrowLeft,Building2,Plus,User,Calendar,Coins,Trash2,FileText,Search,Receipt,Loader2,Filter,ExternalLink} from "lucide-react";
 
 interface CapitalExpense {
   id: number | string;
@@ -23,7 +23,7 @@ export default function CapitalExpensesPage() {
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
-  
+
   // App Logic States
   const [searchQuery, setSearchQuery] = useState("");
   const [expenses, setExpenses] = useState<CapitalExpense[]>([]);
@@ -73,7 +73,7 @@ export default function CapitalExpensesPage() {
       if (res.ok) {
         const savedExpense = await res.json();
         setExpenses([savedExpense, ...expenses]);
-        
+
         setPersonName("");
         setAmount("");
         setDescription("");
@@ -109,6 +109,11 @@ export default function CapitalExpensesPage() {
     }
   };
 
+  // Total Expenses Page එකට selected_capital_id එක යවන function එක
+  const handleViewBreakdown = (capitalId: number | string) => {
+    router.push(`/dashboard/total-expenses?selected_capital_id=${capitalId}`);
+  };
+
   const totalCapitalExpenses = expenses.reduce((sum, item) => sum + Number(item.amount), 0);
 
   const filteredExpenses = expenses.filter(
@@ -120,7 +125,6 @@ export default function CapitalExpensesPage() {
   return (
     <div className="min-h-screen bg-[#080d1a] text-slate-100 p-6 md:p-8 relative overflow-hidden font-sans">
       <div className="max-w-7xl mx-auto space-y-8 relative z-10">
-        
         {/* Header Console */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800/80 pb-6">
           <div className="flex items-center gap-4">
@@ -161,7 +165,6 @@ export default function CapitalExpensesPage() {
 
         {/* Form + Table Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          
           {/* Form Side */}
           <div className="lg:col-span-5 bg-slate-950/70 border border-slate-800/80 rounded-2xl p-6 shadow-2xl backdrop-blur-md">
             <h2 className="text-xs font-bold uppercase tracking-wider text-slate-200 pb-4 border-b border-slate-800/80 mb-5 flex items-center gap-2 font-mono">
@@ -297,18 +300,31 @@ export default function CapitalExpensesPage() {
                           {Number(item.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
                         </td>
                         <td className="p-3 text-center">
-                          <button
-                            onClick={() => handleDeleteExpense(item.id)}
-                            disabled={deletingId === item.id}
-                            className="p-1.5 hover:bg-rose-950/40 text-slate-500 hover:text-rose-400 rounded-lg transition-colors disabled:opacity-50"
-                            title="Delete Record"
-                          >
-                            {deletingId === item.id ? (
-                              <Loader2 size={13} className="animate-spin" />
-                            ) : (
-                              <Trash2 size={13} />
-                            )}
-                          </button>
+                          <div className="flex items-center justify-center gap-1.5">
+                            {/* Filter/View Breakdown Button */}
+                            <button
+                              onClick={() => handleViewBreakdown(item.id)}
+                              className="p-1.5 bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-400 hover:text-emerald-300 border border-emerald-800/60 rounded-lg transition-all flex items-center gap-1 text-[10px] font-mono"
+                              title="Filter Breakdown in Total Expenses"
+                            >
+                              <Filter size={12} />
+                              <span className="hidden sm:inline">Filter</span>
+                            </button>
+
+                            {/* Delete Button */}
+                            <button
+                              onClick={() => handleDeleteExpense(item.id)}
+                              disabled={deletingId === item.id}
+                              className="p-1.5 hover:bg-rose-950/40 text-slate-500 hover:text-rose-400 rounded-lg transition-colors disabled:opacity-50"
+                              title="Delete Record"
+                            >
+                              {deletingId === item.id ? (
+                                <Loader2 size={13} className="animate-spin" />
+                              ) : (
+                                <Trash2 size={13} />
+                              )}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -317,7 +333,6 @@ export default function CapitalExpensesPage() {
               </div>
             )}
           </div>
-
         </div>
       </div>
     </div>

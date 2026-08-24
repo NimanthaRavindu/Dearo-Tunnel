@@ -1,21 +1,50 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db"; 
+import { db } from "@/lib/db";
 
 // GET Method
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const id = searchParams.get("branchId") || searchParams.get("id");
-    const branchId = Number(id);
+    const branchIdParam = searchParams.get("branchId");
+    const capitalIdParam = searchParams.get("capitalId") || searchParams.get("id");
 
-    if (!id || isNaN(branchId)) {
+    // 1. Single Capital Record query (If searching specifically by Capital Record ID)
+    if (capitalIdParam && !branchIdParam) {
+      const capitalId = Number(capitalIdParam);
+      if (isNaN(capitalId)) {
+        return NextResponse.json(
+          { error: "Invalid Capital ID parameter" },
+          { status: 400 }
+        );
+      }
+
+      const [rows]: any = await db.query(
+        `SELECT 
+          id, 
+          branch_id AS branchId,
+          person_name AS personName, 
+          date, 
+          amount, 
+          description, 
+          created_at AS createdAt 
+         FROM capital_expenses 
+         WHERE id = ?`,
+        [capitalId]
+      );
+
+      return NextResponse.json(rows[0] || null, { status: 200 });
+    }
+
+    // 2. Branch Capital Records query
+    const branchId = Number(branchIdParam);
+    if (!branchIdParam || isNaN(branchId)) {
       return NextResponse.json(
-        { error: "Invalid or missing Branch ID parameter" }, 
+        { error: "Invalid or missing Branch ID parameter" },
         { status: 400 }
       );
     }
 
-    const [rows] = await db.query(
+    const [rows]: any = await db.query(
       `SELECT 
         id, 
         branch_id AS branchId,
@@ -46,9 +75,17 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { branchId, personName, date, amount, description } = body;
 
-    if (!branchId || !personName || !date || !amount) {
+    if (!branchId || !personName || !date || amount === undefined || amount === null) {
       return NextResponse.json(
         { error: "Missing required fields (branchId, personName, date, amount)" },
+        { status: 400 }
+      );
+    }
+
+    const parsedAmount = parseFloat(amount);
+    if (isNaN(parsedAmount)) {
+      return NextResponse.json(
+        { error: "Invalid amount value" },
         { status: 400 }
       );
     }
@@ -56,7 +93,7 @@ export async function POST(req: NextRequest) {
     const [result]: any = await db.query(
       `INSERT INTO capital_expenses (branch_id, person_name, date, amount, description) 
        VALUES (?, ?, ?, ?, ?)`,
-      [Number(branchId), personName, date, parseFloat(amount), description || ""]
+      [Number(branchId), personName, date, parsedAmount, description || ""]
     );
 
     const newRecord = {
@@ -64,8 +101,8 @@ export async function POST(req: NextRequest) {
       branchId: Number(branchId),
       personName,
       date,
-      amount: parseFloat(amount),
-      description,
+      amount: parsedAmount,
+      description: description || "",
     };
 
     return NextResponse.json(newRecord, { status: 201 });
@@ -84,8 +121,8 @@ export async function DELETE(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const recordId = searchParams.get("id");
 
-    if (!recordId) {
-      return NextResponse.json({ error: "Missing Record ID" }, { status: 400 });
+    if (!recordId || isNaN(Number(recordId))) {
+      return NextResponse.json({ error: "Missing or invalid Record ID" }, { status: 400 });
     }
 
     await db.query(`DELETE FROM capital_expenses WHERE id = ?`, [Number(recordId)]);
