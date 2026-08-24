@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, useEffect, useCallback, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from "chart.js";
 import { Bar } from "react-chartjs-2";
-import { Building2, TrendingUp, AlertCircle,Coins,Layers,RefreshCw,ArrowRight, ChevronUp, ChevronDown, MapPin} from "lucide-react";
+import { Building2, TrendingUp, AlertCircle, RefreshCw, ChevronUp, ChevronDown, MapPin, Filter, X } from "lucide-react";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
@@ -12,19 +12,27 @@ interface PageProps {
   searchQuery?: string;
 }
 
-export default function DashboardPage({ searchQuery = "" }: PageProps) {
+// 1. Inner Component handling useSearchParams and API logic
+function DashboardContent({ searchQuery = "" }: PageProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const selectedSalesId = searchParams.get("selected_sales_id");
+
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   
-
   const [isTunnelDropdownOpen, setIsTunnelDropdownOpen] = useState(false);
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     try {
-      const response = await fetch("/api/dashboard/summary");
+      let url = "/api/dashboard/summary";
+      if (selectedSalesId) {
+        url += `?selected_sales_id=${selectedSalesId}`;
+      }
+
+      const response = await fetch(url);
       if (!response.ok) throw new Error("Failed to synchronize infrastructure core metrics.");
       const json = await response.json();
       setData(json);
@@ -34,11 +42,15 @@ export default function DashboardPage({ searchQuery = "" }: PageProps) {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [selectedSalesId]);
 
   useEffect(() => {
     fetchDashboardData();
-  }, []);
+  }, [fetchDashboardData]);
+
+  const clearFilter = () => {
+    router.push("/dashboard");
+  };
 
   if (loading) {
     return (
@@ -65,7 +77,7 @@ export default function DashboardPage({ searchQuery = "" }: PageProps) {
       </div>
     );
   }
- 
+
   const filteredBranches = data?.branches?.filter((b: any) =>
     b.branch_name.toLowerCase().includes(searchQuery.toLowerCase())
   ) || [];
@@ -80,7 +92,7 @@ export default function DashboardPage({ searchQuery = "" }: PageProps) {
         borderColor: "#3b82f6",
         borderWidth: 1,
         borderRadius: 4,
-        barThickness:16,
+        barThickness: 16,
       },
     ],
   };
@@ -101,117 +113,137 @@ export default function DashboardPage({ searchQuery = "" }: PageProps) {
     <div className="p-6 md:p-8 space-y-6 bg-[#070a12] min-h-screen text-slate-300 font-mono text-xs selection:bg-cyan-500/20 selection:text-cyan-300">
       
       {/* Dynamic Header */}
-      <div>
-        <h2 className="text-xl font-bold tracking-tight text-white">Financial & Tunnel Logistics</h2>
-        <p className="text-xs text-slate-500 mt-0.5">Real-time centralized ledger for all active infrastructure branches.</p>
-      </div>
-
-      <button
-        onClick={() =>{setRefreshing(true);fetchDashboardData();}}
-        disabled={refreshing}
-        className="self-start sm:self-center flex items-center gap-2 px-3 py-1.5 bg-[#0d1527]/80 border border-slate-800 rounded-lg hover:border-slate-700 hover:text-white transition-all text-[11px]"
-        >
-          <RefreshCw size={13} className={`text-cyan-400 ${refreshing ? "animate-spin" : ""}`}/>
-          {refreshing ? "FETCHING":"REFRESH DATA"}
-        </button>
-
-      <div className="relative z-40">
-      {/* Grid Content Information Cards (Line 92) */}
-      <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* Card 1: Total Branches */}
-        <div 
-          onClick={() =>setIsTunnelDropdownOpen(!isTunnelDropdownOpen)}
-          className={`bg-[#0d1527]/60 border rounded-xl p-4 flex items-center justify-between cursor-pointer transition-all active:scale-[0.99] shadow-sm select-none group relative overflow-hidden ${
-            isTunnelDropdownOpen ? "border-cyan-500/60 bg-[#0f1b35]/80":"border-slate-800 hover:border-cyan-500/30"
-          }`}>
-          <div className="z-10">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              Total Tunnels
-              {isTunnelDropdownOpen ? <ChevronUp size={12} className="text-cyan-400"/>:<ChevronDown size={12} className="text-slate-500 group-hover:text-cyan-400"/>}
-            </p>
-            <p className="text-2xl font-mono font-bold text-white mt-1">
-              {data?.cards?.totalBranches || filteredBranches.length || 0}
-            </p>
-          </div>
-          <div className={`p-2 bg-slate-900/80 border border-slate-800 text-slate-400 rounded-lg transition-all z-10 ${
-            isTunnelDropdownOpen ? "bg-cyan-500/10 border-cyan-500/40 text-cyan-400":"group-hover:bg-cyan-500/10 group-hover:border-cyan-500/30"
-          }`}>
-            <Building2 size={18} />
-          </div>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold tracking-tight text-white">Financial & Tunnel Logistics</h2>
+          <p className="text-xs text-slate-500 mt-0.5">Real-time centralized ledger for all active infrastructure branches.</p>
         </div>
 
-        {/* Card 2: Total Expenses Matrix */}
-        <div
-        onClick={() => router.push("/dashboard/total-expenses")} 
-        className="bg-[#0d1527]/60 border border-slate-800/60 rounded-xl p-4 flex items-center justify-between">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Expenses</p>
-            <p className="text-2xl font-mono font-bold text-blue-400 mt-1">
-              LKR {Number(data?.cards?.totalExpenses || "").toLocaleString("en-US")}
-            </p>
-          </div>
-          <div className="p-2.5 bg-blue-500/10 text-blue-400 rounded-lg">
-            <span className="text-sm font-bold">$</span>
-          </div>
-        </div>
-
-        {/* Card 3: Remaining Due Balance Matrix */}
-        <div 
-        onClick={() => router.push("/dashboard/remaining-balance")}
-        className="bg-[#0d1527]/60 border border-slate-800/60 rounded-xl p-4 flex items-center justify-between">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Remaining Balance</p>
-            <p className="text-2xl font-mono font-bold text-amber-500 mt-1">
-              LKR {Number(data?.cards?.totalRemaining || "").toLocaleString("en-US")}
-            </p>
-          </div>
-          <div className="p-2.5 bg-amber-500/10 text-amber-400 rounded-lg">
-            <TrendingUp size={18} />
-          </div>
-        </div>
-
-      </section>
-
-      {isTunnelDropdownOpen && (
-        <div className="absolute left-0 mt-2 w-full bg-[#0a101f] border border-cyan-500/40 rounded-xl p-5 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150">
-          <div className="text-[10px] font-bold text-cyan-400 uppercase tracking-widest border-b border-slate-800/80 pb-2.5 mb-4 flex items-center justify-between">
-            <span>Active Node Branches List ({filteredBranches.length} Records Located)</span>
-            {searchQuery && <span className="text-[9px] text-slate-500 font-normal lowercase font-sans">filtered by:"{searchQuery}"</span>}
-          </div>
-          {filteredBranches.length === 0 ? (
-            <div className="py-8 text-center text-slate-500 flex items-center justify-center gap-2">
-              <AlertCircle size={14} className="text-slate-600"/>System atabase returned empty branch record matrix.
-            </div>
-          ):(
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-h-[250px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent">
-              {filteredBranches.map((branch:any) => (
-                <div
-                  key={branch.id}
-                  onClick={() => {
-                    router.push(`/dashboard/branches/${branch.id}`)
-                  }} 
-                  className="flex items-center gap-3 p-2.5 bg-[#0e1626] border  border-slate-900 rounded-lg hover:border-cyan-500/30 hover:bg-[#111c34]/50 transition-all group"
-                >
-                  <div className="p-2 bg-slate-900 rounded border border-slate-800 text-slate-500 group-hover:text-cyan-400 group-hover:border-cyan-500/20 transition-all">
-                    <MapPin size={12}/>
-                  </div>
-                  <div className="truncate">
-                    <p className="text-[11px] font-bold text-slate-200 truncate group-hover:text-white transition-colors">
-                      {branch.branch_name}
-                    </p>
-                    <p className="text-[9px] text-slate-500 font-mono tracking-wider mt-0.5">
-                      {branch.branch_code || `CODE-${branch.id}`}
-                    </p>
-                  </div>
-                </div>
-              ))}
+        <div className="flex items-center gap-3">
+          {selectedSalesId && (
+            <div className="flex items-center gap-2 bg-cyan-950/40 border border-cyan-500/30 px-3 py-1.5 rounded-lg text-cyan-400 text-[11px]">
+              <Filter size={12} />
+              <span>Filtered Record #{selectedSalesId}</span>
+              <button 
+                onClick={clearFilter} 
+                className="hover:text-white p-0.5 rounded transition-colors"
+                title="Clear Filter"
+              >
+                <X size={13} />
+              </button>
             </div>
           )}
+
+          <button
+            onClick={() => { setRefreshing(true); fetchDashboardData(); }}
+            disabled={refreshing}
+            className="flex items-center gap-2 px-3 py-1.5 bg-[#0d1527]/80 border border-slate-800 rounded-lg hover:border-slate-700 hover:text-white transition-all text-[11px]"
+          >
+            <RefreshCw size={13} className={`text-cyan-400 ${refreshing ? "animate-spin" : ""}`} />
+            {refreshing ? "FETCHING" : "REFRESH DATA"}
+          </button>
         </div>
-      )}
       </div>
 
-      {/* Analytics Chart Container (Line 122) */}
+      <div className="relative z-40">
+        {/* Grid Content Information Cards */}
+        <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {/* Card 1: Total Branches */}
+          <div 
+            onClick={() => setIsTunnelDropdownOpen(!isTunnelDropdownOpen)}
+            className={`bg-[#0d1527]/60 border rounded-xl p-4 flex items-center justify-between cursor-pointer transition-all active:scale-[0.99] shadow-sm select-none group relative overflow-hidden ${
+              isTunnelDropdownOpen ? "border-cyan-500/60 bg-[#0f1b35]/80" : "border-slate-800 hover:border-cyan-500/30"
+            }`}>
+            <div className="z-10">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                Total Tunnels
+                {isTunnelDropdownOpen ? <ChevronUp size={12} className="text-cyan-400" /> : <ChevronDown size={12} className="text-slate-500 group-hover:text-cyan-400" />}
+              </p>
+              <p className="text-2xl font-mono font-bold text-white mt-1">
+                {data?.cards?.totalBranches || filteredBranches.length || 0}
+              </p>
+            </div>
+            <div className={`p-2 bg-slate-900/80 border border-slate-800 text-slate-400 rounded-lg transition-all z-10 ${
+              isTunnelDropdownOpen ? "bg-cyan-500/10 border-cyan-500/40 text-cyan-400" : "group-hover:bg-cyan-500/10 group-hover:border-cyan-500/30"
+            }`}>
+              <Building2 size={18} />
+            </div>
+          </div>
+
+          {/* Card 2: Total Expenses Matrix */}
+          <div
+            onClick={() => router.push(selectedSalesId ? `/dashboard/total-expenses?selected_sales_id=${selectedSalesId}` : "/dashboard/total-expenses")} 
+            className="bg-[#0d1527]/60 border border-slate-800/60 rounded-xl p-4 flex items-center justify-between cursor-pointer hover:border-blue-500/40 transition-all"
+          >
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Expenses</p>
+              <p className="text-2xl font-mono font-bold text-blue-400 mt-1">
+                LKR {Number(data?.cards?.totalExpenses || 0).toLocaleString("en-US")}
+              </p>
+            </div>
+            <div className="p-2.5 bg-blue-500/10 text-blue-400 rounded-lg">
+              <span className="text-sm font-bold">$</span>
+            </div>
+          </div>
+
+          {/* Card 3: Remaining Due Balance Matrix */}
+          <div 
+            onClick={() => router.push("/dashboard/remaining-balance")}
+            className="bg-[#0d1527]/60 border border-slate-800/60 rounded-xl p-4 flex items-center justify-between cursor-pointer hover:border-amber-500/40 transition-all"
+          >
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Remaining Balance</p>
+              <p className="text-2xl font-mono font-bold text-amber-500 mt-1">
+                LKR {Number(data?.cards?.totalRemaining || 0).toLocaleString("en-US")}
+              </p>
+            </div>
+            <div className="p-2.5 bg-amber-500/10 text-amber-400 rounded-lg">
+              <TrendingUp size={18} />
+            </div>
+          </div>
+
+        </section>
+
+        {isTunnelDropdownOpen && (
+          <div className="absolute left-0 mt-2 w-full bg-[#0a101f] border border-cyan-500/40 rounded-xl p-5 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+            <div className="text-[10px] font-bold text-cyan-400 uppercase tracking-widest border-b border-slate-800/80 pb-2.5 mb-4 flex items-center justify-between">
+              <span>Active Node Branches List ({filteredBranches.length} Records Located)</span>
+              {searchQuery && <span className="text-[9px] text-slate-500 font-normal lowercase font-sans">filtered by:"{searchQuery}"</span>}
+            </div>
+            {filteredBranches.length === 0 ? (
+              <div className="py-8 text-center text-slate-500 flex items-center justify-center gap-2">
+                <AlertCircle size={14} className="text-slate-600"/>System database returned empty branch record matrix.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-h-[250px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent">
+                {filteredBranches.map((branch: any) => (
+                  <div
+                    key={branch.id}
+                    onClick={() => {
+                      router.push(`/dashboard/branches/${branch.id}`);
+                    }} 
+                    className="flex items-center gap-3 p-2.5 bg-[#0e1626] border border-slate-900 rounded-lg hover:border-cyan-500/30 hover:bg-[#111c34]/50 transition-all group cursor-pointer"
+                  >
+                    <div className="p-2 bg-slate-900 rounded border border-slate-800 text-slate-500 group-hover:text-cyan-400 group-hover:border-cyan-500/20 transition-all">
+                      <MapPin size={12}/>
+                    </div>
+                    <div className="truncate">
+                      <p className="text-[11px] font-bold text-slate-200 truncate group-hover:text-white transition-colors">
+                        {branch.branch_name}
+                      </p>
+                      <p className="text-[9px] text-slate-500 font-mono tracking-wider mt-0.5">
+                        {branch.branch_code || `CODE-${branch.id}`}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Analytics Chart Container */}
       <section className="bg-[#0d1527]/40 border border-slate-800/60 rounded-xl p-5">
         <div className="mb-4">
           <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">Branch Expense Distribution</h3>
@@ -229,6 +261,24 @@ export default function DashboardPage({ searchQuery = "" }: PageProps) {
       </section>
 
     </div>
-    
+  );
+}
+
+// 2. Loading Fallback UI during SSG Prerendering
+function DashboardFallback() {
+  return (
+    <div className="h-screen w-full flex flex-col items-center justify-center text-slate-500 bg-[#070a12] font-mono text-xs">
+      <div className="h-5 w-5 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin mb-2"></div>
+      <p className="uppercase tracking-widest text-[10px]">Initializing Operational Ledger Matrices...</p>
+    </div>
+  );
+}
+
+// 3. Exported Component wrapped with Suspense Boundary
+export default function DashboardPage(props: PageProps) {
+  return (
+    <Suspense fallback={<DashboardFallback />}>
+      <DashboardContent {...props} />
+    </Suspense>
   );
 }
