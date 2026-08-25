@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, TrendingUp, FileSpreadsheet, RefreshCw } from "lucide-react";
 
-export default function RemainingBalancePage() {
+function RemainingBalanceContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
@@ -153,5 +153,18 @@ export default function RemainingBalancePage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function RemainingBalancePage() {
+  return (
+    <Suspense fallback={
+      <div className="h-screen w-full flex flex-col items-center justify-center text-slate-500 bg-[#070a12] font-mono text-xs">
+        <div className="h-5 w-5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mb-2"></div>
+        <p className="uppercase tracking-widest text-[10px]">Loading Balance Portfolio...</p>
+      </div>
+    }>
+      <RemainingBalanceContent />
+    </Suspense>
   );
 }
