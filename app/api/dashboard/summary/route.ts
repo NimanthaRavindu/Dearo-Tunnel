@@ -8,48 +8,9 @@ export async function GET(req: NextRequest) {
     const selectedCapitalId = searchParams.get("selected_capital_id");
 
     const parsedSalesId = selectedSalesId ? Number(selectedSalesId) : null;
-    const isSalesFiltered = parsedSalesId !== null && !isNaN(parsedSalesId);
-
     const parsedCapitalId = selectedCapitalId ? Number(selectedCapitalId) : null;
-    const isCapitalFiltered = parsedCapitalId !== null && !isNaN(parsedCapitalId);
 
-    // Arrays to hold parameters strictly in the order they appear in the final query
-    const queryParams: any[] = [];
-
-    // Sales Expenses Subquery
-    let salesSubQuery = `
-      SELECT branch_id, SUM(COALESCE(amount, 0)) AS sales_total 
-      FROM sales_expenses 
-      GROUP BY branch_id
-    `;
-
-    if (isSalesFiltered) {
-      salesSubQuery = `
-        SELECT branch_id, SUM(COALESCE(amount, 0)) AS sales_total 
-        FROM sales_expenses 
-        WHERE id = ?
-        GROUP BY branch_id
-      `;
-      queryParams.push(parsedSalesId);
-    }
-
-    // Capital Expenses Subquery
-    let capitalSubQuery = `
-      SELECT branch_id, SUM(COALESCE(amount, 0)) AS capital_total 
-      FROM capital_expenses 
-      GROUP BY branch_id
-    `;
-
-    if (isCapitalFiltered) {
-      capitalSubQuery = `
-        SELECT branch_id, SUM(COALESCE(amount, 0)) AS capital_total 
-        FROM capital_expenses 
-        WHERE id = ?
-        GROUP BY branch_id
-      `;
-      queryParams.push(parsedCapitalId); // Note: Correctly pushed after sales param if both exist
-    }
-
+    // Clean and optimized SQL query joining all related expenses safely
     const query = `
       SELECT 
         b.id,
@@ -66,14 +27,26 @@ export async function GET(req: NextRequest) {
         SELECT branch_id, SUM(COALESCE(total_payable, 0)) AS salary_total, SUM(COALESCE(balance, 0)) AS salary_balance 
         FROM salary_expenses GROUP BY branch_id
       ) s ON b.id = s.branch_id
-      LEFT JOIN (${salesSubQuery}) se ON b.id = se.branch_id
-      LEFT JOIN (${capitalSubQuery}) c ON b.id = c.branch_id
+      LEFT JOIN (
+        SELECT branch_id, SUM(COALESCE(amount, 0)) AS sales_total 
+        FROM sales_expenses 
+        WHERE (? IS NULL OR id = ?)
+        GROUP BY branch_id
+      ) se ON b.id = se.branch_id
+      LEFT JOIN (
+        SELECT branch_id, SUM(COALESCE(amount, 0)) AS capital_total 
+        FROM capital_expenses 
+        WHERE (? IS NULL OR id = ?)
+        GROUP BY branch_id
+      ) c ON b.id = c.branch_id
       LEFT JOIN (
         SELECT branch_id, SUM(COALESCE(total_payable, 0)) AS other_total, SUM(COALESCE(balance, 0)) AS other_balance 
         FROM other_expenses GROUP BY branch_id
       ) o ON b.id = o.branch_id
     `;
 
+    // Pass parameters safely for both sales and capital filtering checks
+    const queryParams = [parsedSalesId, parsedSalesId, parsedCapitalId, parsedCapitalId];
     const [branches]: any = await db.query(query, queryParams);
 
     let totalBranches = Array.isArray(branches) ? branches.length : 0;
