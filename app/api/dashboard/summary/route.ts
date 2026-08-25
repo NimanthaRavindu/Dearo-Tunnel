@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
     const parsedSalesId = selectedSalesId ? Number(selectedSalesId) : null;
     const parsedCapitalId = selectedCapitalId ? Number(selectedCapitalId) : null;
 
-    // Clean and optimized SQL query joining all related expenses safely
+    // Clean and optimized SQL query joining all related expenses safely with optional ID filtering
     const query = `
       SELECT 
         b.id,
@@ -45,7 +45,6 @@ export async function GET(req: NextRequest) {
       ) o ON b.id = o.branch_id
     `;
 
-    // Pass parameters safely for both sales and capital filtering checks
     const queryParams = [parsedSalesId, parsedSalesId, parsedCapitalId, parsedCapitalId];
     const [branches]: any = await db.query(query, queryParams);
 
@@ -64,7 +63,11 @@ export async function GET(req: NextRequest) {
         
         b.salary_balance = Number(b.salary_balance || 0);
         b.other_balance = Number(b.other_balance || 0);
-        b.total_balance = b.salary_balance + b.other_balance;
+        b.sales_expenses_val = Number(b.sales_expenses || 0);
+        b.capital_expenses_val = Number(b.capital_expenses || 0);
+        
+        // Cumulative Net Liability calculation to include filtered sales/capital expenses
+        b.total_balance = b.salary_balance + b.other_balance + b.sales_expenses_val + b.capital_expenses_val;
 
         totalExpenses += b.total_expenses;
         totalRemaining += b.total_balance;

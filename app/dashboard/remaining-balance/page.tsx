@@ -1,11 +1,17 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, TrendingUp, FileSpreadsheet, RefreshCw } from "lucide-react";
 
 export default function RemainingBalancePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  
+  // Sales saha Capital pages walin pass karana query parameters grab karaganna
+  const selectedSalesId = searchParams.get("selected_sales_id");
+  const selectedCapitalId = searchParams.get("selected_capital_id");
+
   const [branches, setBranches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [totalSum, setTotalSum] = useState(0);
@@ -13,7 +19,14 @@ export default function RemainingBalancePage() {
 
   const fetchBalanceBreakdown = async () => {
     try {
-      const response = await fetch("/api/dashboard/summary");
+      // URL parameters dynamic widihata API request ekata build karanna
+      const params = new URLSearchParams();
+      if (selectedSalesId) params.append("selected_sales_id", selectedSalesId);
+      if (selectedCapitalId) params.append("selected_capital_id", selectedCapitalId);
+
+      const url = `/api/dashboard/summary${params.toString() ? `?${params.toString()}` : ""}`;
+      
+      const response = await fetch(url);
       if (response.ok) {
         const json = await response.json();
         setBranches(json.branches || []);
@@ -29,7 +42,7 @@ export default function RemainingBalancePage() {
 
   useEffect(() => {
     fetchBalanceBreakdown();
-  }, []);
+  }, [selectedSalesId, selectedCapitalId]);
 
   if (loading) {
     return (
@@ -77,8 +90,15 @@ export default function RemainingBalancePage() {
 
       {/* 🔹 Compact Spreadsheet Data Table */}
       <div className="bg-[#0d1527]/30 border border-slate-900 rounded-xl overflow-hidden shadow-sm">
-        <div className="px-4 py-3 bg-[#0a0f1d] border-b border-slate-900 flex items-center gap-1.5 text-slate-400 text-[10px] font-bold uppercase tracking-wider">
-          <FileSpreadsheet size={13} className="text-slate-500" /> Infrastructure Outstanding Liability Ledger Matrix
+        <div className="px-4 py-3 bg-[#0a0f1d] border-b border-slate-900 flex items-center justify-between text-slate-400 text-[10px] font-bold uppercase tracking-wider">
+          <div className="flex items-center gap-1.5">
+            <FileSpreadsheet size={13} className="text-slate-500" /> Infrastructure Outstanding Liability Ledger Matrix
+          </div>
+          {(selectedSalesId || selectedCapitalId) && (
+            <span className="text-amber-400 bg-amber-950/40 px-2 py-0.5 rounded border border-amber-900/50">
+              Filtered View Active
+            </span>
+          )}
         </div>
         <div className="p-4 overflow-x-auto">
           <table className="w-full text-left border-collapse text-[11px]">
