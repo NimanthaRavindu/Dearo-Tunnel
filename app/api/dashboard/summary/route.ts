@@ -13,18 +13,19 @@ export async function GET(req: NextRequest) {
     const parsedCapitalId = selectedCapitalId ? Number(selectedCapitalId) : null;
     const isCapitalFiltered = parsedCapitalId !== null && !isNaN(parsedCapitalId);
 
+    // Arrays to hold parameters strictly in the order they appear in the final query
     const queryParams: any[] = [];
 
-    // Sales Expenses Subquery (συμπεριλαμβανομένου balance/paid εάν υπάρχει)
+    // Sales Expenses Subquery
     let salesSubQuery = `
-      SELECT branch_id, SUM(COALESCE(amount, 0)) AS sales_total, SUM(COALESCE(balance, 0)) AS sales_balance 
+      SELECT branch_id, SUM(COALESCE(amount, 0)) AS sales_total 
       FROM sales_expenses 
       GROUP BY branch_id
     `;
 
     if (isSalesFiltered) {
       salesSubQuery = `
-        SELECT branch_id, SUM(COALESCE(amount, 0)) AS sales_total, SUM(COALESCE(balance, 0)) AS sales_balance 
+        SELECT branch_id, SUM(COALESCE(amount, 0)) AS sales_total 
         FROM sales_expenses 
         WHERE id = ?
         GROUP BY branch_id
@@ -34,19 +35,19 @@ export async function GET(req: NextRequest) {
 
     // Capital Expenses Subquery
     let capitalSubQuery = `
-      SELECT branch_id, SUM(COALESCE(amount, 0)) AS capital_total, SUM(COALESCE(balance, 0)) AS capital_balance 
+      SELECT branch_id, SUM(COALESCE(amount, 0)) AS capital_total 
       FROM capital_expenses 
       GROUP BY branch_id
     `;
 
     if (isCapitalFiltered) {
       capitalSubQuery = `
-        SELECT branch_id, SUM(COALESCE(amount, 0)) AS capital_total, SUM(COALESCE(balance, 0)) AS capital_balance 
+        SELECT branch_id, SUM(COALESCE(amount, 0)) AS capital_total 
         FROM capital_expenses 
         WHERE id = ?
         GROUP BY branch_id
       `;
-      queryParams.push(parsedCapitalId);
+      queryParams.push(parsedCapitalId); // Note: Correctly pushed after sales param if both exist
     }
 
     const query = `
@@ -59,8 +60,6 @@ export async function GET(req: NextRequest) {
         COALESCE(c.capital_total, 0) AS capital_expenses,
         COALESCE(o.other_total, 0) AS other_expenses,
         COALESCE(s.salary_balance, 0) AS salary_balance,
-        COALESCE(se.sales_balance, 0) AS sales_balance,
-        COALESCE(c.capital_balance, 0) AS capital_balance,
         COALESCE(o.other_balance, 0) AS other_balance
       FROM branch b
       LEFT JOIN (
@@ -91,12 +90,8 @@ export async function GET(req: NextRequest) {
         b.total_expenses = b.salary_expenses + b.other_expenses + b.sales_expenses + b.capital_expenses;
         
         b.salary_balance = Number(b.salary_balance || 0);
-        b.sales_balance = Number(b.sales_balance || 0);
-        b.capital_balance = Number(b.capital_balance || 0);
         b.other_balance = Number(b.other_balance || 0);
-
-        // සියලුම වියදම්වල ඉතිරි ශේෂයන්වල එකතුව (Total Balance = Salary + Sales + Capital + Other balances)
-        b.total_balance = b.salary_balance + b.sales_balance + b.capital_balance + b.other_balance;
+        b.total_balance = b.salary_balance + b.other_balance;
 
         totalExpenses += b.total_expenses;
         totalRemaining += b.total_balance;
