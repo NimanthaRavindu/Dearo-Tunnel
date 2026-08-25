@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { DollarSign, Calendar, User, PlusCircle, TrendingUp, CreditCard, ArrowLeft, Trash2, Loader2, Receipt, Search, XCircle, ExternalLink } from "lucide-react";
+import { DollarSign, Calendar, User, PlusCircle, TrendingUp, CreditCard, ArrowLeft, Trash2, Loader2, Receipt, Search, XCircle, ExternalLink, Edit3 } from "lucide-react";
 import Link from "next/link";
 
 interface SalesExpense {
@@ -36,13 +36,13 @@ export default function SalesExpensesPage() {
     if (!branchId) return;
     try {
       setLoading(true);
-      const res = await fetch(`/api/expences/sales?branch_id=${branchId}`);
+      // Fixed URL typo from 'expences' to 'expenses'
+      const res = await fetch(`/api/expenses/sales?branch_id=${branchId}`);
       if (res.ok) {
         const data = await res.json();
         const list = Array.isArray(data) ? data : [];
         setExpenses(list);
 
-        // Check URL query param for initial selection after data loads
         const urlSalesId = searchParams.get("selected_sales_id");
         if (urlSalesId) {
           const numId = Number(urlSalesId);
@@ -72,8 +72,7 @@ export default function SalesExpensesPage() {
     const isCurrentBranch = String(item.branch_id) === String(branchId);
     const matchesSearch =
       item.personName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (item.branch_name &&
-        item.branch_name.toLowerCase().includes(searchTerm.toLowerCase()));
+      (item.branch_name && item.branch_name.toLowerCase().includes(searchTerm.toLowerCase()));
 
     return isCurrentBranch && matchesSearch;
   });
@@ -90,27 +89,42 @@ export default function SalesExpensesPage() {
 
     try {
       setSubmitting(true);
-      const res = await fetch("/api/expences/sales", {
-        method: "POST",
+      const endpoint = "/api/expenses/sales";
+      const method = selectedId ? "PUT" : "POST";
+      const payload = selectedId
+        ? { id: selectedId, branch_id: branchId, ...formData }
+        : { ...formData, branch_id: branchId };
+
+      const res = await fetch(endpoint, {
+        method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...formData,
-          branch_id: branchId,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (res.ok) {
-        const newRecord = await res.json();
-        clearSelection();
-
-        if (newRecord && newRecord.id) {
-          setExpenses((prev) => [newRecord, ...prev]);
+        if (selectedId) {
+          // Update local state for PUT request
+          setExpenses((prev) =>
+            prev.map((item) =>
+              item.id === selectedId
+                ? { ...item, personName: formData.personName, amount: Number(formData.amount), date: formData.date }
+                : item
+            )
+          );
+          clearSelection();
         } else {
-          await fetchExpenses();
+          // Append new record for POST request
+          const newRecord = await res.json();
+          clearSelection();
+          if (newRecord && newRecord.id) {
+            setExpenses((prev) => [newRecord, ...prev]);
+          } else {
+            await fetchExpenses();
+          }
         }
       } else {
         const errData = await res.json();
-        alert(errData.error || "Failed to record expense");
+        alert(errData.error || "Failed to save expense record");
       }
     } catch (err) {
       console.error("Error submitting data:", err);
@@ -120,11 +134,12 @@ export default function SalesExpensesPage() {
   };
 
   const handleDelete = async (id: number, e: React.MouseEvent) => {
-    e.stopPropagation(); 
+    e.stopPropagation();
     if (!confirm("Are you sure you want to delete this expense entry?")) return;
 
     try {
-      const res = await fetch(`/api/expences/sales?id=${id}`, {
+      // Fixed URL typo from 'expences' to 'expenses'
+      const res = await fetch(`/api/expenses/sales?id=${id}`, {
         method: "DELETE",
       });
 
@@ -242,12 +257,22 @@ export default function SalesExpensesPage() {
           <div className="lg:col-span-4 bg-slate-900/70 border border-slate-800/90 rounded-2xl p-5 h-fit shadow-xl backdrop-blur-sm">
             <div className="flex items-center justify-between border-b border-slate-800/80 pb-3 mb-4">
               <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
-                <PlusCircle className="w-4 h-4 text-emerald-400" />
+                {selectedId ? <Edit3 className="w-4 h-4 text-emerald-400" /> : <PlusCircle className="w-4 h-4 text-emerald-400" />}
                 {selectedId ? "Selected Person Details" : "New Expense Entry"}
               </h2>
-              <span className="text-[10px] uppercase font-mono tracking-wider bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20">
-                Branch #{branchId}
-              </span>
+              {selectedId ? (
+                <button
+                  type="button"
+                  onClick={clearSelection}
+                  className="text-[10px] uppercase font-mono tracking-wider text-rose-400 hover:underline"
+                >
+                  Cancel Edit
+                </button>
+              ) : (
+                <span className="text-[10px] uppercase font-mono tracking-wider bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20">
+                  Branch #{branchId}
+                </span>
+              )}
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -316,6 +341,8 @@ export default function SalesExpensesPage() {
               >
                 {submitting ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
+                ) : selectedId ? (
+                  <>Update Record</>
                 ) : (
                   <>
                     <PlusCircle className="w-4 h-4" />
