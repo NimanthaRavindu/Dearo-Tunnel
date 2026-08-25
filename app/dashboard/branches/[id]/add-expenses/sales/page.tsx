@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { DollarSign, Calendar, User, PlusCircle, TrendingUp, CreditCard, ArrowLeft, Trash2, Loader2, Receipt, Search, XCircle, ExternalLink, Edit3, Filter } from "lucide-react";
+import { DollarSign, Calendar, User, PlusCircle, TrendingUp, CreditCard, ArrowLeft, Trash2, Loader2, Receipt, Search, XCircle, ExternalLink, Edit3 } from "lucide-react";
 import Link from "next/link";
 
 interface SalesExpense {
@@ -36,6 +36,7 @@ export default function SalesExpensesPage() {
     if (!branchId) return;
     try {
       setLoading(true);
+      // Fixed URL typo from 'expences' to 'expenses'
       const res = await fetch(`/api/expenses/sales?branch_id=${branchId}`);
       if (res.ok) {
         const data = await res.json();
@@ -102,6 +103,7 @@ export default function SalesExpensesPage() {
 
       if (res.ok) {
         if (selectedId) {
+          // Update local state for PUT request
           setExpenses((prev) =>
             prev.map((item) =>
               item.id === selectedId
@@ -111,6 +113,7 @@ export default function SalesExpensesPage() {
           );
           clearSelection();
         } else {
+          // Append new record for POST request
           const newRecord = await res.json();
           clearSelection();
           if (newRecord && newRecord.id) {
@@ -135,6 +138,7 @@ export default function SalesExpensesPage() {
     if (!confirm("Are you sure you want to delete this expense entry?")) return;
 
     try {
+      // Fixed URL typo from 'expences' to 'expenses'
       const res = await fetch(`/api/expenses/sales?id=${id}`, {
         method: "DELETE",
       });
@@ -165,12 +169,6 @@ export default function SalesExpensesPage() {
 
       window.history.replaceState(null, "", `?selected_sales_id=${item.id}`);
     }
-  };
-
-  // 🔹 Redirects to Remaining Balance page with selected sales ID filter
-  const handleViewBreakdown = (salesId: number | string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    router.push(`/dashboard/remaining-balance?selected_sales_id=${salesId}`);
   };
 
   const clearSelection = () => {
@@ -236,9 +234,9 @@ export default function SalesExpensesPage() {
               {selectedId && (
                 <div className="flex items-center gap-1">
                   <button
-                    onClick={() => router.push(`/dashboard/remaining-balance?selected_sales_id=${selectedId}`)}
+                    onClick={() => router.push(`/dashboard/total-expenses?selected_sales_id=${selectedId}`)}
                     className="p-1 hover:bg-slate-800 text-slate-400 hover:text-sky-400 rounded-lg transition-colors"
-                    title="View Filtered Record in Remaining Balance"
+                    title="View Filtered Record in Total Expenses"
                   >
                     <ExternalLink className="w-4 h-4" />
                   </button>
@@ -256,7 +254,6 @@ export default function SalesExpensesPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Form Section */}
           <div className="lg:col-span-4 bg-slate-900/70 border border-slate-800/90 rounded-2xl p-5 h-fit shadow-xl backdrop-blur-sm">
             <div className="flex items-center justify-between border-b border-slate-800/80 pb-3 mb-4">
               <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
@@ -356,7 +353,6 @@ export default function SalesExpensesPage() {
             </form>
           </div>
 
-          {/* Table Section */}
           <div className="lg:col-span-8 bg-slate-900/70 border border-slate-800/90 rounded-2xl p-5 shadow-xl backdrop-blur-sm flex flex-col justify-between">
             <div>
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-800/80 pb-3 mb-4">
@@ -435,25 +431,13 @@ export default function SalesExpensesPage() {
                             })}
                           </td>
                           <td className="py-2.5 px-3 text-center">
-                            <div className="flex items-center justify-center gap-1.5">
-                              {/* 🔹 Filter Button added to each row to filter directly in Remaining Balance page */}
-                              <button
-                                onClick={(e) => handleViewBreakdown(item.id, e)}
-                                className="p-1.5 bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-400 hover:text-emerald-300 border border-emerald-800/60 rounded-lg transition-all flex items-center gap-1 text-[10px] font-mono"
-                                title="Filter Breakdown in Remaining Balance"
-                              >
-                                <Filter size={12} />
-                                <span className="hidden sm:inline">Filter</span>
-                              </button>
-
-                              <button
-                                onClick={(e) => handleDelete(item.id, e)}
-                                className="text-slate-500 hover:text-rose-400 p-1.5 rounded-lg transition-colors"
-                                title="Delete Record"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
+                            <button
+                              onClick={(e) => handleDelete(item.id, e)}
+                              className="text-slate-500 hover:text-rose-400 p-1 rounded-lg transition-colors"
+                              title="Delete Record"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                           </td>
                         </tr>
                       ))

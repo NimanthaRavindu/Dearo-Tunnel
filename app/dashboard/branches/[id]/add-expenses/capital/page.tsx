@@ -36,8 +36,7 @@ export default function CapitalExpensesPage() {
       if (!id) return;
       try {
         setLoading(true);
-        // Corrected API endpoint path to match capital-expenses
-        const res = await fetch(`/api/capital-expenses?branchId=${id}`);
+        const res = await fetch(`/api/expences/capital?branchId=${id}`);
         if (res.ok) {
           const data = await res.json();
           setExpenses(data);
@@ -46,7 +45,8 @@ export default function CapitalExpensesPage() {
         }
       } catch (err) {
         console.error("Failed to load records", err);
-      } finally {
+      } 
+      finally {
         setLoading(false);
       }
     }
@@ -59,7 +59,7 @@ export default function CapitalExpensesPage() {
 
     try {
       setSubmitting(true);
-      const res = await fetch(`/api/capital-expenses`, {
+      const res = await fetch(`/api/expences/capital`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -94,7 +94,7 @@ export default function CapitalExpensesPage() {
 
     try {
       setDeletingId(expenseId);
-      const res = await fetch(`/api/capital-expenses?id=${expenseId}`, {
+      const res = await fetch(`/api/expences/capital?id=${expenseId}`, {
         method: "DELETE",
       });
 
@@ -110,9 +110,8 @@ export default function CapitalExpensesPage() {
     }
   };
 
-  // 🔹 Redirects to Remaining Balance page with selected capital ID filter
   const handleViewBreakdown = (capitalId: number | string) => {
-    router.push(`/dashboard/remaining-balance?selected_capital_id=${capitalId}`);
+    router.push(`/dashboard/total-expenses?selected_capital_id=${capitalId}`);
   };
 
   const totalCapitalExpenses = expenses.reduce((sum, item) => sum + Number(item.amount), 0);
@@ -305,7 +304,7 @@ export default function CapitalExpensesPage() {
                             <button
                               onClick={() => handleViewBreakdown(item.id)}
                               className="p-1.5 bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-400 hover:text-emerald-300 border border-emerald-800/60 rounded-lg transition-all flex items-center gap-1 text-[10px] font-mono"
-                              title="Filter Breakdown in Remaining Balance"
+                              title="Filter Breakdown in Total Expenses"
                             >
                               <Filter size={12} />
                               <span className="hidden sm:inline">Filter</span>
