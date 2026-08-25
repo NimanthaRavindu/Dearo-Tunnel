@@ -84,38 +84,30 @@ export default function RemainingBalancePage() {
           <table className="w-full text-left border-collapse text-[11px]">
             <thead>
               <tr className="border-b border-slate-900 text-slate-500 text-[10px] uppercase font-bold tracking-wider bg-[#090e1a]/30">
-                <th className="py-2.5 px-3">Node / Branch Identity</th>
-                <th className="py-2.5 px-3 text-right">Salary Balance</th>
-                <th className="py-2.5 px-3 text-right text-emerald-400/90">Sales Balance</th>
-                <th className="py-2.5 px-3 text-right text-amber-400/90">Capital Balance</th>
-                <th className="py-2.5 px-3 text-right">Other Balance</th>
-                <th className="py-2.5 px-3 text-right text-amber-500 bg-amber-950/10">Cumulative Net Liability</th>
+                <th className="py-2.5 px-4">Node / Branch Identity</th>
+                <th className="py-2.5 px-4 text-right">Salary Expenses Liability</th>
+                <th className="py-2.5 px-4 text-right">Other Expenses Liability</th>
+                <th className="py-2.5 px-4 text-right text-amber-500 bg-amber-950/10">Cumulative Net Liability</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-900/40 text-slate-400 font-sans">
               {branches.map((branch: any) => {
-                const hasBalances = branch.salary_balance > 0 || branch.sales_balance > 0 || branch.capital_balance > 0 || branch.other_balance > 0;
+                const hasBalances = branch.salary_balance > 0 || branch.other_balance > 0;
                 return (
                   <tr 
                     key={branch.id} 
                     className={`hover:bg-slate-900/10 transition-all ${!hasBalances ? "opacity-30 bg-slate-950/5" : ""}`}
                   >
-                    <td className="py-2.5 px-3 font-mono font-semibold text-slate-300">
+                    <td className="py-2.5 px-4 font-mono font-semibold text-slate-300">
                       {branch.branch_name} <span className="text-slate-600 font-normal text-[10px]">({branch.branch_code})</span>
                     </td>
-                    <td className="py-2.5 px-3 text-right font-mono">
-                      {branch.salary_balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                    <td className="py-2.5 px-4 text-right font-mono">
+                      {branch.salary_balance > 0 ? branch.salary_balance.toLocaleString("en-US", { minimumFractionDigits: 2 }) : "0.00"}
                     </td>
-                    <td className="py-2.5 px-3 text-right font-mono text-emerald-400/90">
-                      {branch.sales_balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                    <td className="py-2.5 px-4 text-right font-mono">
+                      {branch.other_balance > 0 ? branch.other_balance.toLocaleString("en-US", { minimumFractionDigits: 2 }) : "0.00"}
                     </td>
-                    <td className="py-2.5 px-3 text-right font-mono text-amber-400/90">
-                      {branch.capital_balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                    </td>
-                    <td className="py-2.5 px-3 text-right font-mono">
-                      {branch.other_balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                    </td>
-                    <td className="py-2.5 px-3 text-right font-mono font-bold bg-amber-950/5 text-slate-200">
+                    <td className="py-2.5 px-4 text-right font-mono font-bold bg-amber-950/5 text-slate-200">
                       {branch.total_balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}
                     </td>
                   </tr>
