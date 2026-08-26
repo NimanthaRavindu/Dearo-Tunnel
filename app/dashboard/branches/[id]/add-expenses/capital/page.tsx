@@ -110,7 +110,7 @@ export default function CapitalExpensesPage() {
 
   const handleViewBreakdown = (capitalId: number | string) => {
     router.push(`/dashboard/total-expenses?selected_capital_id=${capitalId}`);
-    router.push(`/dashboard/remaining-balance?selected_capital_id=${capitalId}`);
+
   };
 
   const totalCapitalExpenses = expenses.reduce((sum, item) => sum + Number(item.amount), 0);
