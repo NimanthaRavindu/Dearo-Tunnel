@@ -44,6 +44,15 @@ function RemainingBalanceContent() {
     fetchBalanceBreakdown();
   }, [selectedSalesId, selectedCapitalId]);
 
+  // Dashboard එකට යද්දී active filter parameters ටිකත් සමඟම රැගෙන යාම
+  const handleBackToDashboard = () => {
+    const params = new URLSearchParams();
+    if (selectedSalesId) params.append("selected_sales_id", selectedSalesId);
+    if (selectedCapitalId) params.append("selected_capital_id", selectedCapitalId);
+    const query = params.toString();
+    router.push(`/dashboard${query ? `?${query}` : ""}`);
+  };
+
   if (loading) {
     return (
       <div className="h-screen w-full flex flex-col items-center justify-center text-slate-500 bg-[#070a12] font-mono text-xs">
@@ -60,7 +69,7 @@ function RemainingBalanceContent() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-900 pb-4">
         <div className="space-y-1.5">
           <button 
-            onClick={() => router.push("/dashboard")} 
+            onClick={handleBackToDashboard} 
             className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-white uppercase font-bold transition-colors"
           >
             <ArrowLeft size={12} /> Back To Main Control Panel
