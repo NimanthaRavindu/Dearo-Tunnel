@@ -110,8 +110,13 @@ export default function CapitalExpensesPage() {
     }
   };
 
-  const handleViewBreakdown = (capitalId: number | string) => {
+  // 🔹 Functions for Navigation to Both Pages
+  const handleViewTotalBreakdown = (capitalId: number | string) => {
     router.push(`/dashboard/total-expenses?selected_capital_id=${capitalId}`);
+  };
+
+  const handleViewBalanceBreakdown = (capitalId: number | string) => {
+    router.push(`/dashboard/remaining-balance?selected_capital_id=${capitalId}`);
   };
 
   const totalCapitalExpenses = expenses.reduce((sum, item) => sum + Number(item.amount), 0);
@@ -301,15 +306,27 @@ export default function CapitalExpensesPage() {
                         </td>
                         <td className="p-3 text-center">
                           <div className="flex items-center justify-center gap-1.5">
+                            {/* Filter for Total Expenses Page */}
                             <button
-                              onClick={() => handleViewBreakdown(item.id)}
+                              onClick={() => handleViewTotalBreakdown(item.id)}
                               className="p-1.5 bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-400 hover:text-emerald-300 border border-emerald-800/60 rounded-lg transition-all flex items-center gap-1 text-[10px] font-mono"
                               title="Filter Breakdown in Total Expenses"
                             >
                               <Filter size={12} />
-                              <span className="hidden sm:inline">Filter</span>
+                              <span className="hidden sm:inline">Total</span>
                             </button>
 
+                            {/* Filter for Remaining Balance Page */}
+                            <button
+                              onClick={() => handleViewBalanceBreakdown(item.id)}
+                              className="p-1.5 bg-blue-950/60 hover:bg-blue-900/80 text-blue-400 hover:text-blue-300 border border-blue-800/60 rounded-lg transition-all flex items-center gap-1 text-[10px] font-mono"
+                              title="Filter in Remaining Balance Page"
+                            >
+                              <Filter size={12} />
+                              <span className="hidden sm:inline">Balance</span>
+                            </button>
+
+                            {/* Delete Button */}
                             <button
                               onClick={() => handleDeleteExpense(item.id)}
                               disabled={deletingId === item.id}
