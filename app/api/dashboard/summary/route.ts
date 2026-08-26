@@ -91,7 +91,7 @@ export async function GET(req: NextRequest) {
         b.sales_expenses_val = Number(b.sales_expenses || 0);
         b.capital_expenses_val = Number(b.capital_expenses || 0);
 
-        // 🔹 Filter active නම් වෙනත් unrelated categories වල අගයන් 0 කර හැරීම
+
         if (parsedSalesId !== null) {
           b.salary_balance = 0;
           b.other_balance = 0;
