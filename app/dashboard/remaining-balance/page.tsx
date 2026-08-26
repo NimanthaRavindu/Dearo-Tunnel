@@ -123,10 +123,11 @@ function RemainingBalanceContent() {
             </thead>
             <tbody className="divide-y divide-slate-900/40 text-slate-400 font-sans">
               {branches.map((branch: any) => {
-                const salaryBal = Number(branch.salary_balance || 0);
-                const salesAmt = Number(branch.sales_expenses || 0);
-                const capitalAmt = Number(branch.capital_expenses || 0);
-                const otherBal = Number(branch.other_balance || 0);
+                // 💡 Fallback checks for robust data rendering
+                const salaryBal = Number(branch.salary_balance ?? branch.salary_expenses ?? 0);
+                const salesAmt = Number(branch.sales_expenses ?? 0);
+                const capitalAmt = Number(branch.capital_expenses ?? 0);
+                const otherBal = Number(branch.other_balance ?? branch.other_expenses ?? 0);
                 
                 const netLiability = salaryBal + salesAmt + capitalAmt + otherBal;
                 const hasBalances = netLiability > 0;

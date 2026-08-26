@@ -10,13 +10,8 @@ export async function GET(req: NextRequest) {
     const parsedSalesId = selectedSalesId ? Number(selectedSalesId) : null;
     const parsedCapitalId = selectedCapitalId ? Number(selectedCapitalId) : null;
 
-    let branchFilterCondition = "";
-
-    if (parsedSalesId !== null) {
-      branchFilterCondition = "WHERE b.id = (SELECT branch_id FROM sales_expenses WHERE id = ?)";
-    } else if (parsedCapitalId !== null) {
-      branchFilterCondition = "WHERE b.id = (SELECT branch_id FROM capital_expenses WHERE id = ?)";
-    }
+    // 💡 1. බ්‍රාන්ච් අඩුවී යාම (Chunnakam විතරක් පෙන්වීම) වැළැක්වීමට WHERE condition එක ඉවත් කර ඇත.
+    // දැන් ඕනෑම filter එකක් යටතේ වුවද සියලුම branches ලැයිස්තුව සාමාන්‍ය පරිදි දිස්වේ.
 
     // Clean and optimized SQL query joining all related expenses safely
     const query = `
@@ -59,16 +54,15 @@ export async function GET(req: NextRequest) {
         SELECT branch_id, SUM(COALESCE(total_payable, 0)) AS other_total, SUM(COALESCE(balance, 0)) AS other_balance 
         FROM other_expenses GROUP BY branch_id
       ) o ON b.id = o.branch_id
-      ${branchFilterCondition}
     `;
 
-    // 🔹 Parameter mapping sequence matching the query placeholders (?)
+    // 🔹 Parameter mapping sequence matching the query placeholders (?) - දැන් placeholders 4 ක් පමණි
     let finalQueryParams: any[] = [];
     
     if (parsedSalesId !== null) {
-      finalQueryParams = [parsedSalesId, parsedSalesId, null, null, parsedSalesId];
+      finalQueryParams = [parsedSalesId, parsedSalesId, null, null];
     } else if (parsedCapitalId !== null) {
-      finalQueryParams = [null, null, parsedCapitalId, parsedCapitalId, parsedCapitalId]; 
+      finalQueryParams = [null, null, parsedCapitalId, parsedCapitalId]; 
     } else {
       finalQueryParams = [null, null, null, null];
     }
@@ -88,25 +82,12 @@ export async function GET(req: NextRequest) {
 
         b.salary_balance = Number(b.salary_balance || 0);
         b.other_balance = Number(b.other_balance || 0);
+        
         b.sales_expenses_val = Number(b.sales_expenses || 0);
         b.capital_expenses_val = Number(b.capital_expenses || 0);
 
-        // 🔹 Filter active නම් වෙනත් unrelated categories වල අගයන් 0 කර හැරීම
-        if (parsedSalesId !== null) {
-          b.salary_balance = 0;
-          b.other_balance = 0;
-          b.capital_expenses_val = 0;
-          b.salary_expenses = 0;
-          b.other_expenses = 0;
-          b.capital_expenses = 0;
-        } else if (parsedCapitalId !== null) {
-          b.salary_balance = 0;
-          b.other_balance = 0;
-          b.sales_expenses_val = 0;
-          b.salary_expenses = 0;
-          b.other_expenses = 0;
-          b.sales_expenses = 0;
-        }
+        // 💡 2. මෙහි තිබූ Salary සහ Other expenses బలෙන්ම 0 කරන logic කොටස (if/else blocks) 
+        // සම්පූර්ණයෙන්ම ඉවත් කර ඇත. දැන් ඒවායේ සැබෑ අගයන් එලෙසම පෙන්වනු ඇත.
 
         b.total_expenses = b.salary_expenses + b.other_expenses + b.sales_expenses + b.capital_expenses;
         b.total_balance = b.salary_balance + b.other_balance + b.sales_expenses_val + b.capital_expenses_val;
