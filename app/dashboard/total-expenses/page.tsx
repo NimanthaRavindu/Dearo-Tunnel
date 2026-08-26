@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Coins, FileSpreadsheet, RefreshCw, Filter, X } from "lucide-react";
+import { ArrowLeft, Coins, FileSpreadsheet, RefreshCw, Filter, X, ChevronDown } from "lucide-react";
 
 interface BranchExpense {
   id: number | string;
@@ -32,6 +32,12 @@ function TotalExpensesContent() {
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
 
+  // States for available lists to select filters
+  const [salesList, setSalesList] = useState<any[]>([]);
+  const [capitalList, setCapitalList] = useState<any[]>([]);
+  const [showSalesDropdown, setShowSalesDropdown] = useState<boolean>(false);
+  const [showCapitalDropdown, setShowCapitalDropdown] = useState<boolean>(false);
+
   const fetchExpenseBreakdown = useCallback(async () => {
     try {
       const params = new URLSearchParams();
@@ -56,9 +62,37 @@ function TotalExpensesContent() {
     }
   }, [selectedSalesId, selectedCapitalId]);
 
+  // Fetch filter options (Sales & Capital entries lists)
   useEffect(() => {
+    async function fetchFilterOptions() {
+      try {
+        const res = await fetch("/api/dashboard/filters"); // ඔබගේ database එකෙන් entries ලැයිස්තුව ගන්න API එකක් ඇත්නම්
+        if (res.ok) {
+          const data = await res.json();
+          setSalesList(data.sales || []);
+          setCapitalList(data.capital || []);
+        }
+      } catch (e) {
+        // fallback if filter api isn't separate
+      }
+    }
+    fetchFilterOptions();
     fetchExpenseBreakdown();
   }, [fetchExpenseBreakdown]);
+
+  const handleSelectSales = (id: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("selected_sales_id", id);
+    router.push(`/dashboard/total-expenses?${params.toString()}`);
+    setShowSalesDropdown(false);
+  };
+
+  const handleSelectCapital = (id: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("selected_capital_id", id);
+    router.push(`/dashboard/total-expenses?${params.toString()}`);
+    setShowCapitalDropdown(false);
+  };
 
   const clearSalesFilter = () => {
     const params = new URLSearchParams(searchParams.toString());
@@ -96,6 +130,7 @@ function TotalExpensesContent() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-3 sm:p-5 lg:p-6 font-sans antialiased">
       <div className="max-w-7xl mx-auto space-y-4">
+        
         {/* Header Section */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-3 border-b border-slate-800/80 gap-3">
           <div className="space-y-1">
@@ -117,24 +152,70 @@ function TotalExpensesContent() {
                 Gross Expense Breakdown Sub-Ledger
               </h1>
 
-              {/* Sales Expense Filter Tag */}
-              {selectedSalesId && (
+              {/* Sales Expense Filter Tag / Selector */}
+              {selectedSalesId ? (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-950/80 text-emerald-400 border border-emerald-800/80 text-[10px] font-mono">
                   <Filter size={10} /> Sales Entry #{selectedSalesId}
                   <button onClick={clearSalesFilter} className="hover:text-white ml-1">
                     <X size={10} />
                   </button>
                 </span>
+              ) : (
+                <div className="relative">
+                  <button 
+                    onClick={() => setShowSalesDropdown(!showSalesDropdown)}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-900 text-slate-400 border border-slate-800 text-[10px] font-mono hover:text-white"
+                  >
+                    + Add Sales Filter <ChevronDown size={10} />
+                  </button>
+                  {showSalesDropdown && (
+                    <div className="absolute top-full mt-1 left-0 bg-slate-900 border border-slate-700 rounded-md shadow-xl z-50 p-2 min-w-[140px] max-h-40 overflow-y-auto">
+                      <p className="text-[9px] text-slate-500 uppercase px-1 pb-1">Select Sales ID</p>
+                      {[1, 2, 3, 4, 5, 10].map((id) => (
+                        <div 
+                          key={id} 
+                          onClick={() => handleSelectSales(id.toString())}
+                          className="px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800 rounded cursor-pointer"
+                        >
+                          Sales Entry #{id}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               )}
 
-              {/* Capital Expense Filter Tag */}
-              {selectedCapitalId && (
+              {/* Capital Expense Filter Tag / Selector */}
+              {selectedCapitalId ? (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-950/80 text-amber-400 border border-amber-800/80 text-[10px] font-mono">
                   <Filter size={10} /> Capital Entry #{selectedCapitalId}
                   <button onClick={clearCapitalFilter} className="hover:text-white ml-1">
                     <X size={10} />
                   </button>
                 </span>
+              ) : (
+                <div className="relative">
+                  <button 
+                    onClick={() => setShowCapitalDropdown(!showCapitalDropdown)}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-900 text-slate-400 border border-slate-800 text-[10px] font-mono hover:text-white"
+                  >
+                    + Add Capital Filter <ChevronDown size={10} />
+                  </button>
+                  {showCapitalDropdown && (
+                    <div className="absolute top-full mt-1 left-0 bg-slate-900 border border-slate-700 rounded-md shadow-xl z-50 p-2 min-w-[150px] max-h-40 overflow-y-auto">
+                      <p className="text-[9px] text-slate-500 uppercase px-1 pb-1">Select Capital ID</p>
+                      {[1, 2, 3, 4, 5].map((id) => (
+                        <div 
+                          key={id} 
+                          onClick={() => handleSelectCapital(id.toString())}
+                          className="px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800 rounded cursor-pointer"
+                        >
+                          Capital Entry #{id}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           </div>
@@ -234,31 +315,10 @@ function TotalExpensesContent() {
                   })
                 )}
               </tbody>
-              {branches.length > 0 && (
-                <tfoot className="border-t border-slate-800 bg-slate-950/60 font-mono font-bold text-slate-200">
-                  <tr>
-                    <td className="py-3 px-3 uppercase text-[10px] text-slate-400">Total Matrix Expenses</td>
-                    <td className="py-3 px-3 text-right text-xs">
-                      {formatCurrency(branches.reduce((acc, b) => acc + Number(b.salary_expenses || 0), 0))}
-                    </td>
-                    <td className="py-3 px-3 text-right text-emerald-400 text-xs">
-                      {formatCurrency(branches.reduce((acc, b) => acc + Number(b.sales_expenses || 0), 0))}
-                    </td>
-                    <td className="py-3 px-3 text-right text-amber-400 text-xs">
-                      {formatCurrency(branches.reduce((acc, b) => acc + Number(b.capital_expenses || 0), 0))}
-                    </td>
-                    <td className="py-3 px-3 text-right text-xs">
-                      {formatCurrency(branches.reduce((acc, b) => acc + Number(b.other_expenses || 0), 0))}
-                    </td>
-                    <td className="py-3 px-3 text-right text-emerald-400 bg-emerald-950/20 text-xs">
-                      {formatCurrency(calculatedTotalSum)}
-                    </td>
-                  </tr>
-                </tfoot>
-              )}
             </table>
           </div>
         </div>
+
       </div>
     </div>
   );
