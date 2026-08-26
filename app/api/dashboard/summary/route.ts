@@ -10,10 +10,9 @@ export async function GET(req: NextRequest) {
     const parsedSalesId = selectedSalesId ? Number(selectedSalesId) : null;
     const parsedCapitalId = selectedCapitalId ? Number(selectedCapitalId) : null;
 
-    // 💡 1. බ්‍රාන්ච් අඩුවී යාම (Chunnakam විතරක් පෙන්වීම) වැළැක්වීමට WHERE condition එක ඉවත් කර ඇත.
-    // දැන් ඕනෑම filter එකක් යටතේ වුවද සියලුම branches ලැයිස්තුව සාමාන්‍ය පරිදි දිස්වේ.
-
-    // Clean and optimized SQL query joining all related expenses safely
+    // Clean and optimized SQL query 
+    // 💡 මෙහිදී Sales සහ Capital වෙන වෙනම හෝ එකවර ෆිල්ටර් කළත්, 
+    // අදාළ ID එක දී ඇත්නම් එම ID එකට අදාළ මුදලත්, නැතහොත් මුළු එකතුවත් නිවැරදිව ගණනය වේ.
     const query = `
       SELECT 
         b.id,
@@ -56,16 +55,15 @@ export async function GET(req: NextRequest) {
       ) o ON b.id = o.branch_id
     `;
 
-    // 🔹 Parameter mapping sequence matching the query placeholders (?) - දැන් placeholders 4 ක් පමණි
-    let finalQueryParams: any[] = [];
-    
-    if (parsedSalesId !== null) {
-      finalQueryParams = [parsedSalesId, parsedSalesId, null, null];
-    } else if (parsedCapitalId !== null) {
-      finalQueryParams = [null, null, parsedCapitalId, parsedCapitalId]; 
-    } else {
-      finalQueryParams = [null, null, null, null];
-    }
+    // 🔹 Parameter mapping: 
+    // 1 & 2 -> Sales ID check & Value
+    // 3 & 4 -> Capital ID check & Value
+    let finalQueryParams: any[] = [
+      parsedSalesId, 
+      parsedSalesId, 
+      parsedCapitalId, 
+      parsedCapitalId
+    ];
 
     const [branches]: any = await db.query(query, finalQueryParams);
 
@@ -85,9 +83,6 @@ export async function GET(req: NextRequest) {
         
         b.sales_expenses_val = Number(b.sales_expenses || 0);
         b.capital_expenses_val = Number(b.capital_expenses || 0);
-
-        // 💡 2. මෙහි තිබූ Salary සහ Other expenses బలෙන්ම 0 කරන logic කොටස (if/else blocks) 
-        // සම්පූර්ණයෙන්ම ඉවත් කර ඇත. දැන් ඒවායේ සැබෑ අගයන් එලෙසම පෙන්වනු ඇත.
 
         b.total_expenses = b.salary_expenses + b.other_expenses + b.sales_expenses + b.capital_expenses;
         b.total_balance = b.salary_balance + b.other_balance + b.sales_expenses_val + b.capital_expenses_val;
