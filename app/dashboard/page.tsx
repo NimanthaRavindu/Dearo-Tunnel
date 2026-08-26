@@ -67,6 +67,15 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
     router.push(`/dashboard/total-expenses${query ? `?${query}` : ""}`);
   };
 
+  // Remaining Balance Card එකට යද්දී parameters දෙකම රැගෙන යාම
+  const handleRemainingBalanceClick = () => {
+    const params = new URLSearchParams();
+    if (selectedSalesId) params.append("selected_sales_id", selectedSalesId);
+    if (selectedCapitalId) params.append("selected_capital_id", selectedCapitalId);
+    const query = params.toString();
+    router.push(`/dashboard/remaining-balance${query ? `?${query}` : ""}`);
+  };
+
   if (loading) {
     return (
       <div className="h-screen w-full flex flex-col items-center justify-center text-slate-500 bg-[#070a12] font-mono text-xs">
@@ -194,7 +203,6 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
               <p className="text-2xl font-mono font-bold text-white mt-1">
                 {data?.cards?.totalBranches || filteredBranches.length || 0}
               </p>
-
             </div>
 
             <div className={`p-2 bg-slate-900/80 border border-slate-800 text-slate-400 rounded-lg transition-all z-10 ${
@@ -209,7 +217,6 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
             onClick={handleTotalExpensesClick}
             className="bg-[#0d1527]/60 border border-slate-800/60 rounded-xl p-4 flex items-center justify-between cursor-pointer hover:border-blue-500/40 transition-all"
           >
-
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Expenses</p>
               <p className="text-2xl font-mono font-bold text-blue-400 mt-1">
@@ -224,16 +231,14 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
 
           {/* Card 3: Remaining Balance */}
           <div
-            onClick={() => router.push("/dashboard/remaining-balance")}
+            onClick={handleRemainingBalanceClick}
             className="bg-[#0d1527]/60 border border-slate-800/60 rounded-xl p-4 flex items-center justify-between cursor-pointer hover:border-amber-500/40 transition-all"
           >
-
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Remaining Balance</p>
               <p className="text-2xl font-mono font-bold text-amber-500 mt-1">
                 LKR {Number(data?.cards?.totalRemaining || 0).toLocaleString("en-US")}
               </p>
-
             </div>
             <div className="p-2.5 bg-amber-500/10 text-amber-400 rounded-lg">
               <TrendingUp size={18} />
