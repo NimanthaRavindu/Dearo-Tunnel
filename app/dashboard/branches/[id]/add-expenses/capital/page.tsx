@@ -1,5 +1,4 @@
 "use client";
-
 import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Building2, Plus, User, Calendar, Coins, Trash2, FileText, Search, Receipt, Loader2, Filter } from "lucide-react";
@@ -45,7 +44,7 @@ export default function CapitalExpensesPage() {
         }
       } catch (err) {
         console.error("Failed to load records", err);
-      } 
+      }
       finally {
         setLoading(false);
       }
@@ -74,7 +73,6 @@ export default function CapitalExpensesPage() {
       if (res.ok) {
         const savedExpense = await res.json();
         setExpenses([savedExpense, ...expenses]);
-
         setPersonName("");
         setAmount("");
         setDescription("");
@@ -112,6 +110,7 @@ export default function CapitalExpensesPage() {
 
   const handleViewBreakdown = (capitalId: number | string) => {
     router.push(`/dashboard/total-expenses?selected_capital_id=${capitalId}`);
+    router.push(`/dashboard/remaining-balance?selected_capital_id=${capitalId}`);
   };
 
   const totalCapitalExpenses = expenses.reduce((sum, item) => sum + Number(item.amount), 0);
