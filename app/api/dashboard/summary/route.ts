@@ -10,7 +10,15 @@ export async function GET(req: NextRequest) {
     const parsedSalesId = selectedSalesId ? Number(selectedSalesId) : null;
     const parsedCapitalId = selectedCapitalId ? Number(selectedCapitalId) : null;
 
-    // Clean and optimized SQL query joining all related expenses safely with optional ID filtering
+    let branchFilterCondition = "";
+
+    if (parsedSalesId !== null) {
+      branchFilterCondition = "WHERE b.id = (SELECT branch_id FROM sales_expenses WHERE id = ?)";
+    } else if (parsedCapitalId !== null) {
+      branchFilterCondition = "WHERE b.id = (SELECT branch_id FROM capital_expenses WHERE id = ?)";
+    }
+
+    // Clean and optimized SQL query joining all related expenses safely
     const query = `
       SELECT 
         b.id,
@@ -28,25 +36,42 @@ export async function GET(req: NextRequest) {
         FROM salary_expenses GROUP BY branch_id
       ) s ON b.id = s.branch_id
       LEFT JOIN (
-        SELECT branch_id, SUM(COALESCE(amount, 0)) AS sales_total 
-        FROM sales_expenses 
-        WHERE (? IS NULL OR id = ?)
-        GROUP BY branch_id
+        SELECT branch_id, 
+          SUM(
+            CASE 
+              WHEN ? IS NOT NULL THEN (CASE WHEN id = ? THEN COALESCE(amount, 0) ELSE 0 END)
+              ELSE COALESCE(amount, 0) 
+            END
+          ) AS sales_total 
+        FROM sales_expenses GROUP BY branch_id
       ) se ON b.id = se.branch_id
       LEFT JOIN (
         SELECT branch_id, SUM(COALESCE(amount, 0)) AS capital_total 
-        FROM capital_expenses 
-        WHERE (? IS NULL OR id = ?)
-        GROUP BY branch_id
+        FROM capital_expenses GROUP BY branch_id
       ) c ON b.id = c.branch_id
       LEFT JOIN (
         SELECT branch_id, SUM(COALESCE(total_payable, 0)) AS other_total, SUM(COALESCE(balance, 0)) AS other_balance 
         FROM other_expenses GROUP BY branch_id
       ) o ON b.id = o.branch_id
+      ${branchFilterCondition}
     `;
 
-    const queryParams = [parsedSalesId, parsedSalesId, parsedCapitalId, parsedCapitalId];
-    const [branches]: any = await db.query(query, queryParams);
+    // 🔹 Parameter mapping sequence matching the query placeholders (?)
+    let finalQueryParams: any[] = [];
+    
+    if (parsedSalesId !== null) {
+      // 1. First ? -> sales subquery CASE condition check (parsedSalesId)
+      // 2. Second ? -> sales subquery record id match (parsedSalesId)
+      // 3. Third ? -> branchFilterCondition WHERE clause id match (parsedSalesId)
+      finalQueryParams = [parsedSalesId, parsedSalesId, parsedSalesId];
+    } else if (parsedCapitalId !== null) {
+      finalQueryParams = [null, null, parsedCapitalId]; 
+    } else {
+      // Default / No filters active: pass nulls for the conditional checks
+      finalQueryParams = [null, null];
+    }
+
+    const [branches]: any = await db.query(query, finalQueryParams);
 
     let totalBranches = Array.isArray(branches) ? branches.length : 0;
     let totalExpenses = 0;
@@ -66,7 +91,6 @@ export async function GET(req: NextRequest) {
         b.sales_expenses_val = Number(b.sales_expenses || 0);
         b.capital_expenses_val = Number(b.capital_expenses || 0);
         
-        // Cumulative Net Liability calculation to include filtered sales/capital expenses
         b.total_balance = b.salary_balance + b.other_balance + b.sales_expenses_val + b.capital_expenses_val;
 
         totalExpenses += b.total_expenses;
