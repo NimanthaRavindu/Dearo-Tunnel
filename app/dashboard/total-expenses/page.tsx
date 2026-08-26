@@ -1,8 +1,7 @@
 "use client";
-
 import React, { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Coins, FileSpreadsheet, RefreshCw, Filter, X, ChevronDown } from "lucide-react";
+import { ArrowLeft, Coins, FileSpreadsheet, RefreshCw, Filter, X } from "lucide-react";
 
 interface BranchExpense {
   id: number | string;
@@ -32,10 +31,6 @@ function TotalExpensesContent() {
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
 
-  // Dropdown visibility states
-  const [showSalesDropdown, setShowSalesDropdown] = useState<boolean>(false);
-  const [showCapitalDropdown, setShowCapitalDropdown] = useState<boolean>(false);
-
   const fetchExpenseBreakdown = useCallback(async () => {
     try {
       const params = new URLSearchParams();
@@ -47,7 +42,7 @@ function TotalExpensesContent() {
         ? `/api/dashboard/summary?${queryString}`
         : "/api/dashboard/summary";
 
-      const response = await fetch(url);
+        const response = await fetch(url);
       if (response.ok) {
         const json = await response.json();
         setBranches(json.branches || []);
@@ -63,22 +58,6 @@ function TotalExpensesContent() {
   useEffect(() => {
     fetchExpenseBreakdown();
   }, [fetchExpenseBreakdown]);
-
-  // Handle selecting Sales ID via dropdown
-  const handleSelectSales = (id: string) => {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("selected_sales_id", id);
-    router.push(`/dashboard/total-expenses?${params.toString()}`);
-    setShowSalesDropdown(false);
-  };
-
-  // Handle selecting Capital ID via dropdown
-  const handleSelectCapital = (id: string) => {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("selected_capital_id", id);
-    router.push(`/dashboard/total-expenses?${params.toString()}`);
-    setShowCapitalDropdown(false);
-  };
 
   const clearSalesFilter = () => {
     const params = new URLSearchParams(searchParams.toString());
@@ -128,7 +107,7 @@ function TotalExpensesContent() {
             >
               <ArrowLeft size={13} /> Back To Main Control Panel
             </button>
-            
+
             <div className="flex flex-wrap items-center gap-2">
               <span className="p-1 bg-emerald-500/10 text-emerald-400 rounded-md border border-emerald-500/20">
                 <Coins size={14} />
@@ -137,76 +116,24 @@ function TotalExpensesContent() {
                 Gross Expense Breakdown Sub-Ledger
               </h1>
 
-              {/* Sales Expense Filter Tag / Selector */}
-              {selectedSalesId ? (
+              {/* Sales Expense Filter Tag */}
+              {selectedSalesId && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-950/80 text-emerald-400 border border-emerald-800/80 text-[10px] font-mono">
                   <Filter size={10} /> Sales Entry #{selectedSalesId}
                   <button onClick={clearSalesFilter} className="hover:text-white ml-1">
                     <X size={10} />
                   </button>
                 </span>
-              ) : (
-                <div className="relative">
-                  <button 
-                    onClick={() => {
-                      setShowSalesDropdown(!showSalesDropdown);
-                      setShowCapitalDropdown(false);
-                    }}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-900 text-slate-400 border border-slate-800 text-[10px] font-mono hover:text-white"
-                  >
-                    + Add Sales Filter <ChevronDown size={10} />
-                  </button>
-                  {showSalesDropdown && (
-                    <div className="absolute top-full mt-1 left-0 bg-slate-900 border border-slate-700 rounded-md shadow-xl z-50 p-2 min-w-[140px] max-h-40 overflow-y-auto">
-                      <p className="text-[9px] text-slate-500 uppercase px-1 pb-1">Select Sales ID</p>
-                      {[1, 2, 3, 4, 5, 10].map((id) => (
-                        <div 
-                          key={id} 
-                          onClick={() => handleSelectSales(id.toString())}
-                          className="px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800 rounded cursor-pointer"
-                        >
-                          Sales Entry #{id}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
               )}
 
-              {/* Capital Expense Filter Tag / Selector */}
-              {selectedCapitalId ? (
+              {/* Capital Expense Filter Tag */}
+              {selectedCapitalId && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-950/80 text-amber-400 border border-amber-800/80 text-[10px] font-mono">
                   <Filter size={10} /> Capital Entry #{selectedCapitalId}
                   <button onClick={clearCapitalFilter} className="hover:text-white ml-1">
                     <X size={10} />
                   </button>
                 </span>
-              ) : (
-                <div className="relative">
-                  <button 
-                    onClick={() => {
-                      setShowCapitalDropdown(!showCapitalDropdown);
-                      setShowSalesDropdown(false);
-                    }}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-900 text-slate-400 border border-slate-800 text-[10px] font-mono hover:text-white"
-                  >
-                    + Add Capital Filter <ChevronDown size={10} />
-                  </button>
-                  {showCapitalDropdown && (
-                    <div className="absolute top-full mt-1 left-0 bg-slate-900 border border-slate-700 rounded-md shadow-xl z-50 p-2 min-w-[150px] max-h-40 overflow-y-auto">
-                      <p className="text-[9px] text-slate-500 uppercase px-1 pb-1">Select Capital ID</p>
-                      {[1, 2, 3, 4, 5].map((id) => (
-                        <div 
-                          key={id} 
-                          onClick={() => handleSelectCapital(id.toString())}
-                          className="px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800 rounded cursor-pointer"
-                        >
-                          Capital Entry #{id}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
               )}
             </div>
           </div>
