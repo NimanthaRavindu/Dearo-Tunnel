@@ -66,13 +66,10 @@ export async function GET(req: NextRequest) {
     let finalQueryParams: any[] = [];
     
     if (parsedSalesId !== null) {
-      // 1-2: Sales CASE params, 3: Capital CASE (null), 4: Capital CASE (null), 5: Branch WHERE id match
       finalQueryParams = [parsedSalesId, parsedSalesId, null, null, parsedSalesId];
     } else if (parsedCapitalId !== null) {
-      // 1-2: Sales CASE (null), 3-4: Capital CASE params, 5: Branch WHERE id match
       finalQueryParams = [null, null, parsedCapitalId, parsedCapitalId, parsedCapitalId]; 
     } else {
-      // Default / No filters active
       finalQueryParams = [null, null, null, null];
     }
 
@@ -89,13 +86,29 @@ export async function GET(req: NextRequest) {
         b.capital_expenses = Number(b.capital_expenses || 0);
         b.other_expenses = Number(b.other_expenses || 0);
 
-        b.total_expenses = b.salary_expenses + b.other_expenses + b.sales_expenses + b.capital_expenses;
-        
         b.salary_balance = Number(b.salary_balance || 0);
         b.other_balance = Number(b.other_balance || 0);
         b.sales_expenses_val = Number(b.sales_expenses || 0);
         b.capital_expenses_val = Number(b.capital_expenses || 0);
-        
+
+        // 🔹 Filter active නම් වෙනත් unrelated categories වල අගයන් 0 කර හැරීම
+        if (parsedSalesId !== null) {
+          b.salary_balance = 0;
+          b.other_balance = 0;
+          b.capital_expenses_val = 0;
+          b.salary_expenses = 0;
+          b.other_expenses = 0;
+          b.capital_expenses = 0;
+        } else if (parsedCapitalId !== null) {
+          b.salary_balance = 0;
+          b.other_balance = 0;
+          b.sales_expenses_val = 0;
+          b.salary_expenses = 0;
+          b.other_expenses = 0;
+          b.sales_expenses = 0;
+        }
+
+        b.total_expenses = b.salary_expenses + b.other_expenses + b.sales_expenses + b.capital_expenses;
         b.total_balance = b.salary_balance + b.other_balance + b.sales_expenses_val + b.capital_expenses_val;
 
         totalExpenses += b.total_expenses;
