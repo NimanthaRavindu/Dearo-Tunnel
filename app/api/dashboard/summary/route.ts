@@ -46,7 +46,13 @@ export async function GET(req: NextRequest) {
         FROM sales_expenses GROUP BY branch_id
       ) se ON b.id = se.branch_id
       LEFT JOIN (
-        SELECT branch_id, SUM(COALESCE(amount, 0)) AS capital_total 
+        SELECT branch_id, 
+          SUM(
+            CASE 
+              WHEN ? IS NOT NULL THEN (CASE WHEN id = ? THEN COALESCE(amount, 0) ELSE 0 END)
+              ELSE COALESCE(amount, 0) 
+            END
+          ) AS capital_total 
         FROM capital_expenses GROUP BY branch_id
       ) c ON b.id = c.branch_id
       LEFT JOIN (
@@ -60,15 +66,14 @@ export async function GET(req: NextRequest) {
     let finalQueryParams: any[] = [];
     
     if (parsedSalesId !== null) {
-      // 1. First ? -> sales subquery CASE condition check (parsedSalesId)
-      // 2. Second ? -> sales subquery record id match (parsedSalesId)
-      // 3. Third ? -> branchFilterCondition WHERE clause id match (parsedSalesId)
-      finalQueryParams = [parsedSalesId, parsedSalesId, parsedSalesId];
+      // 1-2: Sales CASE params, 3: Capital CASE (null), 4: Capital CASE (null), 5: Branch WHERE id match
+      finalQueryParams = [parsedSalesId, parsedSalesId, null, null, parsedSalesId];
     } else if (parsedCapitalId !== null) {
-      finalQueryParams = [null, null, parsedCapitalId]; 
+      // 1-2: Sales CASE (null), 3-4: Capital CASE params, 5: Branch WHERE id match
+      finalQueryParams = [null, null, parsedCapitalId, parsedCapitalId, parsedCapitalId]; 
     } else {
-      // Default / No filters active: pass nulls for the conditional checks
-      finalQueryParams = [null, null];
+      // Default / No filters active
+      finalQueryParams = [null, null, null, null];
     }
 
     const [branches]: any = await db.query(query, finalQueryParams);
