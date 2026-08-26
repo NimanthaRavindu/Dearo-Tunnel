@@ -1,4 +1,5 @@
 "use client";
+
 import React, { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Coins, FileSpreadsheet, RefreshCw, Filter, X } from "lucide-react";
@@ -42,7 +43,7 @@ function TotalExpensesContent() {
         ? `/api/dashboard/summary?${queryString}`
         : "/api/dashboard/summary";
 
-        const response = await fetch(url);
+      const response = await fetch(url);
       if (response.ok) {
         const json = await response.json();
         setBranches(json.branches || []);
@@ -107,7 +108,7 @@ function TotalExpensesContent() {
             >
               <ArrowLeft size={13} /> Back To Main Control Panel
             </button>
-
+            
             <div className="flex flex-wrap items-center gap-2">
               <span className="p-1 bg-emerald-500/10 text-emerald-400 rounded-md border border-emerald-500/20">
                 <Coins size={14} />
