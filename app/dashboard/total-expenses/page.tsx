@@ -50,6 +50,8 @@ function TotalExpensesContent() {
       if (response.ok) {
         const json = await response.json();
         setBranches(json.branches || []);
+        setSalesList(json.sales || []);
+        setCapitalList(json.capital || []);
       }
     } catch (err) {
       console.error("Failed to load expense breakdown matrix:", err);
@@ -60,23 +62,6 @@ function TotalExpensesContent() {
   }, [selectedSalesId, selectedCapitalId]);
 
   useEffect(() => {
-    async function fetchFilterOptions() {
-      try {
-        const res = await fetch("/api/dashboard/filters");
-        if (res.ok) {
-          const data = await res.json();
-          setSalesList(data.sales || []);
-          setCapitalList(data.capital || []);
-        } else {
-          setSalesList([]);
-          setCapitalList([]);
-        }
-      } catch (e) {
-        setSalesList([]);
-        setCapitalList([]);
-      }
-    }
-    fetchFilterOptions();
     fetchExpenseBreakdown();
   }, [fetchExpenseBreakdown]);
 

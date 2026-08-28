@@ -61,6 +61,10 @@ export async function GET(req: NextRequest) {
 
     const [branches]: any = await db.query(query, finalQueryParams);
 
+    // Fetch all available Sales and Capital IDs without limits for the dropdowns
+    const [salesRows]: any = await db.query("SELECT id FROM sales_expenses ORDER BY id ASC");
+    const [capitalRows]: any = await db.query("SELECT id FROM capital_expenses ORDER BY id ASC");
+
     let totalBranches = Array.isArray(branches) ? branches.length : 0;
     let totalExpenses = 0;
     let totalRemaining = 0;
@@ -93,6 +97,8 @@ export async function GET(req: NextRequest) {
         totalRemaining,
       },
       branches: branches || [],
+      sales: salesRows.map((r: any) => r.id),
+      capital: capitalRows.map((r: any) => r.id),
     });
   } catch (error: any) {
     console.error("Dashboard Summary API Error:", error.message);
