@@ -1,25 +1,40 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from "react";
+import React, { useState, useEffect, Suspense, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, TrendingUp, FileSpreadsheet, RefreshCw } from "lucide-react";
+
+interface BranchBalance {
+  id: number | string;
+  branch_name: string;
+  branch_code: string;
+  salary_balance?: number;
+  salary_expenses?: number;
+  sales_expenses?: number;
+  capital_expenses?: number;
+  other_balance?: number;
+  other_expenses?: number;
+}
+
+const formatCurrency = (val: number) =>
+  Number(val || 0).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 
 function RemainingBalanceContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
-  // Sales saha Capital pages walin pass karana query parameters grab karaganna
   const selectedSalesId = searchParams.get("selected_sales_id");
   const selectedCapitalId = searchParams.get("selected_capital_id");
 
-  const [branches, setBranches] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [totalSum, setTotalSum] = useState(0);
-  const [refreshing, setRefreshing] = useState(false);
+  const [branches, setBranches] = useState<BranchBalance[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
 
-  const fetchBalanceBreakdown = async () => {
+  const fetchBalanceBreakdown = useCallback(async () => {
     try {
-      // URL parameters dynamic widihata API request ekata build karanna
       const params = new URLSearchParams();
       if (selectedSalesId) params.append("selected_sales_id", selectedSalesId);
       if (selectedCapitalId) params.append("selected_capital_id", selectedCapitalId);
@@ -30,7 +45,6 @@ function RemainingBalanceContent() {
       if (response.ok) {
         const json = await response.json();
         setBranches(json.branches || []);
-        setTotalSum(json.cards?.totalRemaining || 0);
       }
     } catch (err) {
       console.error("Failed to load liability breakdown matrix:", err);
@@ -38,13 +52,12 @@ function RemainingBalanceContent() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [selectedSalesId, selectedCapitalId]);
 
   useEffect(() => {
     fetchBalanceBreakdown();
-  }, [selectedSalesId, selectedCapitalId]);
+  }, [fetchBalanceBreakdown]);
 
-  // Dashboard එකට යද්දී active filter parameters ටිකත් සමඟම රැගෙන යාම
   const handleBackToDashboard = () => {
     const params = new URLSearchParams();
     if (selectedSalesId) params.append("selected_sales_id", selectedSalesId);
@@ -52,6 +65,15 @@ function RemainingBalanceContent() {
     const query = params.toString();
     router.push(`/dashboard${query ? `?${query}` : ""}`);
   };
+
+  // Compute calculated cumulative total dynamically to stay safe
+  const calculatedTotalSum = branches.reduce((acc, branch) => {
+    const salaryBal = Number(branch.salary_balance ?? branch.salary_expenses ?? 0);
+    const salesAmt = Number(branch.sales_expenses ?? 0);
+    const capitalAmt = Number(branch.capital_expenses ?? 0);
+    const otherBal = Number(branch.other_balance ?? branch.other_expenses ?? 0);
+    return acc + (salaryBal + salesAmt + capitalAmt + otherBal);
+  }, 0);
 
   if (loading) {
     return (
@@ -65,7 +87,7 @@ function RemainingBalanceContent() {
   return (
     <div className="p-4 md:p-6 space-y-6 bg-[#070a12] min-h-screen text-slate-300 font-mono text-xs selection:bg-amber-500/20 selection:text-amber-300">
       
-      {/* 🔹 Navigation & Dynamic Total Card Header */}
+      {/* Navigation & Dynamic Total Card Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-900 pb-4">
         <div className="space-y-1.5">
           <button 
@@ -91,13 +113,13 @@ function RemainingBalanceContent() {
           <div className="text-right bg-amber-950/20 border border-amber-900/40 rounded-xl px-4 py-2 min-w-[180px]">
             <span className="text-[9px] text-amber-400 font-bold uppercase block tracking-wider mb-0.5">Aggregate Remaining Balance</span>
             <span className="text-sm font-bold font-sans text-white">
-              LKR {totalSum.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              LKR {formatCurrency(calculatedTotalSum)}
             </span>
           </div>
         </div>
       </div>
 
-      {/* 🔹 Compact Spreadsheet Data Table */}
+      {/* Compact Spreadsheet Data Table */}
       <div className="bg-[#0d1527]/30 border border-slate-900 rounded-xl overflow-hidden shadow-sm">
         <div className="px-4 py-3 bg-[#0a0f1d] border-b border-slate-900 flex items-center justify-between text-slate-400 text-[10px] font-bold uppercase tracking-wider">
           <div className="flex items-center gap-1.5">
@@ -122,42 +144,49 @@ function RemainingBalanceContent() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-900/40 text-slate-400 font-sans">
-              {branches.map((branch: any) => {
-                // 💡 Fallback checks for robust data rendering
-                const salaryBal = Number(branch.salary_balance ?? branch.salary_expenses ?? 0);
-                const salesAmt = Number(branch.sales_expenses ?? 0);
-                const capitalAmt = Number(branch.capital_expenses ?? 0);
-                const otherBal = Number(branch.other_balance ?? branch.other_expenses ?? 0);
-                
-                const netLiability = salaryBal + salesAmt + capitalAmt + otherBal;
-                const hasBalances = netLiability > 0;
+              {branches.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-8 text-center text-slate-500 font-mono uppercase tracking-widest text-[10px]">
+                    No Outstanding Balance Records Found
+                  </td>
+                </tr>
+              ) : (
+                branches.map((branch) => {
+                  const salaryBal = Number(branch.salary_balance ?? branch.salary_expenses ?? 0);
+                  const salesAmt = Number(branch.sales_expenses ?? 0);
+                  const capitalAmt = Number(branch.capital_expenses ?? 0);
+                  const otherBal = Number(branch.other_balance ?? branch.other_expenses ?? 0);
+                  
+                  const netLiability = salaryBal + salesAmt + capitalAmt + otherBal;
+                  const hasBalances = netLiability > 0;
 
-                return (
-                  <tr 
-                    key={branch.id} 
-                    className={`hover:bg-slate-900/10 transition-all ${!hasBalances ? "opacity-30 bg-slate-950/5" : ""}`}
-                  >
-                    <td className="py-2.5 px-3 font-mono font-semibold text-slate-300">
-                      {branch.branch_name} <span className="text-slate-600 font-normal text-[10px]">({branch.branch_code})</span>
-                    </td>
-                    <td className="py-2.5 px-3 text-right font-mono">
-                      {salaryBal > 0 ? salaryBal.toLocaleString("en-US", { minimumFractionDigits: 2 }) : "0.00"}
-                    </td>
-                    <td className="py-2.5 px-3 text-right font-mono text-emerald-400">
-                      {salesAmt > 0 ? salesAmt.toLocaleString("en-US", { minimumFractionDigits: 2 }) : "0.00"}
-                    </td>
-                    <td className="py-2.5 px-3 text-right font-mono text-cyan-400">
-                      {capitalAmt > 0 ? capitalAmt.toLocaleString("en-US", { minimumFractionDigits: 2 }) : "0.00"}
-                    </td>
-                    <td className="py-2.5 px-3 text-right font-mono">
-                      {otherBal > 0 ? otherBal.toLocaleString("en-US", { minimumFractionDigits: 2 }) : "0.00"}
-                    </td>
-                    <td className="py-2.5 px-3 text-right font-mono font-bold bg-amber-950/5 text-slate-200">
-                      {netLiability.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                    </td>
-                  </tr>
-                );
-              })}
+                  return (
+                    <tr 
+                      key={branch.id} 
+                      className={`hover:bg-slate-900/10 transition-all ${!hasBalances ? "opacity-30 bg-slate-950/5" : ""}`}
+                    >
+                      <td className="py-2.5 px-3 font-mono font-semibold text-slate-300">
+                        {branch.branch_name} <span className="text-slate-600 font-normal text-[10px]">({branch.branch_code})</span>
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono">
+                        {formatCurrency(salaryBal)}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono text-emerald-400">
+                        {formatCurrency(salesAmt)}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono text-cyan-400">
+                        {formatCurrency(capitalAmt)}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono">
+                        {formatCurrency(otherBal)}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono font-bold bg-amber-950/5 text-slate-200">
+                        {formatCurrency(netLiability)}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>

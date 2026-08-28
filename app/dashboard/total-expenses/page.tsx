@@ -32,7 +32,6 @@ function TotalExpensesContent() {
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
 
-  // States for available lists to select filters
   const [salesList, setSalesList] = useState<any[]>([]);
   const [capitalList, setCapitalList] = useState<any[]>([]);
   const [showSalesDropdown, setShowSalesDropdown] = useState<boolean>(false);
@@ -45,9 +44,7 @@ function TotalExpensesContent() {
       if (selectedCapitalId) params.append("selected_capital_id", selectedCapitalId);
 
       const queryString = params.toString();
-      const url = queryString
-        ? `/api/dashboard/summary?${queryString}`
-        : "/api/dashboard/summary";
+      const url = queryString ? `/api/dashboard/summary?${queryString}` : "/api/dashboard/summary";
 
       const response = await fetch(url);
       if (response.ok) {
@@ -62,18 +59,21 @@ function TotalExpensesContent() {
     }
   }, [selectedSalesId, selectedCapitalId]);
 
-  // Fetch filter options (Sales & Capital entries lists)
   useEffect(() => {
     async function fetchFilterOptions() {
       try {
-        const res = await fetch("/api/dashboard/filters"); // ඔබගේ database එකෙන් entries ලැයිස්තුව ගන්න API එකක් ඇත්නම්
+        const res = await fetch("/api/dashboard/filters");
         if (res.ok) {
           const data = await res.json();
-          setSalesList(data.sales || []);
-          setCapitalList(data.capital || []);
+          setSalesList(data.sales || [1, 2, 3, 4, 5, 10]);
+          setCapitalList(data.capital || [1, 2, 3, 4, 5]);
+        } else {
+          setSalesList([1, 2, 3, 4, 5, 10]);
+          setCapitalList([1, 2, 3, 4, 5]);
         }
       } catch (e) {
-        // fallback if filter api isn't separate
+        setSalesList([1, 2, 3, 4, 5, 10]);
+        setCapitalList([1, 2, 3, 4, 5]);
       }
     }
     fetchFilterOptions();
@@ -120,9 +120,7 @@ function TotalExpensesContent() {
     return (
       <div className="h-screen w-full flex flex-col items-center justify-center text-slate-500 bg-slate-950 font-mono text-xs">
         <div className="h-5 w-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mb-2"></div>
-        <p className="uppercase tracking-widest text-[10px]">
-          Compiling Expense Ledger Sheets...
-        </p>
+        <p className="uppercase tracking-widest text-[10px]">Compiling Expense Ledger Sheets...</p>
       </div>
     );
   }
@@ -171,15 +169,18 @@ function TotalExpensesContent() {
                   {showSalesDropdown && (
                     <div className="absolute top-full mt-1 left-0 bg-slate-900 border border-slate-700 rounded-md shadow-xl z-50 p-2 min-w-[140px] max-h-40 overflow-y-auto">
                       <p className="text-[9px] text-slate-500 uppercase px-1 pb-1">Select Sales ID</p>
-                      {[1, 2, 3, 4, 5, 10].map((id) => (
-                        <div 
-                          key={id} 
-                          onClick={() => handleSelectSales(id.toString())}
-                          className="px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800 rounded cursor-pointer"
-                        >
-                          Sales Entry #{id}
-                        </div>
-                      ))}
+                      {salesList.map((item) => {
+                        const id = typeof item === "object" ? item.id : item;
+                        return (
+                          <div 
+                            key={id} 
+                            onClick={() => handleSelectSales(id.toString())}
+                            className="px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800 rounded cursor-pointer"
+                          >
+                            Sales Entry #{id}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -204,15 +205,18 @@ function TotalExpensesContent() {
                   {showCapitalDropdown && (
                     <div className="absolute top-full mt-1 left-0 bg-slate-900 border border-slate-700 rounded-md shadow-xl z-50 p-2 min-w-[150px] max-h-40 overflow-y-auto">
                       <p className="text-[9px] text-slate-500 uppercase px-1 pb-1">Select Capital ID</p>
-                      {[1, 2, 3, 4, 5].map((id) => (
-                        <div 
-                          key={id} 
-                          onClick={() => handleSelectCapital(id.toString())}
-                          className="px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800 rounded cursor-pointer"
-                        >
-                          Capital Entry #{id}
-                        </div>
-                      ))}
+                      {capitalList.map((item) => {
+                        const id = typeof item === "object" ? item.id : item;
+                        return (
+                          <div 
+                            key={id} 
+                            onClick={() => handleSelectCapital(id.toString())}
+                            className="px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800 rounded cursor-pointer"
+                          >
+                            Capital Entry #{id}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -230,10 +234,7 @@ function TotalExpensesContent() {
               className="p-2 bg-slate-900/90 border border-slate-800 rounded-lg hover:border-slate-700 text-slate-400 hover:text-white transition-all disabled:opacity-50"
               title="Refresh Ledger"
             >
-              <RefreshCw
-                size={14}
-                className={refreshing ? "animate-spin" : ""}
-              />
+              <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
             </button>
             <div className="bg-slate-900/90 border border-slate-800 rounded-xl px-3.5 py-1.5 shadow-sm min-w-[180px]">
               <span className="text-[9px] text-emerald-400 font-medium uppercase tracking-wider block mb-0.5">
