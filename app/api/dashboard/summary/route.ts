@@ -10,9 +10,6 @@ export async function GET(req: NextRequest) {
     const parsedSalesId = selectedSalesId ? Number(selectedSalesId) : null;
     const parsedCapitalId = selectedCapitalId ? Number(selectedCapitalId) : null;
 
-    // 💡 මෙහිදී වෙනස් කර ඇත: 
-    // Sales හෝ Capital සඳහා ID එකක් දී ඇත්නම් එම නිශ්චිත ID එකේ amount එක පමණක් ගනී.
-    // නැතහොත් (ID එක දී නැත්නම්) එම බ්‍රාන්ච් එකේ සියලුම expenses වල එකතුව සාමාන්‍ය පරිදි ගනී.
     const query = `
       SELECT 
         b.id,
