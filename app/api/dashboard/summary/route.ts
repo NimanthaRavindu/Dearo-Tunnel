@@ -10,9 +10,9 @@ export async function GET(req: NextRequest) {
     const parsedSalesId = selectedSalesId ? Number(selectedSalesId) : null;
     const parsedCapitalId = selectedCapitalId ? Number(selectedCapitalId) : null;
 
-    // Clean and optimized SQL query 
-    // 💡 මෙහිදී Sales සහ Capital වෙන වෙනම හෝ එකවර ෆිල්ටර් කළත්, 
-    // අදාළ ID එක දී ඇත්නම් එම ID එකට අදාළ මුදලත්, නැතහොත් මුළු එකතුවත් නිවැරදිව ගණනය වේ.
+    // 💡 මෙහිදී වෙනස් කර ඇත: 
+    // Sales හෝ Capital සඳහා ID එකක් දී ඇත්නම් එම නිශ්චිත ID එකේ amount එක පමණක් ගනී.
+    // නැතහොත් (ID එක දී නැත්නම්) එම බ්‍රාන්ච් එකේ සියලුම expenses වල එකතුව සාමාන්‍ය පරිදි ගනී.
     const query = `
       SELECT 
         b.id,
@@ -55,9 +55,6 @@ export async function GET(req: NextRequest) {
       ) o ON b.id = o.branch_id
     `;
 
-    // 🔹 Parameter mapping: 
-    // 1 & 2 -> Sales ID check & Value
-    // 3 & 4 -> Capital ID check & Value
     let finalQueryParams: any[] = [
       parsedSalesId, 
       parsedSalesId, 
