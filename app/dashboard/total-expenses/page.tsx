@@ -152,27 +152,32 @@ function TotalExpensesContent() {
                     + Add Sales Filter <ChevronDown size={10} />
                   </button>
                   {showSalesDropdown && (
-                    <div className="absolute top-full mt-1 left-0 bg-slate-900 border border-slate-700 rounded-md shadow-xl z-50 p-2 min-w-[220px] max-h-60 overflow-y-auto">
+                    <div className="absolute top-full mt-1 left-0 bg-slate-900 border border-slate-700 rounded-md shadow-xl z-50 p-2 min-w-[240px] max-h-60 overflow-y-auto">
                       <p className="text-[9px] text-slate-500 uppercase px-1 pb-1">Select Sales Entry</p>
                       {salesList.length === 0 ? (
                         <p className="px-2 py-1 text-[11px] text-slate-500">No sales entries</p>
                       ) : (
                         salesList.map((item) => {
-                          const id = typeof item === "object" ? item.id : item;
-                          const name = item.name || item.customer_name || `Entry #${id}`;
-                          const branchName = item.branch?.branch_name || "";
-                          const date = item.date || "";
-                          const amount = item.amount ? ` - Rs. ${Number(item.amount).toLocaleString()}` : "";
+                          const id = typeof item === "object" && item !== null ? item.id : item;
+                          const name = typeof item === "object" && item !== null ? (item.name || `Sales Entry #${id}`) : `Sales Entry #${id}`;
+                          const branchName = typeof item === "object" && item !== null && item.branch?.branch_name ? item.branch.branch_name : "";
+                          const date = typeof item === "object" && item !== null && item.date ? item.date : "";
+                          const amount = typeof item === "object" && item !== null && item.amount ? `Rs. ${Number(item.amount).toLocaleString()}` : "";
 
                           return (
                             <div 
                               key={id} 
                               onClick={() => handleSelectSales(id.toString())}
-                              className="px-2 py-1.5 text-[11px] text-slate-300 hover:bg-slate-800 rounded cursor-pointer border-b border-slate-800/50 last:border-0"
+                              className="px-2.5 py-2 text-[11px] text-slate-300 hover:bg-slate-800 rounded cursor-pointer border-b border-slate-800/50 last:border-0"
                             >
-                              <span className="font-semibold text-emerald-400">{name}</span>
-                              {branchName && <span className="text-slate-400"> ({branchName})</span>}
-                              {date && <span className="text-slate-500 block text-[10px]">{date} {amount}</span>}
+                              <div className="flex justify-between items-center">
+                                <span className="font-semibold text-emerald-400">#{id} - {name}</span>
+                                {amount && <span className="text-slate-200 font-bold">{amount}</span>}
+                              </div>
+                              <div className="flex justify-between items-center mt-1 text-[10px] text-slate-500">
+                                <span>{branchName}</span>
+                                <span>{date}</span>
+                              </div>
                             </div>
                           );
                         })
@@ -199,27 +204,32 @@ function TotalExpensesContent() {
                     + Add Capital Filter <ChevronDown size={10} />
                   </button>
                   {showCapitalDropdown && (
-                    <div className="absolute top-full mt-1 left-0 bg-slate-900 border border-slate-700 rounded-md shadow-xl z-50 p-2 min-w-[220px] max-h-60 overflow-y-auto">
+                    <div className="absolute top-full mt-1 left-0 bg-slate-900 border border-slate-700 rounded-md shadow-xl z-50 p-2 min-w-[240px] max-h-60 overflow-y-auto">
                       <p className="text-[9px] text-slate-500 uppercase px-1 pb-1">Select Capital Entry</p>
                       {capitalList.length === 0 ? (
                         <p className="px-2 py-1 text-[11px] text-slate-500">No capital entries</p>
                       ) : (
                         capitalList.map((item) => {
-                          const id = typeof item === "object" ? item.id : item;
-                          const name = item.name || item.customer_name || `Entry #${id}`;
-                          const branchName = item.branch?.branch_name || "";
-                          const date = item.date || "";
-                          const amount = item.amount ? ` - Rs. ${Number(item.amount).toLocaleString()}` : "";
+                          const id = typeof item === "object" && item !== null ? item.id : item;
+                          const name = typeof item === "object" && item !== null ? (item.name || `Capital Entry #${id}`) : `Capital Entry #${id}`;
+                          const branchName = typeof item === "object" && item !== null && item.branch?.branch_name ? item.branch.branch_name : "";
+                          const date = typeof item === "object" && item !== null && item.date ? item.date : "";
+                          const amount = typeof item === "object" && item !== null && item.amount ? `Rs. ${Number(item.amount).toLocaleString()}` : "";
 
                           return (
                             <div 
                               key={id} 
                               onClick={() => handleSelectCapital(id.toString())}
-                              className="px-2 py-1.5 text-[11px] text-slate-300 hover:bg-slate-800 rounded cursor-pointer border-b border-slate-800/50 last:border-0"
+                              className="px-2.5 py-2 text-[11px] text-slate-300 hover:bg-slate-800 rounded cursor-pointer border-b border-slate-800/50 last:border-0"
                             >
-                              <span className="font-semibold text-amber-400">{name}</span>
-                              {branchName && <span className="text-slate-400"> ({branchName})</span>}
-                              {date && <span className="text-slate-500 block text-[10px]">{date} {amount}</span>}
+                              <div className="flex justify-between items-center">
+                                <span className="font-semibold text-amber-400">#{id} - {name}</span>
+                                {amount && <span className="text-slate-200 font-bold">{amount}</span>}
+                              </div>
+                              <div className="flex justify-between items-center mt-1 text-[10px] text-slate-500">
+                                <span>{branchName}</span>
+                                <span>{date}</span>
+                              </div>
                             </div>
                           );
                         })

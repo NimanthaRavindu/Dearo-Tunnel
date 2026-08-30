@@ -61,9 +61,20 @@ export async function GET(req: NextRequest) {
 
     const [branches]: any = await db.query(query, finalQueryParams);
 
-    // Fetch all available Sales and Capital IDs without limits for the dropdowns
-    const [salesRows]: any = await db.query("SELECT id FROM sales_expenses ORDER BY id ASC");
-    const [capitalRows]: any = await db.query("SELECT id FROM capital_expenses ORDER BY id ASC");
+    // Fetch all available Sales and Capital details with description, branch, date, and amount
+    const [salesRows]: any = await db.query(`
+      SELECT se.id, se.amount, se.date, se.description, b.branch_name 
+      FROM sales_expenses se 
+      LEFT JOIN branch b ON se.branch_id = b.id 
+      ORDER BY se.id ASC
+    `);
+
+    const [capitalRows]: any = await db.query(`
+      SELECT ce.id, ce.amount, ce.date, ce.description, b.branch_name 
+      FROM capital_expenses ce 
+      LEFT JOIN branch b ON ce.branch_id = b.id 
+      ORDER BY ce.id ASC
+    `);
 
     let totalBranches = Array.isArray(branches) ? branches.length : 0;
     let totalExpenses = 0;
@@ -97,8 +108,20 @@ export async function GET(req: NextRequest) {
         totalRemaining,
       },
       branches: branches || [],
-      sales: salesRows.map((r: any) => r.id),
-      capital: capitalRows.map((r: any) => r.id),
+      sales: salesRows.map((r: any) => ({
+        id: r.id,
+        name: r.description || `Sales Entry #${r.id}`,
+        branch: { branch_name: r.branch_name || "N/A" },
+        date: r.date || "",
+        amount: r.amount || 0
+      })),
+      capital: capitalRows.map((r: any) => ({
+        id: r.id,
+        name: r.description || `Capital Entry #${r.id}`,
+        branch: { branch_name: r.branch_name || "N/A" },
+        date: r.date || "",
+        amount: r.amount || 0
+      })),
     });
   } catch (error: any) {
     console.error("Dashboard Summary API Error:", error.message);
