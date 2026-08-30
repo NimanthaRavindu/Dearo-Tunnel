@@ -152,20 +152,27 @@ function TotalExpensesContent() {
                     + Add Sales Filter <ChevronDown size={10} />
                   </button>
                   {showSalesDropdown && (
-                    <div className="absolute top-full mt-1 left-0 bg-slate-900 border border-slate-700 rounded-md shadow-xl z-50 p-2 min-w-[160px] max-h-60 overflow-y-auto">
-                      <p className="text-[9px] text-slate-500 uppercase px-1 pb-1">Select Sales ID</p>
+                    <div className="absolute top-full mt-1 left-0 bg-slate-900 border border-slate-700 rounded-md shadow-xl z-50 p-2 min-w-[220px] max-h-60 overflow-y-auto">
+                      <p className="text-[9px] text-slate-500 uppercase px-1 pb-1">Select Sales Entry</p>
                       {salesList.length === 0 ? (
                         <p className="px-2 py-1 text-[11px] text-slate-500">No sales entries</p>
                       ) : (
                         salesList.map((item) => {
                           const id = typeof item === "object" ? item.id : item;
+                          const name = item.name || item.customer_name || `Entry #${id}`;
+                          const branchName = item.branch?.branch_name || "";
+                          const date = item.date || "";
+                          const amount = item.amount ? ` - Rs. ${Number(item.amount).toLocaleString()}` : "";
+
                           return (
                             <div 
                               key={id} 
                               onClick={() => handleSelectSales(id.toString())}
-                              className="px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800 rounded cursor-pointer"
+                              className="px-2 py-1.5 text-[11px] text-slate-300 hover:bg-slate-800 rounded cursor-pointer border-b border-slate-800/50 last:border-0"
                             >
-                              Sales Entry #{id}
+                              <span className="font-semibold text-emerald-400">{name}</span>
+                              {branchName && <span className="text-slate-400"> ({branchName})</span>}
+                              {date && <span className="text-slate-500 block text-[10px]">{date} {amount}</span>}
                             </div>
                           );
                         })
@@ -192,20 +199,27 @@ function TotalExpensesContent() {
                     + Add Capital Filter <ChevronDown size={10} />
                   </button>
                   {showCapitalDropdown && (
-                    <div className="absolute top-full mt-1 left-0 bg-slate-900 border border-slate-700 rounded-md shadow-xl z-50 p-2 min-w-[160px] max-h-60 overflow-y-auto">
-                      <p className="text-[9px] text-slate-500 uppercase px-1 pb-1">Select Capital ID</p>
+                    <div className="absolute top-full mt-1 left-0 bg-slate-900 border border-slate-700 rounded-md shadow-xl z-50 p-2 min-w-[220px] max-h-60 overflow-y-auto">
+                      <p className="text-[9px] text-slate-500 uppercase px-1 pb-1">Select Capital Entry</p>
                       {capitalList.length === 0 ? (
                         <p className="px-2 py-1 text-[11px] text-slate-500">No capital entries</p>
                       ) : (
                         capitalList.map((item) => {
                           const id = typeof item === "object" ? item.id : item;
+                          const name = item.name || item.customer_name || `Entry #${id}`;
+                          const branchName = item.branch?.branch_name || "";
+                          const date = item.date || "";
+                          const amount = item.amount ? ` - Rs. ${Number(item.amount).toLocaleString()}` : "";
+
                           return (
                             <div 
                               key={id} 
                               onClick={() => handleSelectCapital(id.toString())}
-                              className="px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800 rounded cursor-pointer"
+                              className="px-2 py-1.5 text-[11px] text-slate-300 hover:bg-slate-800 rounded cursor-pointer border-b border-slate-800/50 last:border-0"
                             >
-                              Capital Entry #{id}
+                              <span className="font-semibold text-amber-400">{name}</span>
+                              {branchName && <span className="text-slate-400"> ({branchName})</span>}
+                              {date && <span className="text-slate-500 block text-[10px]">{date} {amount}</span>}
                             </div>
                           );
                         })
