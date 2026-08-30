@@ -10,6 +10,7 @@ export async function GET(req: NextRequest) {
     const parsedSalesId = selectedSalesId ? Number(selectedSalesId) : null;
     const parsedCapitalId = selectedCapitalId ? Number(selectedCapitalId) : null;
 
+    // Fixed and safe SQL Query for Summaries
     const query = `
       SELECT 
         b.id,
@@ -61,20 +62,21 @@ export async function GET(req: NextRequest) {
 
     const [branches]: any = await db.query(query, finalQueryParams);
 
-    // Fetch all available Sales and Capital details with description, branch, date, and amount
+    // Fetch all available Sales details safely
     const [salesRows]: any = await db.query(`
       SELECT se.id, se.amount, se.date, se.description, b.branch_name 
       FROM sales_expenses se 
       LEFT JOIN branch b ON se.branch_id = b.id 
       ORDER BY se.id ASC
-    `);
+    `).catch(() => [[]]);
 
+    // Fetch all available Capital details safely
     const [capitalRows]: any = await db.query(`
       SELECT ce.id, ce.amount, ce.date, ce.description, b.branch_name 
       FROM capital_expenses ce 
       LEFT JOIN branch b ON ce.branch_id = b.id 
       ORDER BY ce.id ASC
-    `);
+    `).catch(() => [[]]);
 
     let totalBranches = Array.isArray(branches) ? branches.length : 0;
     let totalExpenses = 0;
@@ -108,23 +110,23 @@ export async function GET(req: NextRequest) {
         totalRemaining,
       },
       branches: branches || [],
-      sales: salesRows.map((r: any) => ({
+      sales: Array.isArray(salesRows) ? salesRows.map((r: any) => ({
         id: r.id,
         name: r.description || `Sales Entry #${r.id}`,
         branch: { branch_name: r.branch_name || "N/A" },
         date: r.date || "",
         amount: r.amount || 0
-      })),
-      capital: capitalRows.map((r: any) => ({
+      })) : [],
+      capital: Array.isArray(capitalRows) ? capitalRows.map((r: any) => ({
         id: r.id,
         name: r.description || `Capital Entry #${r.id}`,
         branch: { branch_name: r.branch_name || "N/A" },
         date: r.date || "",
         amount: r.amount || 0
-      })),
+      })) : [],
     });
   } catch (error: any) {
-    console.error("Dashboard Summary API Error:", error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("Dashboard Summary API Error:", error.message || error);
+    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
   }
 }
