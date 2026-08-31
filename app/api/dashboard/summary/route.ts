@@ -105,15 +105,15 @@ export async function GET(req: NextRequest) {
       sales: Array.isArray(salesRows) ? salesRows.map((r: any) => ({
         id: r.id,
         name: r.personName || r.description || `Sales Entry #${r.id}`,
-        branch: { branch_name: r.branch_name || "N/A" },
-        date: r.date || "",
+        branch_name: r.branch_name || "N/A", // Added for dropdown UI
+        date: r.date ? String(r.date).split("T")[0] : "", // Formatted date
         amount: r.amount || 0
       })) : [],
       capital: Array.isArray(capitalRows) ? capitalRows.map((r: any) => ({
         id: r.id,
         name: r.person_name || r.description || `Capital Entry #${r.id}`,
-        branch: { branch_name: r.branch_name || "N/A" },
-        date: r.date || "",
+        branch_name: r.branch_name || "N/A", // Added for dropdown UI
+        date: r.date ? String(r.date).split("T")[0] : "", // Formatted date
         amount: r.amount || 0
       })) : [],
     });
