@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Coins, FileSpreadsheet, RefreshCw, Filter, X, ChevronDown } from "lucide-react";
+import { ArrowLeft, Coins, FileSpreadsheet, RefreshCw } from "lucide-react";
+import { ExpenseFilters } from "@/components/ExpenseFilters"; // adjust path as needed
 
 interface BranchExpense {
   id: number | string;
@@ -13,6 +14,11 @@ interface BranchExpense {
   sales_expenses?: number;
   capital_expenses?: number;
   total_expenses: number;
+}
+
+interface FilterItem {
+  id: number | string;
+  name?: string;
 }
 
 const formatCurrency = (val: number) =>
@@ -32,10 +38,8 @@ function TotalExpensesContent() {
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
 
-  const [salesList, setSalesList] = useState<any[]>([]);
-  const [capitalList, setCapitalList] = useState<any[]>([]);
-  const [showSalesDropdown, setShowSalesDropdown] = useState<boolean>(false);
-  const [showCapitalDropdown, setShowCapitalDropdown] = useState<boolean>(false);
+  const [salesList, setSalesList] = useState<FilterItem[]>([]);
+  const [capitalList, setCapitalList] = useState<FilterItem[]>([]);
 
   const fetchExpenseBreakdown = useCallback(async () => {
     try {
@@ -69,14 +73,12 @@ function TotalExpensesContent() {
     const params = new URLSearchParams(searchParams.toString());
     params.set("selected_sales_id", id);
     router.push(`/dashboard/total-expenses?${params.toString()}`);
-    setShowSalesDropdown(false);
   };
 
   const handleSelectCapital = (id: string) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set("selected_capital_id", id);
     router.push(`/dashboard/total-expenses?${params.toString()}`);
-    setShowCapitalDropdown(false);
   };
 
   const clearSalesFilter = () => {
@@ -140,87 +142,16 @@ function TotalExpensesContent() {
                 Gross Expense Breakdown Sub-Ledger
               </h1>
 
-              {/* Sales Expense Filter Tag / Selector */}
-              {selectedSalesId ? (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-950/80 text-emerald-400 border border-emerald-800/80 text-[10px] font-mono">
-                  <Filter size={10} /> Sales Entry #{selectedSalesId}
-                  <button onClick={clearSalesFilter} className="hover:text-white ml-1">
-                    <X size={10} />
-                  </button>
-                </span>
-              ) : (
-                <div className="relative">
-                  <button 
-                    onClick={() => setShowSalesDropdown(!showSalesDropdown)}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-900 text-slate-400 border border-slate-800 text-[10px] font-mono hover:text-white"
-                  >
-                    + Add Sales Filter <ChevronDown size={10} />
-                  </button>
-                  {showSalesDropdown && (
-                    <div className="absolute top-full mt-1 left-0 bg-slate-900 border border-slate-700 rounded-md shadow-xl z-50 p-2 min-w-[160px] max-h-60 overflow-y-auto">
-                      <p className="text-[9px] text-slate-500 uppercase px-1 pb-1">Select Sales ID</p>
-                      {salesList.length === 0 ? (
-                        <p className="px-2 py-1 text-[11px] text-slate-500">No sales entries</p>
-                      ) : (
-                        salesList.map((item) => {
-                          const id = typeof item === "object" ? item.id : item;
-                          const displayName = item.name ? `${item.name} (#${id})` : `Sales Entry #${id}`;
-                          return (
-                            <div 
-                              key={id} 
-                              onClick={() => handleSelectSales(id.toString())}
-                              className="px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800 rounded cursor-pointer"
-                            >
-                              {displayName}
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Capital Expense Filter Tag / Selector */}
-              {selectedCapitalId ? (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-950/80 text-amber-400 border border-amber-800/80 text-[10px] font-mono">
-                  <Filter size={10} /> Capital Entry #{selectedCapitalId}
-                  <button onClick={clearCapitalFilter} className="hover:text-white ml-1">
-                    <X size={10} />
-                  </button>
-                </span>
-              ) : (
-                <div className="relative">
-                  <button 
-                    onClick={() => setShowCapitalDropdown(!showCapitalDropdown)}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-900 text-slate-400 border border-slate-800 text-[10px] font-mono hover:text-white"
-                  >
-                    + Add Capital Filter <ChevronDown size={10} />
-                  </button>
-                  {showCapitalDropdown && (
-                    <div className="absolute top-full mt-1 left-0 bg-slate-900 border border-slate-700 rounded-md shadow-xl z-50 p-2 min-w-[160px] max-h-60 overflow-y-auto">
-                      <p className="text-[9px] text-slate-500 uppercase px-1 pb-1">Select Capital ID</p>
-                      {capitalList.length === 0 ? (
-                        <p className="px-2 py-1 text-[11px] text-slate-500">No capital entries</p>
-                      ) : (
-                        capitalList.map((item) => {
-                          const id = typeof item === "object" ? item.id : item;
-                          const displayName = item.name ? `${item.name} (#${id})` : `Capital Entry #${id}`;
-                          return (
-                            <div 
-                              key={id} 
-                              onClick={() => handleSelectCapital(id.toString())}
-                              className="px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800 rounded cursor-pointer"
-                            >
-                              {displayName}
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
+              <ExpenseFilters
+                selectedSalesId={selectedSalesId}
+                selectedCapitalId={selectedCapitalId}
+                salesList={salesList}
+                capitalList={capitalList}
+                onSelectSales={handleSelectSales}
+                onSelectCapital={handleSelectCapital}
+                onClearSales={clearSalesFilter}
+                onClearCapital={clearCapitalFilter}
+              />
             </div>
           </div>
 

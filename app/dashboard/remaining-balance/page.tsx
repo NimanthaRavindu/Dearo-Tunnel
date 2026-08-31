@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, TrendingUp, FileSpreadsheet, RefreshCw, Filter, X, ChevronDown } from "lucide-react";
+import { ArrowLeft, TrendingUp, FileSpreadsheet, RefreshCw } from "lucide-react";
+import { ExpenseFilters } from "@/components/ExpenseFilters"; // adjust path as needed
 
 interface BranchBalance {
   id: number | string;
@@ -14,6 +15,11 @@ interface BranchBalance {
   capital_expenses?: number;
   other_balance?: number;
   other_expenses?: number;
+}
+
+interface FilterItem {
+  id: number | string;
+  name?: string;
 }
 
 function RemainingBalanceContent() {
@@ -28,10 +34,8 @@ function RemainingBalanceContent() {
   const [totalSum, setTotalSum] = useState<number>(0);
   const [refreshing, setRefreshing] = useState<boolean>(false);
 
-  const [salesList, setSalesList] = useState<any[]>([]);
-  const [capitalList, setCapitalList] = useState<any[]>([]);
-  const [showSalesDropdown, setShowSalesDropdown] = useState<boolean>(false);
-  const [showCapitalDropdown, setShowCapitalDropdown] = useState<boolean>(false);
+  const [salesList, setSalesList] = useState<FilterItem[]>([]);
+  const [capitalList, setCapitalList] = useState<FilterItem[]>([]);
 
   const fetchBalanceBreakdown = useCallback(async () => {
     try {
@@ -66,14 +70,12 @@ function RemainingBalanceContent() {
     const params = new URLSearchParams(searchParams.toString());
     params.set("selected_sales_id", id);
     router.push(`/dashboard/remaining-balance?${params.toString()}`);
-    setShowSalesDropdown(false);
   };
 
   const handleSelectCapital = (id: string) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set("selected_capital_id", id);
     router.push(`/dashboard/remaining-balance?${params.toString()}`);
-    setShowCapitalDropdown(false);
   };
 
   const clearSalesFilter = () => {
@@ -110,7 +112,7 @@ function RemainingBalanceContent() {
   return (
     <div className="p-4 md:p-6 space-y-6 bg-[#070a12] min-h-screen text-slate-300 font-mono text-xs selection:bg-amber-500/20 selection:text-amber-300">
       
-      {/* 🔹 Navigation & Dynamic Total Card Header */}
+      {/* Navigation & Dynamic Total Card Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-900 pb-4">
         <div className="space-y-1.5">
           <button 
@@ -125,87 +127,16 @@ function RemainingBalanceContent() {
               <TrendingUp size={15} className="text-amber-500" /> Outstanding Balances Portfolio Sub-Ledger
             </h2>
 
-            {/* Sales Filter Tag / Selector */}
-            {selectedSalesId ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-950/80 text-emerald-400 border border-emerald-800/80 text-[10px]">
-                <Filter size={10} /> Sales Entry #{selectedSalesId}
-                <button onClick={clearSalesFilter} className="hover:text-white ml-1">
-                  <X size={10} />
-                </button>
-              </span>
-            ) : (
-              <div className="relative">
-                <button 
-                  onClick={() => setShowSalesDropdown(!showSalesDropdown)}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-900 text-slate-400 border border-slate-800 text-[10px] hover:text-white"
-                >
-                  + Add Sales Filter <ChevronDown size={10} />
-                </button>
-                {showSalesDropdown && (
-                  <div className="absolute top-full mt-1 left-0 bg-slate-900 border border-slate-700 rounded-md shadow-xl z-50 p-2 min-w-[160px] max-h-60 overflow-y-auto">
-                    <p className="text-[9px] text-slate-500 uppercase px-1 pb-1">Select Sales ID</p>
-                    {salesList.length === 0 ? (
-                      <p className="px-2 py-1 text-[11px] text-slate-500">No sales entries</p>
-                    ) : (
-                      salesList.map((item) => {
-                        const id = typeof item === "object" ? item.id : item;
-                        const displayName = item.name ? `${item.name} (#${id})` : `Sales Entry #${id}`;
-                        return (
-                          <div 
-                            key={id} 
-                            onClick={() => handleSelectSales(id.toString())}
-                            className="px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800 rounded cursor-pointer"
-                          >
-                            {displayName}
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Capital Filter Tag / Selector */}
-            {selectedCapitalId ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-950/80 text-amber-400 border border-amber-800/80 text-[10px]">
-                <Filter size={10} /> Capital Entry #{selectedCapitalId}
-                <button onClick={clearCapitalFilter} className="hover:text-white ml-1">
-                  <X size={10} />
-                </button>
-              </span>
-            ) : (
-              <div className="relative">
-                <button 
-                  onClick={() => setShowCapitalDropdown(!showCapitalDropdown)}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-900 text-slate-400 border border-slate-800 text-[10px] hover:text-white"
-                >
-                  + Add Capital Filter <ChevronDown size={10} />
-                </button>
-                {showCapitalDropdown && (
-                  <div className="absolute top-full mt-1 left-0 bg-slate-900 border border-slate-700 rounded-md shadow-xl z-50 p-2 min-w-[160px] max-h-60 overflow-y-auto">
-                    <p className="text-[9px] text-slate-500 uppercase px-1 pb-1">Select Capital ID</p>
-                    {capitalList.length === 0 ? (
-                      <p className="px-2 py-1 text-[11px] text-slate-500">No capital entries</p>
-                    ) : (
-                      capitalList.map((item) => {
-                        const id = typeof item === "object" ? item.id : item;
-                        const displayName = item.name ? `${item.name} (#${id})` : `Capital Entry #${id}`;
-                        return (
-                          <div 
-                            key={id} 
-                            onClick={() => handleSelectCapital(id.toString())}
-                            className="px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800 rounded cursor-pointer"
-                          >
-                            {displayName}
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
+            <ExpenseFilters
+              selectedSalesId={selectedSalesId}
+              selectedCapitalId={selectedCapitalId}
+              salesList={salesList}
+              capitalList={capitalList}
+              onSelectSales={handleSelectSales}
+              onSelectCapital={handleSelectCapital}
+              onClearSales={clearSalesFilter}
+              onClearCapital={clearCapitalFilter}
+            />
           </div>
         </div>
         
@@ -227,7 +158,7 @@ function RemainingBalanceContent() {
         </div>
       </div>
 
-      {/* 🔹 Compact Spreadsheet Data Table */}
+      {/* Compact Spreadsheet Data Table */}
       <div className="bg-[#0d1527]/30 border border-slate-900 rounded-xl overflow-hidden shadow-sm">
         <div className="px-4 py-3 bg-[#0a0f1d] border-b border-slate-900 flex items-center justify-between text-slate-400 text-[10px] font-bold uppercase tracking-wider">
           <div className="flex items-center gap-1.5">
