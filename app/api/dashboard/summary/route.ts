@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
     const parsedSalesId = selectedSalesId ? Number(selectedSalesId) : null;
     const parsedCapitalId = selectedCapitalId ? Number(selectedCapitalId) : null;
 
-    // Fixed and safe SQL Query for Summaries
+    // Clean and optimized SQL Query for Summaries with proper filtering
     const query = `
       SELECT 
         b.id,
@@ -28,24 +28,16 @@ export async function GET(req: NextRequest) {
         FROM salary_expenses GROUP BY branch_id
       ) s ON b.id = s.branch_id
       LEFT JOIN (
-        SELECT branch_id, 
-          SUM(
-            CASE 
-              WHEN ? IS NOT NULL THEN (CASE WHEN id = ? THEN COALESCE(amount, 0) ELSE 0 END)
-              ELSE COALESCE(amount, 0) 
-            END
-          ) AS sales_total 
-        FROM sales_expenses GROUP BY branch_id
+        SELECT branch_id, SUM(COALESCE(amount, 0)) AS sales_total 
+        FROM sales_expenses 
+        WHERE (? IS NULL OR id = ?)
+        GROUP BY branch_id
       ) se ON b.id = se.branch_id
       LEFT JOIN (
-        SELECT branch_id, 
-          SUM(
-            CASE 
-              WHEN ? IS NOT NULL THEN (CASE WHEN id = ? THEN COALESCE(amount, 0) ELSE 0 END)
-              ELSE COALESCE(amount, 0) 
-            END
-          ) AS capital_total 
-        FROM capital_expenses GROUP BY branch_id
+        SELECT branch_id, SUM(COALESCE(amount, 0)) AS capital_total 
+        FROM capital_expenses 
+        WHERE (? IS NULL OR id = ?)
+        GROUP BY branch_id
       ) c ON b.id = c.branch_id
       LEFT JOIN (
         SELECT branch_id, SUM(COALESCE(total_payable, 0)) AS other_total, SUM(COALESCE(balance, 0)) AS other_balance 
@@ -62,7 +54,7 @@ export async function GET(req: NextRequest) {
 
     const [branches]: any = await db.query(query, finalQueryParams);
 
-    // Fetch all available Sales details safely (supporting personName or description)
+    // Fetch all available Sales details safely
     const [salesRows]: any = await db.query(`
       SELECT se.id, se.amount, se.date, se.description, se.personName, b.branch_name 
       FROM sales_expenses se 
@@ -70,7 +62,7 @@ export async function GET(req: NextRequest) {
       ORDER BY se.id ASC
     `).catch(() => [[]]);
 
-    // Fetch all available Capital details safely (supporting person_name or description)
+    // Fetch all available Capital details safely
     const [capitalRows]: any = await db.query(`
       SELECT ce.id, ce.amount, ce.date, ce.description, ce.person_name, b.branch_name 
       FROM capital_expenses ce 
