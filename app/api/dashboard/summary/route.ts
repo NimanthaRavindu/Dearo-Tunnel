@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
     const parsedSalesId = selectedSalesId ? Number(selectedSalesId) : null;
     const parsedCapitalId = selectedCapitalId ? Number(selectedCapitalId) : null;
 
-    // Clean and optimized SQL Query for Summaries with proper filtering
+    // Clean and optimized SQL Query for Summaries with proper filtering parameters
     const query = `
       SELECT 
         b.id,
@@ -105,15 +105,15 @@ export async function GET(req: NextRequest) {
       sales: Array.isArray(salesRows) ? salesRows.map((r: any) => ({
         id: r.id,
         name: r.personName || r.description || `Sales Entry #${r.id}`,
-        branch_name: r.branch_name || "N/A", // Added for dropdown UI
-        date: r.date ? String(r.date).split("T")[0] : "", // Formatted date
+        branch_name: r.branch_name || "N/A",
+        date: r.date ? String(r.date).split("T")[0] : "",
         amount: r.amount || 0
       })) : [],
       capital: Array.isArray(capitalRows) ? capitalRows.map((r: any) => ({
         id: r.id,
         name: r.person_name || r.description || `Capital Entry #${r.id}`,
-        branch_name: r.branch_name || "N/A", // Added for dropdown UI
-        date: r.date ? String(r.date).split("T")[0] : "", // Formatted date
+        branch_name: r.branch_name || "N/A",
+        date: r.date ? String(r.date).split("T")[0] : "",
         amount: r.amount || 0
       })) : [],
     });
