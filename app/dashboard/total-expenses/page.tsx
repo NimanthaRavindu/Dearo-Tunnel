@@ -93,6 +93,14 @@ function TotalExpensesContent() {
     router.push(qs ? `/dashboard/total-expenses?${qs}` : "/dashboard/total-expenses");
   };
 
+  const handleBackToDashboard = () => {
+    const params = new URLSearchParams();
+    if (selectedSalesId) params.append("selected_sales_id", selectedSalesId);
+    if (selectedCapitalId) params.append("selected_capital_id", selectedCapitalId);
+    const query = params.toString();
+    router.push(`/dashboard${query ? `?${query}` : ""}`);
+  };
+
   const calculatedTotalSum = branches.reduce((acc, branch) => {
     const salary = Number(branch.salary_expenses || 0);
     const sales = Number(branch.sales_expenses || 0);
@@ -118,10 +126,7 @@ function TotalExpensesContent() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-3 border-b border-slate-800/80 gap-3">
           <div className="space-y-1">
             <button
-              onClick={() => {
-                const qs = searchParams.toString();
-                router.push(qs ? `/dashboard?${qs}` : "/dashboard");
-              }}
+              onClick={handleBackToDashboard}
               className="flex items-center gap-1.5 text-[11px] text-slate-400 hover:text-white font-medium transition-colors"
             >
               <ArrowLeft size={13} /> Back To Main Control Panel
@@ -159,13 +164,14 @@ function TotalExpensesContent() {
                       ) : (
                         salesList.map((item) => {
                           const id = typeof item === "object" ? item.id : item;
+                          const displayName = item.name ? `${item.name} (#${id})` : `Sales Entry #${id}`;
                           return (
                             <div 
                               key={id} 
                               onClick={() => handleSelectSales(id.toString())}
                               className="px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800 rounded cursor-pointer"
                             >
-                              Sales Entry #{id}
+                              {displayName}
                             </div>
                           );
                         })
@@ -199,13 +205,14 @@ function TotalExpensesContent() {
                       ) : (
                         capitalList.map((item) => {
                           const id = typeof item === "object" ? item.id : item;
+                          const displayName = item.name ? `${item.name} (#${id})` : `Capital Entry #${id}`;
                           return (
                             <div 
                               key={id} 
                               onClick={() => handleSelectCapital(id.toString())}
                               className="px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800 rounded cursor-pointer"
                             >
-                              Capital Entry #{id}
+                              {displayName}
                             </div>
                           );
                         })

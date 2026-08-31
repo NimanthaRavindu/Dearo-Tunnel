@@ -149,13 +149,14 @@ function RemainingBalanceContent() {
                     ) : (
                       salesList.map((item) => {
                         const id = typeof item === "object" ? item.id : item;
+                        const displayName = item.name ? `${item.name} (#${id})` : `Sales Entry #${id}`;
                         return (
                           <div 
                             key={id} 
                             onClick={() => handleSelectSales(id.toString())}
                             className="px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800 rounded cursor-pointer"
                           >
-                            Sales Entry #{id}
+                            {displayName}
                           </div>
                         );
                       })
@@ -189,13 +190,14 @@ function RemainingBalanceContent() {
                     ) : (
                       capitalList.map((item) => {
                         const id = typeof item === "object" ? item.id : item;
+                        const displayName = item.name ? `${item.name} (#${id})` : `Capital Entry #${id}`;
                         return (
                           <div 
                             key={id} 
                             onClick={() => handleSelectCapital(id.toString())}
                             className="px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800 rounded cursor-pointer"
                           >
-                            Capital Entry #{id}
+                            {displayName}
                           </div>
                         );
                       })
