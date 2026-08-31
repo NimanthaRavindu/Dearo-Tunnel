@@ -31,7 +31,6 @@ function RemainingBalanceContent() {
 
   const [branches, setBranches] = useState<BranchBalance[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [totalSum, setTotalSum] = useState<number>(0);
   const [refreshing, setRefreshing] = useState<boolean>(false);
 
   const [salesList, setSalesList] = useState<FilterItem[]>([]);
@@ -50,7 +49,6 @@ function RemainingBalanceContent() {
       if (response.ok) {
         const json = await response.json();
         setBranches(json.branches || []);
-        setTotalSum(json.cards?.totalRemaining || 0);
         setSalesList(json.sales || []);
         setCapitalList(json.capital || []);
       }
@@ -99,6 +97,15 @@ function RemainingBalanceContent() {
     const query = params.toString();
     router.push(`/dashboard${query ? `?${query}` : ""}`);
   };
+
+  // ටේබල් එකේ ඩේටා වලින්ම නිවැරදි එකතුව (Aggregate Total) ස්වයංක්‍රීයව ගණනය කිරීම
+  const calculatedTotalLiability = branches.reduce((acc, branch: any) => {
+    const salaryBal = Number(branch.salary_balance ?? branch.salary_expenses ?? 0);
+    const salesAmt = Number(branch.sales_expenses ?? 0);
+    const capitalAmt = Number(branch.capital_expenses ?? 0);
+    const otherBal = Number(branch.other_balance ?? branch.other_expenses ?? 0);
+    return acc + (salaryBal + salesAmt + capitalAmt + otherBal);
+  }, 0);
 
   if (loading) {
     return (
@@ -152,7 +159,7 @@ function RemainingBalanceContent() {
           <div className="text-right bg-amber-950/20 border border-amber-900/40 rounded-xl px-4 py-2 min-w-[180px]">
             <span className="text-[9px] text-amber-400 font-bold uppercase block tracking-wider mb-0.5">Aggregate Remaining Balance</span>
             <span className="text-sm font-bold font-sans text-white">
-              LKR {totalSum.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              LKR {calculatedTotalLiability.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </div>
         </div>
