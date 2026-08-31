@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState } from "react";
 import { Filter, X, ChevronDown } from "lucide-react";
 
 interface FilterItem {
@@ -34,23 +34,6 @@ export function ExpenseFilters({
   const [showSalesDropdown, setShowSalesDropdown] = useState(false);
   const [showCapitalDropdown, setShowCapitalDropdown] = useState(false);
 
-  const salesRef = useRef<HTMLDivElement>(null);
-  const capitalRef = useRef<HTMLDivElement>(null);
-
-  // Close dropdowns when clicking outside
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (salesRef.current && !salesRef.current.contains(event.target as Node)) {
-        setShowSalesDropdown(false);
-      }
-      if (capitalRef.current && !capitalRef.current.contains(event.target as Node)) {
-        setShowCapitalDropdown(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
   return (
     <div className="flex flex-wrap items-center gap-2">
       {/* Sales Filter */}
@@ -62,12 +45,9 @@ export function ExpenseFilters({
           </button>
         </span>
       ) : (
-        <div className="relative" ref={salesRef}>
+        <div className="relative">
           <button
-            onClick={() => {
-              setShowSalesDropdown(!showSalesDropdown);
-              setShowCapitalDropdown(false);
-            }}
+            onClick={() => setShowSalesDropdown(!showSalesDropdown)}
             className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-900 text-slate-400 border border-slate-800 text-[10px] font-mono hover:text-white transition-all"
           >
             + Add Sales Filter <ChevronDown size={10} />
@@ -115,12 +95,9 @@ export function ExpenseFilters({
           </button>
         </span>
       ) : (
-        <div className="relative" ref={capitalRef}>
+        <div className="relative">
           <button
-            onClick={() => {
-              setShowCapitalDropdown(!showCapitalDropdown);
-              setShowSalesDropdown(false);
-            }}
+            onClick={() => setShowCapitalDropdown(!showCapitalDropdown)}
             className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-900 text-slate-400 border border-slate-800 text-[10px] font-mono hover:text-white transition-all"
           >
             + Add Capital Filter <ChevronDown size={10} />
