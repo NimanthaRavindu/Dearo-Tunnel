@@ -98,7 +98,6 @@ function RemainingBalanceContent() {
     router.push(`/dashboard${query ? `?${query}` : ""}`);
   };
 
-  // ටේබල් එකේ ඩේටා වලින්ම නිවැරදි එකතුව (Aggregate Total) ස්වයංක්‍රීයව ගණනය කිරීම
   const calculatedTotalLiability = branches.reduce((acc, branch: any) => {
     const salaryBal = Number(branch.salary_balance ?? branch.salary_expenses ?? 0);
     const salesAmt = Number(branch.sales_expenses ?? 0);
