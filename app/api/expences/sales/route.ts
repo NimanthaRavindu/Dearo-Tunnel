@@ -56,9 +56,9 @@ export async function GET(req: Request) {
       );
     }
 
-    // Default Fetch Records mode (with 'name' alias for frontend compatibility)
+    // Default Fetch Records mode (Providing both personName and name for frontend compatibility)
     let query = `
-      SELECT s.id, s.branch_id, b.branch_name, s.personName AS name, s.amount, s.date 
+      SELECT s.id, s.branch_id, b.branch_name, s.personName, s.personName AS name, s.amount, s.date 
       FROM sales_expenses s
       LEFT JOIN branch b ON s.branch_id = b.id
     `;
@@ -123,7 +123,7 @@ export async function POST(req: Request) {
     );
 
     const [newRows] = await db.query<RowDataPacket[]>(
-      `SELECT s.id, s.branch_id, b.branch_name, s.personName AS name, s.amount, s.date 
+      `SELECT s.id, s.branch_id, b.branch_name, s.personName, s.personName AS name, s.amount, s.date 
        FROM sales_expenses s 
        LEFT JOIN branch b ON s.branch_id = b.id 
        WHERE s.id = ?`,
