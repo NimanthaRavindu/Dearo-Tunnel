@@ -1,5 +1,6 @@
 import { NextResponse, NextRequest } from "next/server";
 import { db } from "@/lib/db"; 
+import { RowDataPacket } from "mysql2";
 
 export async function GET(req: NextRequest) {
   try {
@@ -10,7 +11,6 @@ export async function GET(req: NextRequest) {
     const parsedSalesId = selectedSalesId ? Number(selectedSalesId) : null;
     const parsedCapitalId = selectedCapitalId ? Number(selectedCapitalId) : null;
 
-    // Clean and optimized SQL Query for Summaries with proper filtering
     const query = `
       SELECT 
         b.id,
@@ -45,35 +45,33 @@ export async function GET(req: NextRequest) {
       ) o ON b.id = o.branch_id
     `;
 
-    let finalQueryParams: any[] = [
+    const finalQueryParams: (number | null)[] = [
       parsedSalesId, 
       parsedSalesId, 
       parsedCapitalId, 
       parsedCapitalId
     ];
 
-    const [branches]: any = await db.query(query, finalQueryParams);
+    const [branches] = await db.query<RowDataPacket[]>(query, finalQueryParams);
 
-    // Fetch all available Sales details safely without filtering so dropdown always has full list
-    const [salesRows]: any = await db.query(`
+    const [salesRows] = await db.query<RowDataPacket[]>(`
       SELECT se.id, se.amount, se.date, se.description, se.personName, b.branch_name 
       FROM sales_expenses se 
       LEFT JOIN branch b ON se.branch_id = b.id 
       ORDER BY se.id ASC
     `).catch((err) => {
       console.error("Sales Fetch Error in Summary:", err);
-      return [[]];
+      return [[] as RowDataPacket[]];
     });
 
-    // Fetch all available Capital details safely without filtering
-    const [capitalRows]: any = await db.query(`
+    const [capitalRows] = await db.query<RowDataPacket[]>(`
       SELECT ce.id, ce.amount, ce.date, ce.description, ce.person_name, b.branch_name 
       FROM capital_expenses ce 
       LEFT JOIN branch b ON ce.branch_id = b.id 
       ORDER BY ce.id ASC
     `).catch((err) => {
       console.error("Capital Fetch Error in Summary:", err);
-      return [[]];
+      return [[] as RowDataPacket[]];
     });
 
     let totalBranches = Array.isArray(branches) ? branches.length : 0;

@@ -56,7 +56,7 @@ export async function GET(req: Request) {
       );
     }
 
-    // Default Fetch Records mode (Providing both personName and name for frontend compatibility)
+    // Default Fetch Records mode
     let query = `
       SELECT s.id, s.branch_id, b.branch_name, s.personName, s.personName AS name, s.amount, s.date 
       FROM sales_expenses s

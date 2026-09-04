@@ -89,27 +89,50 @@ export default function SalesExpensesPage() {
 
     try {
       setSubmitting(true);
-      const res = await fetch("/api/expences/sales", {
-        method: "POST",
+      
+      const isUpdating = selectedId !== null;
+      const endpoint = "/api/expences/sales";
+      const method = isUpdating ? "PUT" : "POST";
+      
+      const payload = isUpdating
+        ? { ...formData, id: selectedId, branch_id: branchId }
+        : { ...formData, branch_id: branchId };
+
+      const res = await fetch(endpoint, {
+        method: method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...formData,
-          branch_id: branchId,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (res.ok) {
-        const newRecord = await res.json();
-        clearSelection();
-
-        if (newRecord && newRecord.id) {
-          setExpenses((prev) => [newRecord, ...prev]);
-        } else {
+        if (isUpdating) {
+          setExpenses((prev) =>
+            prev.map((item) =>
+              item.id === selectedId
+                ? {
+                    ...item,
+                    personName: formData.personName,
+                    amount: Number(formData.amount),
+                    date: formData.date,
+                  }
+                : item
+            )
+          );
+          clearSelection();
           await fetchExpenses();
+        } else {
+          const newRecord = await res.json();
+          clearSelection();
+
+          if (newRecord && newRecord.id) {
+            setExpenses((prev) => [newRecord, ...prev]);
+          } else {
+            await fetchExpenses();
+          }
         }
       } else {
         const errData = await res.json();
-        alert(errData.error || "Failed to record expense");
+        alert(errData.error || "Failed to save expense record");
       }
     } catch (err) {
       console.error("Error submitting data:", err);
@@ -311,20 +334,31 @@ export default function SalesExpensesPage() {
                 </div>
               </div>
 
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 disabled:opacity-50 text-white font-medium py-1.5 px-3 rounded-lg text-xs transition duration-150 ease-in-out shadow-md shadow-emerald-950/50 flex items-center justify-center gap-1.5 mt-1"
-              >
-                {submitting ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <>
-                    <PlusCircle className="w-3.5 h-3.5" />
-                    Save Record
-                  </>
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 disabled:opacity-50 text-white font-medium py-1.5 px-3 rounded-lg text-xs transition duration-150 ease-in-out shadow-md shadow-emerald-950/50 flex items-center justify-center gap-1.5"
+                >
+                  {submitting ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <>
+                      <PlusCircle className="w-3.5 h-3.5" />
+                      {selectedId ? "Update Record" : "Save Record"}
+                    </>
+                  )}
+                </button>
+                {selectedId && (
+                  <button
+                    type="button"
+                    onClick={clearSelection}
+                    className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium py-1.5 px-3 rounded-lg text-xs transition"
+                  >
+                    Cancel
+                  </button>
                 )}
-              </button>
+              </div>
             </form>
           </div>
 

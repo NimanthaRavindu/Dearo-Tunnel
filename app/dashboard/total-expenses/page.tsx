@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Coins, FileSpreadsheet, RefreshCw } from "lucide-react";
-import { ExpenseFilters } from "@/components/ExpenseFilters"; // adjust path as needed
 
 interface BranchExpense {
   id: number | string;
@@ -38,8 +37,8 @@ function TotalExpensesContent() {
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
 
-  const [salesList, setSalesList] = useState<FilterItem[]>([]);
-  const [capitalList, setCapitalList] = useState<FilterItem[]>([]);
+  const [, setSalesList] = useState<FilterItem[]>([]);
+  const [, setCapitalList] = useState<FilterItem[]>([]);
 
   const fetchExpenseBreakdown = useCallback(async () => {
     try {
@@ -68,32 +67,6 @@ function TotalExpensesContent() {
   useEffect(() => {
     fetchExpenseBreakdown();
   }, [fetchExpenseBreakdown]);
-
-  const handleSelectSales = (id: string) => {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("selected_sales_id", id);
-    router.push(`/dashboard/total-expenses?${params.toString()}`);
-  };
-
-  const handleSelectCapital = (id: string) => {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("selected_capital_id", id);
-    router.push(`/dashboard/total-expenses?${params.toString()}`);
-  };
-
-  const clearSalesFilter = () => {
-    const params = new URLSearchParams(searchParams.toString());
-    params.delete("selected_sales_id");
-    const qs = params.toString();
-    router.push(qs ? `/dashboard/total-expenses?${qs}` : "/dashboard/total-expenses");
-  };
-
-  const clearCapitalFilter = () => {
-    const params = new URLSearchParams(searchParams.toString());
-    params.delete("selected_capital_id");
-    const qs = params.toString();
-    router.push(qs ? `/dashboard/total-expenses?${qs}` : "/dashboard/total-expenses");
-  };
 
   const handleBackToDashboard = () => {
     const params = new URLSearchParams();
@@ -141,17 +114,6 @@ function TotalExpensesContent() {
               <h1 className="text-base md:text-lg font-semibold tracking-tight text-white">
                 Gross Expense Breakdown Sub-Ledger
               </h1>
-
-              <ExpenseFilters
-                selectedSalesId={selectedSalesId}
-                selectedCapitalId={selectedCapitalId}
-                salesList={salesList}
-                capitalList={capitalList}
-                onSelectSales={handleSelectSales}
-                onSelectCapital={handleSelectCapital}
-                onClearSales={clearSalesFilter}
-                onClearCapital={clearCapitalFilter}
-              />
             </div>
           </div>
 
