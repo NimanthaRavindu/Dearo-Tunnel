@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
 
     const [branches]: any = await db.query(query, finalQueryParams);
 
-    // Fetch all available Sales details safely with explicit error catching
+    // Fetch all available Sales details safely without filtering so dropdown always has full list
     const [salesRows]: any = await db.query(`
       SELECT se.id, se.amount, se.date, se.description, se.personName, b.branch_name 
       FROM sales_expenses se 
@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
       return [[]];
     });
 
-    // Fetch all available Capital details safely
+    // Fetch all available Capital details safely without filtering
     const [capitalRows]: any = await db.query(`
       SELECT ce.id, ce.amount, ce.date, ce.description, ce.person_name, b.branch_name 
       FROM capital_expenses ce 
