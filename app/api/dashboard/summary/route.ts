@@ -54,8 +54,9 @@ export async function GET(req: NextRequest) {
 
     const [branches] = await db.query<RowDataPacket[]>(query, finalQueryParams);
 
+
     const [salesRows] = await db.query<RowDataPacket[]>(`
-      SELECT se.id, se.amount, se.date, se.description, se.personName, se.person_name, b.branch_name 
+      SELECT se.*, b.branch_name 
       FROM sales_expenses se 
       LEFT JOIN branch b ON se.branch_id = b.id 
       ORDER BY se.id ASC
@@ -64,8 +65,9 @@ export async function GET(req: NextRequest) {
       return [[] as RowDataPacket[]];
     });
 
+
     const [capitalRows] = await db.query<RowDataPacket[]>(`
-      SELECT ce.id, ce.amount, ce.date, ce.description, ce.person_name, ce.personName, b.branch_name 
+      SELECT ce.*, b.branch_name 
       FROM capital_expenses ce 
       LEFT JOIN branch b ON ce.branch_id = b.id 
       ORDER BY ce.id ASC
@@ -108,14 +110,14 @@ export async function GET(req: NextRequest) {
       branches: branches || [],
       sales: Array.isArray(salesRows) ? salesRows.map((r: any) => ({
         id: r.id,
-        name: r.person_name || r.personName || r.description || `Sales Entry #${r.id}`,
+        name: r.personName || r.person_name || r.name || `Sales Entry #${r.id}`,
         branch_name: r.branch_name || "N/A", 
         date: r.date ? String(r.date).split("T")[0] : "", 
         amount: r.amount || 0
       })) : [],
       capital: Array.isArray(capitalRows) ? capitalRows.map((r: any) => ({
         id: r.id,
-        name: r.person_name || r.personName || r.description || `Capital Entry #${r.id}`,
+        name: r.person_name || r.personName || r.name || `Capital Entry #${r.id}`,
         branch_name: r.branch_name || "N/A", 
         date: r.date ? String(r.date).split("T")[0] : "", 
         amount: r.amount || 0
