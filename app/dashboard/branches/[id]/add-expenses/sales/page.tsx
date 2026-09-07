@@ -31,10 +31,23 @@ export default function SalesExpensesPage() {
   const [formData, setFormData] = useState({
     personName: "",
     item_name: "",
-    quantity: "1",
+    quantity: "",
     amount: "",
     date: new Date().toISOString().split("T")[0],
   });
+
+  const predefinedItems = [
+    "Cucumber",
+    "Tomato",
+    "Potato",
+    "Onion",
+    "Carrot",
+    "Beans",
+    "Cabbage",
+    "Leeks",
+    "Beetroot",
+    "Pumpkin"
+  ];
 
   const fetchExpenses = useCallback(async () => {
     if (!branchId) return;
@@ -73,9 +86,12 @@ export default function SalesExpensesPage() {
     fetchExpenses();
   }, [fetchExpenses]);
 
-  // Unique item names list එක ලබා ගැනීම සඳහා (dropdown එකට පෙන්වීමට)
-  const uniqueItemNames = Array.from(
-    new Set(expenses.map((item) => item.item_name).filter(Boolean))
+  
+  const allItemNames = Array.from(
+    new Set([
+      ...predefinedItems,
+      ...expenses.map((item) => item.item_name).filter(Boolean)
+    ])
   ) as string[];
 
   const filteredExpenses = expenses.filter((item) => {
@@ -107,8 +123,8 @@ export default function SalesExpensesPage() {
       const method = isUpdating ? "PUT" : "POST";
       
       const payload = isUpdating
-        ? { ...formData, id: selectedId, branch_id: branchId }
-        : { ...formData, branch_id: branchId };
+        ? { ...formData, quantity: Number(formData.quantity), amount: Number(formData.amount), id: selectedId, branch_id: branchId }
+        : { ...formData, quantity: Number(formData.quantity), amount: Number(formData.amount), branch_id: branchId };
 
       const res = await fetch(endpoint, {
         method: method,
@@ -322,7 +338,7 @@ export default function SalesExpensesPage() {
                   <input
                     type="text"
                     list="product-suggestions"
-                    placeholder="Select or type item name..."
+                    placeholder="Select or type item (e.g. Cucumber, Tomato, Potato)..."
                     value={formData.item_name}
                     onChange={(e) =>
                       setFormData({ ...formData, item_name: e.target.value })
@@ -330,7 +346,7 @@ export default function SalesExpensesPage() {
                     className="w-full bg-slate-950/80 border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/50 transition-all"
                   />
                   <datalist id="product-suggestions">
-                    {uniqueItemNames.map((name, index) => (
+                    {allItemNames.map((name, index) => (
                       <option key={index} value={name} />
                     ))}
                   </datalist>
