@@ -31,7 +31,7 @@ export default function SalesExpensesPage() {
   const [formData, setFormData] = useState({
     personName: "",
     item_name: "",
-    quantity: "",
+    quantity: "1",
     amount: "",
     date: new Date().toISOString().split("T")[0],
   });
@@ -72,6 +72,11 @@ export default function SalesExpensesPage() {
   useEffect(() => {
     fetchExpenses();
   }, [fetchExpenses]);
+
+  // Unique item names list එක ලබා ගැනීම සඳහා (dropdown එකට පෙන්වීමට)
+  const uniqueItemNames = Array.from(
+    new Set(expenses.map((item) => item.item_name).filter(Boolean))
+  ) as string[];
 
   const filteredExpenses = expenses.filter((item) => {
     const isCurrentBranch = String(item.branch_id) === String(branchId);
@@ -316,13 +321,19 @@ export default function SalesExpensesPage() {
                   <Package className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-500" />
                   <input
                     type="text"
-                    placeholder="e.g. Item Name"
+                    list="product-suggestions"
+                    placeholder="Select or type item name..."
                     value={formData.item_name}
                     onChange={(e) =>
                       setFormData({ ...formData, item_name: e.target.value })
                     }
                     className="w-full bg-slate-950/80 border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/50 transition-all"
                   />
+                  <datalist id="product-suggestions">
+                    {uniqueItemNames.map((name, index) => (
+                      <option key={index} value={name} />
+                    ))}
+                  </datalist>
                 </div>
               </div>
 
