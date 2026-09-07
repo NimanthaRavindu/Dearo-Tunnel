@@ -86,7 +86,6 @@ export default function SalesExpensesPage() {
     fetchExpenses();
   }, [fetchExpenses]);
 
-  
   const allItemNames = Array.from(
     new Set([
       ...predefinedItems,
@@ -123,14 +122,16 @@ export default function SalesExpensesPage() {
       const method = isUpdating ? "PUT" : "POST";
       
       const payload = isUpdating
-        ? { ...formData, quantity: Number(formData.quantity), amount: Number(formData.amount), id: selectedId, branch_id: branchId }
-        : { ...formData, quantity: Number(formData.quantity), amount: Number(formData.amount), branch_id: branchId };
+        ? { ...formData, quantity: Number(formData.quantity || 1), amount: Number(formData.amount), id: selectedId, branch_id: branchId }
+        : { ...formData, quantity: Number(formData.quantity || 1), amount: Number(formData.amount), branch_id: branchId };
 
       const res = await fetch(endpoint, {
         method: method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+
+      const resData = await res.json();
 
       if (res.ok) {
         if (isUpdating) {
@@ -141,7 +142,7 @@ export default function SalesExpensesPage() {
                     ...item,
                     personName: formData.personName,
                     item_name: formData.item_name,
-                    quantity: Number(formData.quantity),
+                    quantity: Number(formData.quantity || 1),
                     amount: Number(formData.amount),
                     date: formData.date,
                   }
@@ -151,21 +152,19 @@ export default function SalesExpensesPage() {
           clearSelection();
           await fetchExpenses();
         } else {
-          const newRecord = await res.json();
           clearSelection();
-
-          if (newRecord && newRecord.id) {
-            setExpenses((prev) => [newRecord, ...prev]);
+          if (resData && resData.id) {
+            setExpenses((prev) => [resData, ...prev]);
           } else {
             await fetchExpenses();
           }
         }
       } else {
-        const errData = await res.json();
-        alert(errData.error || "Failed to save expense record");
+        alert(resData.error || "Failed to save expense record");
       }
     } catch (err) {
       console.error("Error submitting data:", err);
+      alert("An unexpected error occurred while saving.");
     } finally {
       setSubmitting(false);
     }
@@ -338,7 +337,7 @@ export default function SalesExpensesPage() {
                   <input
                     type="text"
                     list="product-suggestions"
-                    placeholder="Select or type item (e.g. Cucumber, Tomato, Potato)..."
+                    placeholder="Select or type item..."
                     value={formData.item_name}
                     onChange={(e) =>
                       setFormData({ ...formData, item_name: e.target.value })

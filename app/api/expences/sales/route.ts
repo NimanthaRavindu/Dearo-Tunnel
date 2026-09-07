@@ -10,7 +10,6 @@ export async function GET(req: Request) {
     const mode = searchParams.get("mode");
     const selected_sales_id = searchParams.get("selected_sales_id");
 
-    // Summary mode computation
     if (mode === "summary" && branch_id) {
       const [branchRows] = await db.query<RowDataPacket[]>(
         `SELECT salary_expense, other_expense FROM branch WHERE id = ?`,
@@ -20,7 +19,6 @@ export async function GET(req: Request) {
       const salaryExpense = Number(branchRows[0]?.salary_expense || 0);
       const otherExpense = Number(branchRows[0]?.other_expense || 0);
 
-      // Filter sales total by selected_sales_id if provided
       let salesQuery = `SELECT SUM(amount) AS total_sales FROM sales_expenses WHERE branch_id = ?`;
       const salesQueryParams: (string | number)[] = [branch_id];
 
@@ -35,11 +33,8 @@ export async function GET(req: Request) {
       );
 
       const rawSalesTotal = Number(salesRows[0]?.total_sales || 0);
-
-      // Rule: Effective sales added ONLY IF both salary & other > 0
       const effectiveSalesExpense =
         salaryExpense <= 0 || otherExpense <= 0 ? 0 : rawSalesTotal;
-
       const grandTotal = salaryExpense + otherExpense + effectiveSalesExpense;
 
       return NextResponse.json(
@@ -56,9 +51,8 @@ export async function GET(req: Request) {
       );
     }
 
-    // Default Fetch Records mode
     let query = `
-      SELECT s.id, s.branch_id, b.branch_name, s.personName, s.personName AS name, s.amount, s.date 
+      SELECT s.id, s.branch_id, b.branch_name, s.personName, s.personName AS name, s.item_name, s.quantity, s.amount, s.date 
       FROM sales_expenses s
       LEFT JOIN branch b ON s.branch_id = b.id
     `;
@@ -74,10 +68,10 @@ export async function GET(req: Request) {
     const [rows] = await db.query<RowDataPacket[]>(query, queryParams);
 
     return NextResponse.json(rows, { status: 200 });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Database GET Error:", error);
     return NextResponse.json(
-      { error: "Failed to fetch sales expenses records" },
+      { error: error.message || "Failed to fetch sales expenses records" },
       { status: 500 }
     );
   }
@@ -87,43 +81,35 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { branch_id, personName, amount, date } = body;
+    const { branch_id, personName, item_name, quantity, amount, date } = body;
 
     if (!branch_id || !personName || !amount || !date) {
       return NextResponse.json(
-        {
-          error:
-            "All required fields (branch_id, personName, amount, date) must be provided",
-        },
+        { error: "All required fields (branch_id, personName, amount, date) must be provided" },
         { status: 400 }
       );
     }
 
     const parsedBranchId = parseInt(branch_id, 10);
     if (isNaN(parsedBranchId)) {
-      return NextResponse.json(
-        { error: "Invalid branch_id provided" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Invalid branch_id provided" }, { status: 400 });
     }
 
     const parsedAmount = parseFloat(amount);
-    if (isNaN(parsedAmount) || parsedAmount <= 0) {
-      return NextResponse.json(
-        { error: "Invalid amount provided" },
-        { status: 400 }
-      );
+    if (isNaN(parsedAmount) || parsedAmount < 0) {
+      return NextResponse.json({ error: "Invalid amount provided" }, { status: 400 });
     }
 
-    const formattedDate = new Date(date).toISOString().split("T")[0];
+    const parsedQuantity = quantity ? parseInt(quantity, 10) : 1;
+    const formattedDate = date ? new Date(date).toISOString().split("T")[0] : new Date().toISOString().split("T")[0];
 
     const [result] = await db.query<ResultSetHeader>(
-      "INSERT INTO sales_expenses (branch_id, personName, amount, date) VALUES (?, ?, ?, ?)",
-      [parsedBranchId, personName.trim(), parsedAmount, formattedDate]
+      "INSERT INTO sales_expenses (branch_id, personName, item_name, quantity, amount, date) VALUES (?, ?, ?, ?, ?, ?)",
+      [parsedBranchId, personName.trim(), item_name ? item_name.trim() : null, parsedQuantity, parsedAmount, formattedDate]
     );
 
     const [newRows] = await db.query<RowDataPacket[]>(
-      `SELECT s.id, s.branch_id, b.branch_name, s.personName, s.personName AS name, s.amount, s.date 
+      `SELECT s.id, s.branch_id, b.branch_name, s.personName, s.personName AS name, s.item_name, s.quantity, s.amount, s.date 
        FROM sales_expenses s 
        LEFT JOIN branch b ON s.branch_id = b.id 
        WHERE s.id = ?`,
@@ -131,10 +117,10 @@ export async function POST(req: Request) {
     );
 
     return NextResponse.json(newRows[0], { status: 201 });
-  } catch (error) {
-    console.error("Database POST Error:", error);
+  } catch (error: any) {
+    console.error("Database POST Error details:", error);
     return NextResponse.json(
-      { error: "Failed to create sales expense entry" },
+      { error: error.message || "Failed to create sales expense entry" },
       { status: 500 }
     );
   }
@@ -144,13 +130,10 @@ export async function POST(req: Request) {
 export async function PUT(req: Request) {
   try {
     const body = await req.json();
-    const { id, branch_id, personName, amount, date } = body;
+    const { id, branch_id, personName, item_name, quantity, amount, date } = body;
 
     if (!id || !branch_id || !personName || !amount || !date) {
-      return NextResponse.json(
-        { error: "Missing required fields for update" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Missing required fields for update" }, { status: 400 });
     }
 
     const parsedId = parseInt(id, 10);
@@ -158,36 +141,28 @@ export async function PUT(req: Request) {
     const parsedAmount = parseFloat(amount);
 
     if (isNaN(parsedId) || isNaN(parsedBranchId) || isNaN(parsedAmount)) {
-      return NextResponse.json(
-        { error: "Invalid payload parameters" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Invalid payload parameters" }, { status: 400 });
     }
 
+    const parsedQuantity = quantity ? parseInt(quantity, 10) : 1;
     const formattedDate = new Date(date).toISOString().split("T")[0];
 
     const [result] = await db.query<ResultSetHeader>(
       `UPDATE sales_expenses 
-       SET branch_id = ?, personName = ?, amount = ?, date = ? 
+       SET branch_id = ?, personName = ?, item_name = ?, quantity = ?, amount = ?, date = ? 
        WHERE id = ?`,
-      [parsedBranchId, personName.trim(), parsedAmount, formattedDate, parsedId]
+      [parsedBranchId, personName.trim(), item_name ? item_name.trim() : null, parsedQuantity, parsedAmount, formattedDate, parsedId]
     );
 
     if (result.affectedRows === 0) {
-      return NextResponse.json(
-        { error: "Record not found or no changes made" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Record not found or no changes made" }, { status: 404 });
     }
 
-    return NextResponse.json(
-      { message: "Expense record updated successfully" },
-      { status: 200 }
-    );
-  } catch (error) {
+    return NextResponse.json({ message: "Expense record updated successfully" }, { status: 200 });
+  } catch (error: any) {
     console.error("Database PUT Error:", error);
     return NextResponse.json(
-      { error: "Failed to update sales expense record" },
+      { error: error.message || "Failed to update sales expense record" },
       { status: 500 }
     );
   }
@@ -200,18 +175,12 @@ export async function DELETE(req: Request) {
     const id = searchParams.get("id");
 
     if (!id) {
-      return NextResponse.json(
-        { error: "Expense record ID is required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Expense record ID is required" }, { status: 400 });
     }
 
     const parsedId = parseInt(id, 10);
     if (isNaN(parsedId)) {
-      return NextResponse.json(
-        { error: "Invalid ID format" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Invalid ID format" }, { status: 400 });
     }
 
     const [result] = await db.query<ResultSetHeader>(
@@ -220,20 +189,14 @@ export async function DELETE(req: Request) {
     );
 
     if (result.affectedRows === 0) {
-      return NextResponse.json(
-        { error: "Expense record not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Expense record not found" }, { status: 404 });
     }
 
-    return NextResponse.json(
-      { message: "Expense record deleted successfully" },
-      { status: 200 }
-    );
-  } catch (error) {
+    return NextResponse.json({ message: "Expense record deleted successfully" }, { status: 200 });
+  } catch (error: any) {
     console.error("Database DELETE Error:", error);
     return NextResponse.json(
-      { error: "Failed to delete expense record" },
+      { error: error.message || "Failed to delete expense record" },
       { status: 500 }
     );
   }
