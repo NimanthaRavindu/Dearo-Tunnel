@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { DollarSign, Calendar, User, PlusCircle, TrendingUp, CreditCard, ArrowLeft, Trash2, Loader2, Receipt, Search, XCircle, ExternalLink } from "lucide-react";
+import { DollarSign, Calendar, User, PlusCircle, TrendingUp, CreditCard, ArrowLeft, Trash2, Loader2, Receipt, Search, XCircle, ExternalLink, Building2 } from "lucide-react";
 import Link from "next/link";
 
 interface SalesExpense {
@@ -393,8 +393,8 @@ export default function SalesExpensesPage() {
                   <thead>
                     <tr className="border-b border-slate-800 text-slate-400 bg-slate-950/40 uppercase tracking-wider text-[9px] font-mono">
                       <th className="py-2 px-2.5">Date</th>
-                      <th className="py-2 px-2.5">Branch</th>
-                      <th className="py-2 px-2.5">Payee / Entity</th>
+                      <th className="py-2 px-2.5">Branch Name</th>
+                      <th className="py-2 px-2.5">Payee / Person Name</th>
                       <th className="py-2 px-2.5 text-right">Amount (LKR)</th>
                       <th className="py-2 px-2.5 text-center">Action</th>
                     </tr>
@@ -428,7 +428,8 @@ export default function SalesExpensesPage() {
                           <td className="py-2 px-2.5 text-slate-400 whitespace-nowrap font-mono text-[11px]">
                             {item.date ? new Date(item.date).toISOString().split("T")[0] : "N/A"}
                           </td>
-                          <td className="py-2 px-2.5 text-emerald-400/90 whitespace-nowrap font-medium text-[11px]">
+                          <td className="py-2 px-2.5 text-emerald-400/90 whitespace-nowrap font-medium text-[11px] flex items-center gap-1.5">
+                            <Building2 className="w-3 h-3 text-emerald-500/70" />
                             {item.branch_name || `Branch #${item.branch_id}`}
                           </td>
                           <td className="py-2 px-2.5 font-medium text-slate-200 whitespace-nowrap text-[11px]">
