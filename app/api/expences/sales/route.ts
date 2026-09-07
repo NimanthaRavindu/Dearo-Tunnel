@@ -101,11 +101,10 @@ export async function POST(req: Request) {
     }
 
     const parsedQuantity = quantity ? parseInt(quantity, 10) : 1;
-    const formattedDate = date ? new Date(date).toISOString().split("T")[0] : new Date().toISOString().split("T")[0];
 
     const [result] = await db.query<ResultSetHeader>(
       "INSERT INTO sales_expenses (branch_id, personName, item_name, quantity, amount, date) VALUES (?, ?, ?, ?, ?, ?)",
-      [parsedBranchId, personName.trim(), item_name ? item_name.trim() : null, parsedQuantity, parsedAmount, formattedDate]
+      [parsedBranchId, personName.trim(), item_name ? item_name.trim() : null, parsedQuantity, parsedAmount, date]
     );
 
     const [newRows] = await db.query<RowDataPacket[]>(
@@ -145,13 +144,12 @@ export async function PUT(req: Request) {
     }
 
     const parsedQuantity = quantity ? parseInt(quantity, 10) : 1;
-    const formattedDate = new Date(date).toISOString().split("T")[0];
 
     const [result] = await db.query<ResultSetHeader>(
       `UPDATE sales_expenses 
        SET branch_id = ?, personName = ?, item_name = ?, quantity = ?, amount = ?, date = ? 
        WHERE id = ?`,
-      [parsedBranchId, personName.trim(), item_name ? item_name.trim() : null, parsedQuantity, parsedAmount, formattedDate, parsedId]
+      [parsedBranchId, personName.trim(), item_name ? item_name.trim() : null, parsedQuantity, parsedAmount, date, parsedId]
     );
 
     if (result.affectedRows === 0) {
@@ -174,7 +172,7 @@ export async function DELETE(req: Request) {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
 
-    if (!id) {
+   if (!id) {
       return NextResponse.json({ error: "Expense record ID is required" }, { status: 400 });
     }
 

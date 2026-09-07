@@ -134,31 +134,8 @@ export default function SalesExpensesPage() {
       const resData = await res.json();
 
       if (res.ok) {
-        if (isUpdating) {
-          setExpenses((prev) =>
-            prev.map((item) =>
-              item.id === selectedId
-                ? {
-                    ...item,
-                    personName: formData.personName,
-                    item_name: formData.item_name,
-                    quantity: Number(formData.quantity || 1),
-                    amount: Number(formData.amount),
-                    date: formData.date,
-                  }
-                : item
-            )
-          );
-          clearSelection();
-          await fetchExpenses();
-        } else {
-          clearSelection();
-          if (resData && resData.id) {
-            setExpenses((prev) => [resData, ...prev]);
-          } else {
-            await fetchExpenses();
-          }
-        }
+        clearSelection();
+        await fetchExpenses();
       } else {
         alert(resData.error || "Failed to save expense record");
       }
@@ -504,7 +481,7 @@ export default function SalesExpensesPage() {
                           }`}
                         >
                           <td className="py-2 px-2.5 text-slate-400 whitespace-nowrap font-mono text-[11px]">
-                            {item.date ? new Date(item.date).toISOString().split("T")[0] : "N/A"}
+                            {item.date ? item.date.split("T")[0] : "N/A"}
                           </td>
                           <td className="py-2 px-2.5 text-emerald-400/90 whitespace-nowrap font-medium text-[11px] flex items-center gap-1.5">
                             <Building2 className="w-3 h-3 text-emerald-500/70" />
