@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { DollarSign, Calendar, User, PlusCircle, TrendingUp, CreditCard, ArrowLeft, Trash2, Loader2, Receipt, Search, XCircle, ExternalLink, Building2 } from "lucide-react";
+import { DollarSign, Calendar, User, PlusCircle, TrendingUp, CreditCard, ArrowLeft, Trash2, Loader2, Receipt, Search, XCircle, ExternalLink, Building2, Package, Hash } from "lucide-react";
 import Link from "next/link";
 
 interface SalesExpense {
@@ -10,6 +10,8 @@ interface SalesExpense {
   branch_id: number;
   branch_name?: string;
   personName: string;
+  item_name?: string;
+  quantity?: number;
   amount: number;
   date: string;
 }
@@ -28,6 +30,8 @@ export default function SalesExpensesPage() {
 
   const [formData, setFormData] = useState({
     personName: "",
+    item_name: "",
+    quantity: "",
     amount: "",
     date: new Date().toISOString().split("T")[0],
   });
@@ -50,6 +54,8 @@ export default function SalesExpensesPage() {
             setSelectedId(found.id);
             setFormData({
               personName: found.personName,
+              item_name: found.item_name || "",
+              quantity: String(found.quantity || 1),
               amount: String(found.amount),
               date: found.date ? found.date.split("T")[0] : new Date().toISOString().split("T")[0],
             });
@@ -71,6 +77,7 @@ export default function SalesExpensesPage() {
     const isCurrentBranch = String(item.branch_id) === String(branchId);
     const matchesSearch =
       item.personName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.item_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (item.branch_name &&
         item.branch_name.toLowerCase().includes(searchTerm.toLowerCase()));
 
@@ -112,6 +119,8 @@ export default function SalesExpensesPage() {
                 ? {
                     ...item,
                     personName: formData.personName,
+                    item_name: formData.item_name,
+                    quantity: Number(formData.quantity),
                     amount: Number(formData.amount),
                     date: formData.date,
                   }
@@ -170,6 +179,8 @@ export default function SalesExpensesPage() {
       setSelectedId(item.id);
       setFormData({
         personName: item.personName,
+        item_name: item.item_name || "",
+        quantity: String(item.quantity || 1),
         amount: String(item.amount),
         date: item.date ? item.date.split("T")[0] : new Date().toISOString().split("T")[0],
       });
@@ -182,6 +193,8 @@ export default function SalesExpensesPage() {
     setSelectedId(null);
     setFormData({
       personName: "",
+      item_name: "",
+      quantity: "1",
       amount: "",
       date: new Date().toISOString().split("T")[0],
     });
@@ -268,7 +281,7 @@ export default function SalesExpensesPage() {
             <div className="flex items-center justify-between border-b border-slate-800/80 pb-2.5 mb-3">
               <h2 className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
                 <PlusCircle className="w-3.5 h-3.5 text-emerald-400" />
-                {selectedId ? "Selected Person Details" : "New Expense Entry"}
+                {selectedId ? "Selected Record Details" : "New Expense Entry"}
               </h2>
               <span className="text-[10px] uppercase font-mono tracking-wider bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/20">
                 Branch #{branchId}
@@ -291,6 +304,43 @@ export default function SalesExpensesPage() {
                       setFormData({ ...formData, personName: e.target.value })
                     }
                     className="w-full bg-slate-950/80 border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/50 transition-all"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                  Product / Item Name
+                </label>
+                <div className="relative">
+                  <Package className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-500" />
+                  <input
+                    type="text"
+                    placeholder="e.g. Item Name"
+                    value={formData.item_name}
+                    onChange={(e) =>
+                      setFormData({ ...formData, item_name: e.target.value })
+                    }
+                    className="w-full bg-slate-950/80 border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/50 transition-all"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                  Quantity
+                </label>
+                <div className="relative">
+                  <Hash className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-500" />
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="1"
+                    value={formData.quantity}
+                    onChange={(e) =>
+                      setFormData({ ...formData, quantity: e.target.value })
+                    }
+                    className="w-full bg-slate-950/80 border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/50 font-mono transition-all"
                   />
                 </div>
               </div>
@@ -380,7 +430,7 @@ export default function SalesExpensesPage() {
                   <Search className="w-3 h-3 absolute left-2.5 top-2 text-slate-500" />
                   <input
                     type="text"
-                    placeholder="Search payee or branch..."
+                    placeholder="Search payee, item or branch..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="w-full bg-slate-950/80 border border-slate-800 rounded-lg pl-7 pr-2.5 py-1 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50"
@@ -395,6 +445,8 @@ export default function SalesExpensesPage() {
                       <th className="py-2 px-2.5">Date</th>
                       <th className="py-2 px-2.5">Branch Name</th>
                       <th className="py-2 px-2.5">Payee / Person Name</th>
+                      <th className="py-2 px-2.5">Item / Product</th>
+                      <th className="py-2 px-2.5 text-center">Qty</th>
                       <th className="py-2 px-2.5 text-right">Amount (LKR)</th>
                       <th className="py-2 px-2.5 text-center">Action</th>
                     </tr>
@@ -402,14 +454,14 @@ export default function SalesExpensesPage() {
                   <tbody className="divide-y divide-slate-800/50">
                     {loading ? (
                       <tr>
-                        <td colSpan={5} className="text-center py-8 text-slate-500">
+                        <td colSpan={7} className="text-center py-8 text-slate-500">
                           <Loader2 className="w-4 h-4 animate-spin mx-auto mb-1 text-emerald-400" />
                           Fetching record entries...
                         </td>
                       </tr>
                     ) : filteredExpenses.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="text-center py-8 text-slate-500">
+                        <td colSpan={7} className="text-center py-8 text-slate-500">
                           <Receipt className="w-6 h-6 mx-auto mb-1 opacity-30" />
                           No sales expenses found for Branch #{branchId}.
                         </td>
@@ -434,6 +486,12 @@ export default function SalesExpensesPage() {
                           </td>
                           <td className="py-2 px-2.5 font-medium text-slate-200 whitespace-nowrap text-[11px]">
                             {item.personName}
+                          </td>
+                          <td className="py-2 px-2.5 text-slate-300 whitespace-nowrap text-[11px]">
+                            {item.item_name || <span className="text-slate-600 italic">N/A</span>}
+                          </td>
+                          <td className="py-2 px-2.5 text-center font-mono text-slate-300 whitespace-nowrap text-[11px]">
+                            {item.quantity || 1}
                           </td>
                           <td className="py-2 px-2.5 text-right font-medium font-mono text-emerald-400 whitespace-nowrap text-[11px]">
                             {Number(item.amount || 0).toLocaleString("en-US", {
