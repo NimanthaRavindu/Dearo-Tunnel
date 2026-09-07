@@ -206,6 +206,7 @@ export default function AddOperationalExpensePage({ params }: PageProps) {
               <option value="Agriculture">Agriculture</option>
               <option value="Water">Water</option>
               <option value="Electricity">Electricity</option>
+              <option value="Petty Cash">Petty Cash</option>
               <option value="Other Payments">Other Payments</option>
             </select>
           </div>
