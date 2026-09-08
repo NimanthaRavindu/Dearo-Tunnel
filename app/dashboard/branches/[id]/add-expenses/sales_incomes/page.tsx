@@ -2,14 +2,14 @@
 
 import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
-import { ArrowLeft, Plus, Trash2, Loader2, TrendingUp, Filter, X, Building2 } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Loader2, TrendingUp, Building2 } from "lucide-react";
 
 interface SalesIncomeItem {
   id: string;
   name: string;
   amount: number;
   date: string;
-  note?: string;
+  created_at?: string;
 }
 
 function BranchSalesIncomesContent() {
@@ -25,34 +25,23 @@ function BranchSalesIncomesContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Form states (title වෙනුවට name භාවිතා කරයි)
+  // Form states
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
-  const [note, setNote] = useState("");
 
   useEffect(() => {
     fetchBranchSalesIncomes();
-  }, [branchId, selectedSalesId, selectedCapitalId]);
+  }, [branchId]);
 
   const fetchBranchSalesIncomes = async () => {
     try {
       setIsLoading(true);
-      const queryParams = new URLSearchParams();
-      if (selectedSalesId) queryParams.append("selected_sales_id", selectedSalesId);
-      if (selectedCapitalId) queryParams.append("selected_capital_id", selectedCapitalId);
-      
-      const queryString = queryParams.toString();
-      const res = await fetch(`/api/branches/${branchId}/sales-incomes${queryString ? `?${queryString}` : ""}`);
+      const res = await fetch(`/api/branches/${branchId}/sales-incomes`);
       const result = await res.json();
       
       if (result.success) {
-        // Backend එකෙන් title හෝ name ලෙස එන අගය 'name' ලෙස map කර ගැනීම
-        const formattedData = result.data.map((item: any) => ({
-          ...item,
-          name: item.name || item.title || "",
-        }));
-        setIncomes(formattedData);
+        setIncomes(result.data);
       }
     } catch (error) {
       console.error("Failed to fetch branch sales incomes:", error);
@@ -71,12 +60,9 @@ function BranchSalesIncomesContent() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name, // title වෙනුවට name යවනු ලැබේ
+          name,
           amount: parseFloat(amount),
           date,
-          note,
-          sales_id: selectedSalesId || null,
-          capital_id: selectedCapitalId || null,
         }),
       });
 
@@ -84,7 +70,7 @@ function BranchSalesIncomesContent() {
       if (result.success) {
         setName("");
         setAmount("");
-        setNote("");
+        setDate(new Date().toISOString().split("T")[0]);
         fetchBranchSalesIncomes();
       }
     } catch (error) {
@@ -110,14 +96,6 @@ function BranchSalesIncomesContent() {
     }
   };
 
-  const clearFilter = (type: "sales" | "capital") => {
-    const qParams = new URLSearchParams(searchParams.toString());
-    if (type === "sales") qParams.delete("selected_sales_id");
-    if (type === "capital") qParams.delete("selected_capital_id");
-    const query = qParams.toString();
-    router.push(`/dashboard/branches/${branchId}/add-expenses/sales_incomes${query ? `?${query}` : ""}`);
-  };
-
   const handleBack = () => {
     const qParams = new URLSearchParams();
     if (selectedSalesId) qParams.append("selected_sales_id", selectedSalesId);
@@ -141,7 +119,7 @@ function BranchSalesIncomesContent() {
             <button
               type="button"
               onClick={handleBack}
-              className="p-3 bg-slate-900/90 hover:bg-slate-800/90 rounded-xl transition-all duration-200 border border-slate-800 text-slate-400 hover:text-white shadow-lg hover:scale-105 active:scale-95 group"
+              className="p-3 bg-slate-900/95 hover:bg-slate-800 rounded-xl transition-all duration-200 border border-slate-800 text-slate-400 hover:text-white shadow-lg group"
               title="Return to Branch Expenses Hub"
             >
               <ArrowLeft size={16} className="group-hover:-translate-x-0.5 transition-transform" />
@@ -157,27 +135,6 @@ function BranchSalesIncomesContent() {
                 Record and manage direct sales revenue entries for this operational unit
               </p>
             </div>
-          </div>
-
-          <div className="flex items-center gap-3 flex-wrap">
-            {selectedCapitalId && (
-              <div className="flex items-center gap-2 bg-amber-950/40 border border-amber-500/30 px-3 py-1.5 rounded-lg text-amber-400 text-[11px]">
-                <Filter size={12} />
-                <span>Capital Record #{selectedCapitalId}</span>
-                <button onClick={() => clearFilter("capital")} className="hover:text-white p-0.5 rounded transition-colors">
-                  <X size={13} />
-                </button>
-              </div>
-            )}
-            {selectedSalesId && (
-              <div className="flex items-center gap-2 bg-cyan-950/40 border border-cyan-500/30 px-3 py-1.5 rounded-lg text-cyan-400 text-[11px]">
-                <Filter size={12} />
-                <span>Sales Record #{selectedSalesId}</span>
-                <button onClick={() => clearFilter("sales")} className="hover:text-white p-0.5 rounded transition-colors">
-                  <X size={13} />
-                </button>
-              </div>
-            )}
           </div>
         </div>
 
@@ -211,7 +168,7 @@ function BranchSalesIncomesContent() {
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Daily POS Collection"
+                placeholder="e.g. Daily Collection"
                 required
                 className="w-full bg-[#090e1a] border border-slate-800 rounded-xl px-3 py-2 text-slate-100 focus:outline-none focus:border-red-500/50 transition-colors text-xs"
               />
@@ -264,7 +221,7 @@ function BranchSalesIncomesContent() {
             </div>
           ) : incomes.length === 0 ? (
             <div className="py-20 text-center text-slate-500">
-              No sales income records found for this branch under current filters.
+              No sales income records found for this branch.
             </div>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-slate-800 bg-[#090e1a]/50">

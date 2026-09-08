@@ -1,60 +1,117 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
-// GET: Fetch branch-wise total incomes summary
+// GET: Fetch branch sales incomes entries
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const selectedSalesId = searchParams.get('selected_sales_id');
-    const selectedCapitalId = searchParams.get('selected_capital_id');
+    const recordId = searchParams.get('id');
+
+    const urlParts = new URL(request.url).pathname.split('/');
+    const branchIdIndex = urlParts.indexOf('branches') + 1;
+    const branchId = urlParts[branchIdIndex];
 
     let query = `
       SELECT 
-          b.id AS branchId,
-          b.branch_name AS branchName,
-          COUNT(s.id) AS entriesCount,
-          SUM(s.amount) AS totalAmount
+          id,
+          name,
+          amount,
+          date,
+          branch_id,
+          created_at
       FROM 
-          sales_incomes s
-      LEFT JOIN 
-          branches b ON s.branch_id = b.id
-      WHERE 1=1
+          sales_incomes
+      WHERE branch_id = ?
     `;
 
-    const queryParams: any[] = [];
+    const queryParams: any[] = [branchId];
 
-    // Oyaage table eke sales_id / capital_id columns thiyena widihata methana column names check karaganna
-    if (selectedSalesId) {
-      query += ` AND s.sales_id = ?`;
-      queryParams.push(selectedSalesId);
+    if (recordId) {
+      query += ` AND id = ?`;
+      queryParams.push(recordId);
     }
 
-    if (selectedCapitalId) {
-      query += ` AND s.capital_id = ?`;
-      queryParams.push(selectedCapitalId);
-    }
-
-    query += ` GROUP BY b.id, b.branch_name;`;
+    query += ` ORDER BY date DESC, id DESC;`;
 
     const [rows]: any = await db.query(query, queryParams);
 
     const data = rows.map((row: any) => ({
-      branchId: row.branchId ? row.branchId.toString() : "Unknown",
-      branchName: row.branchName || `Branch Unit #${row.branchId}`,
-      totalAmount: Number(row.totalAmount || 0),
-      entriesCount: Number(row.entriesCount || 0),
+      id: row.id.toString(),
+      name: row.name || "",
+      amount: Number(row.amount || 0),
+      date: row.date,
+      created_at: row.created_at,
     }));
-
-    const grandTotal = data.reduce((sum: number, item: any) => sum + item.totalAmount, 0);
 
     return NextResponse.json({
       success: true,
       data,
-      grandTotal,
     }, { status: 200 });
 
   } catch (error) {
     console.error("Database fetch error:", error);
+    return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
+  }
+}
+
+// POST: Add new sales income entry
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const { name, amount, date } = body;
+
+    const urlParts = new URL(request.url).pathname.split('/');
+    const branchIdIndex = urlParts.indexOf('branches') + 1;
+    const branchId = urlParts[branchIdIndex];
+
+    if (!name || amount === undefined || !date) {
+      return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
+    }
+
+    const query = `
+      INSERT INTO sales_incomes (branch_id, name, amount, date)
+      VALUES (?, ?, ?, ?)
+    `;
+
+    const [result]: any = await db.query(query, [
+      branchId,
+      name,
+      amount,
+      date,
+    ]);
+
+    return NextResponse.json({
+      success: true,
+      insertId: result.insertId,
+      message: 'Sales income added successfully',
+    }, { status: 201 });
+
+  } catch (error) {
+    console.error("Database insert error:", error);
+    return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
+  }
+}
+
+// DELETE: Remove sales income entry
+export async function DELETE(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({ success: false, error: 'Income ID is required' }, { status: 400 });
+    }
+
+    const query = `DELETE FROM sales_incomes WHERE id = ?`;
+    await db.query(query, [id]);
+
+    return NextResponse.json({
+      success: true,
+      message: 'Sales income deleted successfully',
+    }, { status: 200 });
+
+  } catch (error) {
+    console.error("Database delete error:", error);
     return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
   }
 }
