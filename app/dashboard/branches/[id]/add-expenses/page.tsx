@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft,Wallet,Coins,Building2,TrendingUp,ChevronRight,Sparkles} from "lucide-react";
+import { ArrowLeft, Wallet, Coins, Building2, TrendingUp, TrendingDown, ChevronRight, Sparkles } from "lucide-react";
 
 export default function AddExpensesMainPage() {
   const params = useParams();
@@ -47,16 +47,28 @@ export default function AddExpensesMainPage() {
       chevronHover: "group-hover:text-emerald-400"
     },
     {
-      id: "sales",
+      id: "sales-expenses",
       title: "Sales Expenses",
       description: "Record marketing allocations, client acquisition costs, distribution logistics, and sales pipeline expenditures.",
-      icon: TrendingUp,
+      icon: TrendingDown,
       accentColor: "amber",
       hoverBorder: "hover:border-amber-500/50",
       hoverShadow: "hover:shadow-amber-500/10",
       iconBg: "group-hover:bg-amber-500/10 group-hover:border-amber-500/30 group-hover:text-amber-400",
       titleHover: "group-hover:text-amber-400",
       chevronHover: "group-hover:text-amber-400"
+    },
+    {
+      id: "sales",
+      title: "Sales Income",
+      description: "Record and manage daily cash sales, incoming revenue streams, and customer payment collections for the branch.",
+      icon: TrendingUp,
+      accentColor: "emerald",
+      hoverBorder: "hover:border-emerald-500/50",
+      hoverShadow: "hover:shadow-emerald-500/10",
+      iconBg: "group-hover:bg-emerald-500/10 group-hover:border-emerald-500/30 group-hover:text-emerald-400",
+      titleHover: "group-hover:text-emerald-400",
+      chevronHover: "group-hover:text-emerald-400"
     }
   ];
 
@@ -86,7 +98,7 @@ export default function AddExpensesMainPage() {
                 </h1>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                Select the expense category matrix to allocate transaction data
+                Select the financial category matrix to allocate transaction data
               </p>
             </div>
           </div>
@@ -97,7 +109,7 @@ export default function AddExpensesMainPage() {
           </div>
         </div>
 
-        {/* 4 Interaction Cards Grid */}
+        {/* Interaction Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {expenseCategories.map((item) => {
             const IconComponent = item.icon;
