@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from "chart.js";
 import { Bar } from "react-chartjs-2";
-import { Building2, TrendingUp, AlertCircle, RefreshCw, ChevronUp, ChevronDown, MapPin, Filter, X } from "lucide-react";
+import { Building2, TrendingUp, AlertCircle, RefreshCw, ChevronUp, ChevronDown, MapPin, Filter, X, Sparkles } from "lucide-react";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
@@ -48,7 +48,6 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
     fetchDashboardData();
   }, [fetchDashboardData]);
 
-  // තනි Filter එකක් ඉවත් කරද්දී අනෙක තබා ගැනීම
   const clearFilter = (type: "sales" | "capital") => {
     const params = new URLSearchParams(searchParams.toString());
     if (type === "sales") params.delete("selected_sales_id");
@@ -58,7 +57,6 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
     router.push(`/dashboard${query ? `?${query}` : ""}`);
   };
 
-  // Total Expenses Card එකට යද්දී parameters දෙකම රැගෙන යාම
   const handleTotalExpensesClick = () => {
     const params = new URLSearchParams();
     if (selectedSalesId) params.append("selected_sales_id", selectedSalesId);
@@ -67,13 +65,20 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
     router.push(`/dashboard/total-expenses${query ? `?${query}` : ""}`);
   };
 
-  // Remaining Balance Card එකට යද්දී parameters දෙකම රැගෙන යාම
   const handleRemainingBalanceClick = () => {
     const params = new URLSearchParams();
     if (selectedSalesId) params.append("selected_sales_id", selectedSalesId);
     if (selectedCapitalId) params.append("selected_capital_id", selectedCapitalId);
     const query = params.toString();
     router.push(`/dashboard/remaining-balance${query ? `?${query}` : ""}`);
+  };
+
+  const handleTotalIncomesClick = () => {
+    const params = new URLSearchParams();
+    if (selectedSalesId) params.append("selected_sales_id", selectedSalesId);
+    if (selectedCapitalId) params.append("selected_capital_id", selectedCapitalId);
+    const query = params.toString();
+    router.push(`/dashboard/total-incomes${query ? `?${query}` : ""}`);
   };
 
   if (loading) {
@@ -136,7 +141,6 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
 
   return (
     <div className="p-6 md:p-8 space-y-6 bg-[#070a12] min-h-screen text-slate-300 font-mono text-xs selection:bg-cyan-500/20 selection:text-cyan-300">
-      {/* Dynamic Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold tracking-tight text-white">Financial & Tunnel Logistics</h2>
@@ -144,30 +148,20 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
-          {/* Capital Filter Badge */}
           {selectedCapitalId && (
             <div className="flex items-center gap-2 bg-amber-950/40 border border-amber-500/30 px-3 py-1.5 rounded-lg text-amber-400 text-[11px]">
               <Filter size={12} />
               <span>Capital Record #{selectedCapitalId}</span>
-              <button
-                onClick={() => clearFilter("capital")}
-                className="hover:text-white p-0.5 rounded transition-colors"
-                title="Clear Capital Filter"
-              >
+              <button onClick={() => clearFilter("capital")} className="hover:text-white p-0.5 rounded transition-colors" title="Clear Capital Filter">
                 <X size={13} />
               </button>
             </div>
           )}
-          {/* Sales Filter Badge */}
           {selectedSalesId && (
             <div className="flex items-center gap-2 bg-cyan-950/40 border border-cyan-500/30 px-3 py-1.5 rounded-lg text-cyan-400 text-[11px]">
               <Filter size={12} />
               <span>Sales Record #{selectedSalesId}</span>
-              <button
-                onClick={() => clearFilter("sales")}
-                className="hover:text-white p-0.5 rounded transition-colors"
-                title="Clear Sales Filter"
-              >
+              <button onClick={() => clearFilter("sales")} className="hover:text-white p-0.5 rounded transition-colors" title="Clear Sales Filter">
                 <X size={13} />
               </button>
             </div>
@@ -185,26 +179,23 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
       </div>
 
       <div className="relative z-40">
-        <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-
+        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Card 1: Total Tunnels */}
           <div
             onClick={() => setIsTunnelDropdownOpen(!isTunnelDropdownOpen)}
             className={`bg-[#0d1527]/60 border rounded-xl p-4 flex items-center justify-between cursor-pointer transition-all active:scale-[0.99] shadow-sm select-none group relative overflow-hidden ${
               isTunnelDropdownOpen ? "border-cyan-500/60 bg-[#0f1b35]/80" : "border-slate-800 hover:border-cyan-500/30"
-            }`}>
-
+            }`}
+          >
             <div className="z-10">
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
                 Total Tunnels
                 {isTunnelDropdownOpen ? <ChevronUp size={12} className="text-cyan-400" /> : <ChevronDown size={12} className="text-slate-500 group-hover:text-cyan-400" />}
               </p>
-
               <p className="text-2xl font-mono font-bold text-white mt-1">
                 {data?.cards?.totalBranches || filteredBranches.length || 0}
               </p>
             </div>
-
             <div className={`p-2 bg-slate-900/80 border border-slate-800 text-slate-400 rounded-lg transition-all z-10 ${
               isTunnelDropdownOpen ? "bg-cyan-500/10 border-cyan-500/40 text-cyan-400" : "group-hover:bg-cyan-500/10 group-hover:border-cyan-500/30"
             }`}>
@@ -212,7 +203,7 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
             </div>
           </div>
 
-          {/* Card 2: Total Expenses Matrix */}
+          {/* Card 2: Total Expenses */}
           <div
             onClick={handleTotalExpensesClick}
             className="bg-[#0d1527]/60 border border-slate-800/60 rounded-xl p-4 flex items-center justify-between cursor-pointer hover:border-blue-500/40 transition-all"
@@ -223,7 +214,6 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
                 LKR {Number(data?.cards?.totalExpenses || 0).toLocaleString("en-US")}
               </p>
             </div>
-
             <div className="p-2.5 bg-blue-500/10 text-blue-400 rounded-lg">
               <span className="text-sm font-bold">$</span>
             </div>
@@ -245,6 +235,21 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
             </div>
           </div>
 
+          {/* Card 4: Total Incomes */}
+          <div
+            onClick={handleTotalIncomesClick}
+            className="bg-[#0d1527]/60 border border-slate-800/60 rounded-xl p-4 flex items-center justify-between cursor-pointer hover:border-red-500/40 transition-all group"
+          >
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Incomes</p>
+              <p className="text-2xl font-mono font-bold text-red-400 mt-1">
+                LKR {Number(data?.cards?.totalIncomes || 0).toLocaleString("en-US")}
+              </p>
+            </div>
+            <div className="p-2.5 bg-red-500/10 text-red-400 rounded-lg group-hover:scale-110 transition-transform">
+              <Sparkles size={18} />
+            </div>
+          </div>
         </section>
 
         {isTunnelDropdownOpen && (
@@ -252,7 +257,6 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
             <div className="text-[10px] font-bold text-cyan-400 uppercase tracking-widest border-b border-slate-800/80 pb-2.5 mb-4 flex items-center justify-between">
               <span>Active Node Branches List ({filteredBranches.length} Records Located)</span>
             </div>
-
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-h-[250px] overflow-y-auto pr-2">
               {filteredBranches.map((branch: any) => (
                 <div
@@ -269,7 +273,6 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
         )}
       </div>
 
-      {/* Analytics Chart */}
       <section className="bg-[#0d1527]/40 border border-slate-800/60 rounded-xl p-5">
         <div className="mb-4">
           <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">Branch Expense Distribution</h3>
@@ -278,7 +281,6 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
           <Bar data={chartData} options={chartOptions as any} />
         </div>
       </section>
-
     </div>
   );
 }
