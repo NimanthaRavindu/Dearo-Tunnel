@@ -12,6 +12,7 @@ interface SalesExpense {
   personName: string;
   item_name?: string;
   quantity?: number;
+  unit_price?: number;
   amount: number;
   date: string;
 }
@@ -31,7 +32,8 @@ export default function SalesExpensesPage() {
   const [formData, setFormData] = useState({
     personName: "",
     item_name: "",
-    quantity: "",
+    quantity: "1",
+    unit_price: "",
     amount: "",
     date: new Date().toISOString().split("T")[0],
   });
@@ -48,6 +50,16 @@ export default function SalesExpensesPage() {
     "Beetroot",
     "Pumpkin"
   ];
+
+  // Auto-calculate amount when quantity or unit_price changes
+  useEffect(() => {
+    const qty = parseFloat(formData.quantity) || 0;
+    const price = parseFloat(formData.unit_price) || 0;
+    if (qty > 0 && price > 0) {
+      const calculated = (qty * price).toFixed(2);
+      setFormData((prev) => ({ ...prev, amount: calculated }));
+    }
+  }, [formData.quantity, formData.unit_price]);
 
   const fetchExpenses = useCallback(async () => {
     if (!branchId) return;
@@ -69,6 +81,7 @@ export default function SalesExpensesPage() {
               personName: found.personName,
               item_name: found.item_name || "",
               quantity: String(found.quantity || 1),
+              unit_price: found.unit_price ? String(found.unit_price) : "",
               amount: String(found.amount),
               date: found.date ? found.date.split("T")[0] : new Date().toISOString().split("T")[0],
             });
@@ -122,8 +135,21 @@ export default function SalesExpensesPage() {
       const method = isUpdating ? "PUT" : "POST";
       
       const payload = isUpdating
-        ? { ...formData, quantity: Number(formData.quantity || 1), amount: Number(formData.amount), id: selectedId, branch_id: branchId }
-        : { ...formData, quantity: Number(formData.quantity || 1), amount: Number(formData.amount), branch_id: branchId };
+        ? { 
+            ...formData, 
+            quantity: Number(formData.quantity || 1), 
+            unit_price: formData.unit_price ? Number(formData.unit_price) : null,
+            amount: Number(formData.amount), 
+            id: selectedId, 
+            branch_id: branchId 
+          }
+        : { 
+            ...formData, 
+            quantity: Number(formData.quantity || 1), 
+            unit_price: formData.unit_price ? Number(formData.unit_price) : null,
+            amount: Number(formData.amount), 
+            branch_id: branchId 
+          };
 
       const res = await fetch(endpoint, {
         method: method,
@@ -178,6 +204,7 @@ export default function SalesExpensesPage() {
         personName: item.personName,
         item_name: item.item_name || "",
         quantity: String(item.quantity || 1),
+        unit_price: item.unit_price ? String(item.unit_price) : "",
         amount: String(item.amount),
         date: item.date ? item.date.split("T")[0] : new Date().toISOString().split("T")[0],
       });
@@ -192,6 +219,7 @@ export default function SalesExpensesPage() {
       personName: "",
       item_name: "",
       quantity: "1",
+      unit_price: "",
       amount: "",
       date: new Date().toISOString().split("T")[0],
     });
@@ -329,28 +357,50 @@ export default function SalesExpensesPage() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-[11px] font-medium text-slate-300 mb-1">
-                  Quantity
-                </label>
-                <div className="relative">
-                  <Hash className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-500" />
-                  <input
-                    type="number"
-                    min="1"
-                    placeholder="1"
-                    value={formData.quantity}
-                    onChange={(e) =>
-                      setFormData({ ...formData, quantity: e.target.value })
-                    }
-                    className="w-full bg-slate-950/80 border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/50 font-mono transition-all"
-                  />
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                    Quantity
+                  </label>
+                  <div className="relative">
+                    <Hash className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-500" />
+                    <input
+                      type="number"
+                      min="1"
+                      placeholder="1"
+                      value={formData.quantity}
+                      onChange={(e) =>
+                        setFormData({ ...formData, quantity: e.target.value })
+                      }
+                      className="w-full bg-slate-950/80 border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/50 font-mono transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                    Unit Price (LKR)
+                  </label>
+                  <div className="relative">
+                    <DollarSign className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-500" />
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={formData.unit_price}
+                      onChange={(e) =>
+                        setFormData({ ...formData, unit_price: e.target.value })
+                      }
+                      className="w-full bg-slate-950/80 border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/50 font-mono transition-all"
+                    />
+                  </div>
                 </div>
               </div>
 
               <div>
                 <label className="block text-[11px] font-medium text-slate-300 mb-1">
-                  Amount (LKR) <span className="text-rose-400">*</span>
+                  Total Amount (LKR) <span className="text-rose-400">*</span>
                 </label>
                 <div className="relative">
                   <DollarSign className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-500" />
@@ -450,6 +500,7 @@ export default function SalesExpensesPage() {
                       <th className="py-2 px-2.5">Payee / Person Name</th>
                       <th className="py-2 px-2.5">Item / Product</th>
                       <th className="py-2 px-2.5 text-center">Qty</th>
+                      <th className="py-2 px-2.5 text-right">Unit Price</th>
                       <th className="py-2 px-2.5 text-right">Amount (LKR)</th>
                       <th className="py-2 px-2.5 text-center">Action</th>
                     </tr>
@@ -457,14 +508,14 @@ export default function SalesExpensesPage() {
                   <tbody className="divide-y divide-slate-800/50">
                     {loading ? (
                       <tr>
-                        <td colSpan={7} className="text-center py-8 text-slate-500">
+                        <td colSpan={8} className="text-center py-8 text-slate-500">
                           <Loader2 className="w-4 h-4 animate-spin mx-auto mb-1 text-emerald-400" />
                           Fetching record entries...
                         </td>
                       </tr>
                     ) : filteredExpenses.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="text-center py-8 text-slate-500">
+                        <td colSpan={8} className="text-center py-8 text-slate-500">
                           <Receipt className="w-6 h-6 mx-auto mb-1 opacity-30" />
                           No sales expenses found for Branch #{branchId}.
                         </td>
@@ -495,6 +546,9 @@ export default function SalesExpensesPage() {
                           </td>
                           <td className="py-2 px-2.5 text-center font-mono text-slate-300 whitespace-nowrap text-[11px]">
                             {item.quantity || 1}
+                          </td>
+                          <td className="py-2 px-2.5 text-right font-mono text-slate-300 whitespace-nowrap text-[11px]">
+                            {item.unit_price ? Number(item.unit_price).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "-"}
                           </td>
                           <td className="py-2 px-2.5 text-right font-medium font-mono text-emerald-400 whitespace-nowrap text-[11px]">
                             {Number(item.amount || 0).toLocaleString("en-US", {

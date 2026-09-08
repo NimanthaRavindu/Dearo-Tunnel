@@ -52,7 +52,7 @@ export async function GET(req: Request) {
     }
 
     let query = `
-      SELECT s.id, s.branch_id, b.branch_name, s.personName, s.personName AS name, s.item_name, s.quantity, s.amount, s.date 
+      SELECT s.id, s.branch_id, b.branch_name, s.personName, s.personName AS name, s.item_name, s.quantity, s.unit_price, s.amount, s.date 
       FROM sales_expenses s
       LEFT JOIN branch b ON s.branch_id = b.id
     `;
@@ -81,7 +81,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { branch_id, personName, item_name, quantity, amount, date } = body;
+    const { branch_id, personName, item_name, quantity, unit_price, amount, date } = body;
 
     if (!branch_id || !personName || !amount || !date) {
       return NextResponse.json(
@@ -101,14 +101,15 @@ export async function POST(req: Request) {
     }
 
     const parsedQuantity = quantity ? parseInt(quantity, 10) : 1;
+    const parsedUnitPrice = unit_price !== undefined && unit_price !== null && unit_price !== "" ? parseFloat(unit_price) : null;
 
     const [result] = await db.query<ResultSetHeader>(
-      "INSERT INTO sales_expenses (branch_id, personName, item_name, quantity, amount, date) VALUES (?, ?, ?, ?, ?, ?)",
-      [parsedBranchId, personName.trim(), item_name ? item_name.trim() : null, parsedQuantity, parsedAmount, date]
+      "INSERT INTO sales_expenses (branch_id, personName, item_name, quantity, unit_price, amount, date) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [parsedBranchId, personName.trim(), item_name ? item_name.trim() : null, parsedQuantity, parsedUnitPrice, parsedAmount, date]
     );
 
     const [newRows] = await db.query<RowDataPacket[]>(
-      `SELECT s.id, s.branch_id, b.branch_name, s.personName, s.personName AS name, s.item_name, s.quantity, s.amount, s.date 
+      `SELECT s.id, s.branch_id, b.branch_name, s.personName, s.personName AS name, s.item_name, s.quantity, s.unit_price, s.amount, s.date 
        FROM sales_expenses s 
        LEFT JOIN branch b ON s.branch_id = b.id 
        WHERE s.id = ?`,
@@ -129,7 +130,7 @@ export async function POST(req: Request) {
 export async function PUT(req: Request) {
   try {
     const body = await req.json();
-    const { id, branch_id, personName, item_name, quantity, amount, date } = body;
+    const { id, branch_id, personName, item_name, quantity, unit_price, amount, date } = body;
 
     if (!id || !branch_id || !personName || !amount || !date) {
       return NextResponse.json({ error: "Missing required fields for update" }, { status: 400 });
@@ -144,12 +145,13 @@ export async function PUT(req: Request) {
     }
 
     const parsedQuantity = quantity ? parseInt(quantity, 10) : 1;
+    const parsedUnitPrice = unit_price !== undefined && unit_price !== null && unit_price !== "" ? parseFloat(unit_price) : null;
 
     const [result] = await db.query<ResultSetHeader>(
       `UPDATE sales_expenses 
-       SET branch_id = ?, personName = ?, item_name = ?, quantity = ?, amount = ?, date = ? 
+       SET branch_id = ?, personName = ?, item_name = ?, quantity = ?, unit_price = ?, amount = ?, date = ? 
        WHERE id = ?`,
-      [parsedBranchId, personName.trim(), item_name ? item_name.trim() : null, parsedQuantity, parsedAmount, date, parsedId]
+      [parsedBranchId, personName.trim(), item_name ? item_name.trim() : null, parsedQuantity, parsedUnitPrice, parsedAmount, date, parsedId]
     );
 
     if (result.affectedRows === 0) {
@@ -172,7 +174,7 @@ export async function DELETE(req: Request) {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
 
-   if (!id) {
+    if (!id) {
       return NextResponse.json({ error: "Expense record ID is required" }, { status: 400 });
     }
 
