@@ -1,292 +1,322 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, TrendingUp, Calendar, User, DollarSign, PlusCircle, Trash2, Sparkles, CheckCircle2, Loader2 } from "lucide-react";
+import React, { useState, useEffect, Suspense } from "react";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
+import { ArrowLeft, Plus, Trash2, Loader2, TrendingUp, Filter, X, Building2 } from "lucide-react";
 
 interface SalesIncomeItem {
   id: string;
-  name: string;
-  date: string;
+  title: string;
   amount: number;
+  date: string;
+  note?: string;
 }
 
-export default function SalesIncomesPage() {
-  const params = useParams();
+function BranchSalesIncomesContent() {
   const router = useRouter();
-  const id = params.id;
+  const params = useParams();
+  const searchParams = useSearchParams();
 
-  // Form States
-  const [name, setName] = useState("");
-  const [date, setDate] = useState("");
-  const [amount, setAmount] = useState("");
+  const branchId = params.id as string;
+  const selectedSalesId = searchParams.get("selected_sales_id");
+  const selectedCapitalId = searchParams.get("selected_capital_id");
 
-  // Data & Loading States
   const [incomes, setIncomes] = useState<SalesIncomeItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [successMessage, setSuccessMessage] = useState(false);
 
-  // Fetch data from database on load
+  // Form states
+  const [title, setTitle] = useState("");
+  const [amount, setAmount] = useState("");
+  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [note, setNote] = useState("");
+
   useEffect(() => {
-    fetchIncomes();
-  }, []);
+    fetchBranchSalesIncomes();
+  }, [branchId, selectedSalesId, selectedCapitalId]);
 
-  const fetchIncomes = async () => {
+  const fetchBranchSalesIncomes = async () => {
     try {
-      const res = await fetch("/api/expences/sales-incomes");
+      setIsLoading(true);
+      const queryParams = new URLSearchParams();
+      if (selectedSalesId) queryParams.append("selected_sales_id", selectedSalesId);
+      if (selectedCapitalId) queryParams.append("selected_capital_id", selectedCapitalId);
+      
+      const queryString = queryParams.toString();
+      const res = await fetch(`/api/branches/${branchId}/sales-incomes${queryString ? `?${queryString}` : ""}`);
       const result = await res.json();
+      
       if (result.success) {
         setIncomes(result.data);
       }
     } catch (error) {
-      console.error("Failed to fetch sales incomes:", error);
+      console.error("Failed to fetch branch sales incomes:", error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Handle Form Submit (Save to Database)
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleAddIncome = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !date || !amount) return;
+    if (!title || !amount) return;
 
-    setIsSubmitting(true);
     try {
-      const res = await fetch("/api/expences/sales-incomes", {
+      setIsSubmitting(true);
+      const res = await fetch(`/api/branches/${branchId}/sales-incomes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, date, amount: parseFloat(amount), branchId: id }),
+        body: JSON.stringify({
+          title,
+          amount: parseFloat(amount),
+          date,
+          note,
+          sales_id: selectedSalesId || null,
+          capital_id: selectedCapitalId || null,
+        }),
       });
 
       const result = await res.json();
       if (result.success) {
-        fetchIncomes(); // Refresh list from DB
-        setName("");
-        setDate("");
+        setTitle("");
         setAmount("");
-        setSuccessMessage(true);
-        setTimeout(() => setSuccessMessage(false), 3000);
-      } else {
-        alert(result.error || "Failed to save record");
+        setNote("");
+        fetchBranchSalesIncomes();
       }
     } catch (error) {
-      console.error("Error submitting form:", error);
+      console.error("Failed to add sales income entry:", error);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Delete item handler
-  const handleDelete = async (itemId: string) => {
-    if (!confirm("Are you sure you want to delete this record?")) return;
+  const handleDeleteIncome = async (incomeId: string) => {
+    if (!confirm("Are you sure you want to delete this sales income record?")) return;
 
     try {
-      const res = await fetch(`/api/expences/sales-incomes?itemId=${itemId}`, {
+      const res = await fetch(`/api/branches/${branchId}/sales-incomes?id=${incomeId}`, {
         method: "DELETE",
       });
       const result = await res.json();
       if (result.success) {
-        setIncomes(incomes.filter((item) => item.id !== itemId));
-      } else {
-        alert("Failed to delete record");
+        fetchBranchSalesIncomes();
       }
     } catch (error) {
-      console.error("Error deleting record:", error);
+      console.error("Failed to delete sales income entry:", error);
     }
   };
 
-  // Calculate Total Sales Income
-  const totalIncome = incomes.reduce((acc, curr) => acc + curr.amount, 0);
+  const clearFilter = (type: "sales" | "capital") => {
+    const qParams = new URLSearchParams(searchParams.toString());
+    if (type === "sales") qParams.delete("selected_sales_id");
+    if (type === "capital") qParams.delete("selected_capital_id");
+    const query = qParams.toString();
+    router.push(`/dashboard/branches/${branchId}/add-expenses/sales_incomes${query ? `?${query}` : ""}`);
+  };
+
+  const handleBack = () => {
+    const qParams = new URLSearchParams();
+    if (selectedSalesId) qParams.append("selected_sales_id", selectedSalesId);
+    if (selectedCapitalId) qParams.append("selected_capital_id", selectedCapitalId);
+    const query = qParams.toString();
+    router.push(`/dashboard/branches/${branchId}/add-expenses${query ? `?${query}` : ""}`);
+  };
+
+  const totalAmount = incomes.reduce((sum, item) => sum + Number(item.amount || 0), 0);
 
   return (
-    <div className="min-h-screen bg-[#080d1a] text-slate-100 p-6 flex flex-col items-center relative overflow-hidden">
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[300px] bg-red-600/10 blur-[120px] pointer-events-none rounded-full" />
+    <div className="min-h-screen bg-[#070a12] text-slate-100 p-6 sm:p-10 flex flex-col items-center relative overflow-hidden font-mono text-xs">
+      <div className="absolute top-0 left-1/4 w-[500px] h-[300px] bg-red-600/10 blur-[140px] pointer-events-none rounded-full" />
+      <div className="absolute bottom-10 right-1/4 w-[400px] h-[250px] bg-rose-600/5 blur-[120px] pointer-events-none rounded-full" />
 
-      <div className="w-full max-w-4xl space-y-6 relative z-10">
+      <div className="w-full max-w-5xl space-y-6 relative z-10">
         
-        {/* Header Console */}
-        <div className="flex items-center justify-between border-b border-slate-800/80 pb-6">
+        {/* Header & Navigation */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-6">
           <div className="flex items-center gap-4">
             <button
               type="button"
-              onClick={() => router.push(`/dashboard/branches/${id}/add-expenses`)}
-              className="p-2.5 bg-slate-900/90 hover:bg-slate-800 rounded-xl transition-all border border-slate-800/80 text-slate-400 hover:text-white shadow-sm hover:scale-105 active:scale-95"
-              title="Back to Hub"
+              onClick={handleBack}
+              className="p-3 bg-slate-900/90 hover:bg-slate-800/90 rounded-xl transition-all duration-200 border border-slate-800 text-slate-400 hover:text-white shadow-lg hover:scale-105 active:scale-95 group"
+              title="Return to Branch Expenses Hub"
             >
-              <ArrowLeft size={18} />
+              <ArrowLeft size={16} className="group-hover:-translate-x-0.5 transition-transform" />
             </button>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="flex h-2 w-2 rounded-full bg-red-500 animate-pulse" />
-                <h1 className="text-xl font-extrabold tracking-wide uppercase text-slate-100">
-                  Sales Income Management
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse shadow-lg shadow-red-500/50" />
+                <h1 className="text-xl sm:text-2xl font-black tracking-wider uppercase text-slate-100">
+                  Branch #{branchId} Sales Incomes
                 </h1>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Record daily incoming revenues, customer payments, and cash collections
+              <p className="text-xs text-slate-400 mt-1 font-medium">
+                Record and manage direct sales revenue entries for this operational unit
               </p>
             </div>
           </div>
 
-          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-900/80 border border-slate-800 text-[11px] font-semibold text-slate-400">
-            <Sparkles size={13} className="text-red-400" />
-            <span>Branch ID: <strong className="text-slate-200">#{id}</strong></span>
+          <div className="flex items-center gap-3 flex-wrap">
+            {selectedCapitalId && (
+              <div className="flex items-center gap-2 bg-amber-950/40 border border-amber-500/30 px-3 py-1.5 rounded-lg text-amber-400 text-[11px]">
+                <Filter size={12} />
+                <span>Capital Record #{selectedCapitalId}</span>
+                <button onClick={() => clearFilter("capital")} className="hover:text-white p-0.5 rounded transition-colors">
+                  <X size={13} />
+                </button>
+              </div>
+            )}
+            {selectedSalesId && (
+              <div className="flex items-center gap-2 bg-cyan-950/40 border border-cyan-500/30 px-3 py-1.5 rounded-lg text-cyan-400 text-[11px]">
+                <Filter size={12} />
+                <span>Sales Record #{selectedSalesId}</span>
+                <button onClick={() => clearFilter("sales")} className="hover:text-white p-0.5 rounded transition-colors">
+                  <X size={13} />
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Success Alert Banner */}
-        {successMessage && (
-          <div className="flex items-center gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs animate-fadeIn">
-            <CheckCircle2 size={18} />
-            <span>Sales income record successfully saved to the database and ledger table!</span>
-          </div>
-        )}
-
-        {/* Main Grid Layout: Form & Summary */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
-          {/* Input Form Card */}
-          <div className="lg:col-span-1 p-6 rounded-2xl bg-slate-950/70 backdrop-blur-md border border-slate-800/80 shadow-xl space-y-5">
-            <div className="flex items-center gap-2 pb-3 border-b border-slate-800/60">
-              <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400">
-                <TrendingUp size={18} />
-              </div>
-              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-200">
-                New Entry Form
-              </h2>
+        {/* Total Summary Banner */}
+        <div className="p-6 rounded-2xl bg-[#0d1527]/60 border border-slate-800 shadow-2xl flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400">
+              <TrendingUp size={24} />
             </div>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-400 flex items-center gap-1.5">
-                  <User size={13} className="text-red-400" /> Source / Name
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Daily Cash Sale / Client X"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-slate-200 text-xs focus:outline-none focus:border-red-500/50 focus:ring-2 focus:ring-red-500/10 transition-all"
-                />
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Branch Revenue</span>
+              <div className="text-2xl font-black text-slate-100 mt-0.5">
+                LKR {totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </div>
+            </div>
+          </div>
+          <div className="text-right">
+            <span className="text-[11px] text-slate-400 font-semibold">{incomes.length} Entries Recorded</span>
+          </div>
+        </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-400 flex items-center gap-1.5">
-                  <Calendar size={13} className="text-red-400" /> Transaction Date
-                </label>
-                <input
-                  type="date"
-                  required
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-slate-200 text-xs focus:outline-none focus:border-red-500/50 focus:ring-2 focus:ring-red-500/10 transition-all"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-400 flex items-center gap-1.5">
-                  <DollarSign size={13} className="text-red-400" /> Amount (LKR)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  required
-                  placeholder="0.00"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-slate-200 text-xs focus:outline-none focus:border-red-500/50 focus:ring-2 focus:ring-red-500/10 transition-all"
-                />
-              </div>
-
+        {/* Add Income Form Card */}
+        <div className="p-6 rounded-2xl bg-[#0d1527]/40 border border-slate-800 shadow-2xl space-y-4">
+          <h2 className="text-xs font-extrabold uppercase tracking-widest text-slate-200 flex items-center gap-2">
+            <Plus size={15} className="text-red-400" /> Add New Sales Income Entry
+          </h2>
+          <form onSubmit={handleAddIncome} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div>
+              <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Description / Title</label>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="e.g. Daily POS Collection"
+                required
+                className="w-full bg-[#090e1a] border border-slate-800 rounded-xl px-3 py-2 text-slate-100 focus:outline-none focus:border-red-500/50 transition-colors text-xs"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Amount (LKR)</label>
+              <input
+                type="number"
+                step="0.01"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0.00"
+                required
+                className="w-full bg-[#090e1a] border border-slate-800 rounded-xl px-3 py-2 text-slate-100 focus:outline-none focus:border-red-500/50 transition-colors text-xs"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Date</label>
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                required
+                className="w-full bg-[#090e1a] border border-slate-800 rounded-xl px-3 py-2 text-slate-100 focus:outline-none focus:border-red-500/50 transition-colors text-xs"
+              />
+            </div>
+            <div className="flex items-end">
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full mt-2 flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-bold text-xs uppercase tracking-wider shadow-lg shadow-red-600/20 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+                className="w-full bg-red-600 hover:bg-red-500 active:scale-95 transition-all text-white font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-red-600/20 disabled:opacity-50"
               >
-                {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : <PlusCircle size={16} />}
-                {isSubmitting ? "Saving..." : "Submit Record"}
+                {isSubmitting ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
+                <span>Save Entry</span>
               </button>
-            </form>
-          </div>
-
-          {/* Submitted Records Table & Summary View */}
-          <div className="lg:col-span-2 p-6 rounded-2xl bg-slate-950/70 backdrop-blur-md border border-slate-800/80 shadow-xl flex flex-col justify-between space-y-5">
-            <div>
-              <div className="flex items-center justify-between pb-3 border-b border-slate-800/60 mb-4">
-                <h2 className="text-sm font-bold uppercase tracking-wider text-slate-200">
-                  Recorded Sales Incomes Ledger
-                </h2>
-                <span className="px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800 text-[11px] font-semibold text-red-400">
-                  Total Entries: {incomes.length}
-                </span>
-              </div>
-
-              {isLoading ? (
-                <div className="py-16 text-center flex flex-col items-center justify-center space-y-3">
-                  <Loader2 size={28} className="text-red-500 animate-spin" />
-                  <p className="text-xs text-slate-400">Loading records from database...</p>
-                </div>
-              ) : incomes.length === 0 ? (
-                <div className="py-16 text-center flex flex-col items-center justify-center space-y-3">
-                  <div className="p-4 rounded-full bg-slate-900/80 border border-slate-800 text-slate-600">
-                    <TrendingUp size={28} />
-                  </div>
-                  <p className="text-xs text-slate-400">No sales income records found in the database.</p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto max-h-[350px] overflow-y-auto pr-1">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="border-b border-slate-800 text-[11px] font-bold text-slate-400 uppercase">
-                        <th className="py-3 px-3">Name / Source</th>
-                        <th className="py-3 px-3">Date</th>
-                        <th className="py-3 px-3 text-right">Amount</th>
-                        <th className="py-3 px-2 text-center">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800/50 text-xs">
-                      {incomes.map((item) => (
-                        <tr key={item.id} className="hover:bg-slate-900/50 transition-colors">
-                          <td className="py-3.5 px-3 font-medium text-slate-200">{item.name}</td>
-                          <td className="py-3.5 px-3 text-slate-400">{item.date}</td>
-                          <td className="py-3.5 px-3 text-right font-bold text-red-400">
-                            {item.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                          </td>
-                          <td className="py-3.5 px-2 text-center">
-                            <button
-                              type="button"
-                              onClick={() => handleDelete(item.id)}
-                              className="p-1.5 bg-slate-900 hover:bg-red-500/20 text-slate-500 hover:text-red-400 rounded-lg transition-all border border-slate-800"
-                              title="Delete Record"
-                            >
-                              <Trash2 size="14"/>
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
             </div>
+          </form>
+        </div>
 
-            {/* Bottom Total Summary Footer */}
-            <div className="pt-4 border-t border-slate-800/80 flex items-center justify-between bg-slate-900/40 px-4 py-3 rounded-xl border border-slate-800/60">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                Total Cumulative Income:
-              </span>
-              <span className="text-sm font-extrabold text-red-400">
-                LKR {totalIncome.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-              </span>
+        {/* Income Entries Table */}
+        <div className="p-6 rounded-2xl bg-[#0d1527]/40 border border-slate-800 shadow-2xl space-y-4">
+          <h2 className="text-xs font-extrabold uppercase tracking-widest text-slate-200 flex items-center gap-2">
+            <Building2 size={15} className="text-red-400" /> Recorded Sales Income Entries
+          </h2>
+
+          {isLoading ? (
+            <div className="py-20 text-center flex flex-col items-center justify-center space-y-3">
+              <Loader2 size={26} className="text-red-500 animate-spin" />
+              <p className="text-[11px] text-slate-400">Loading branch financial records...</p>
             </div>
-
-          </div>
-
+          ) : incomes.length === 0 ? (
+            <div className="py-20 text-center text-slate-500">
+              No sales income records found for this branch under current filters.
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-slate-800 bg-[#090e1a]/50">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-800 bg-slate-900/60 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    <th className="py-3 px-4">ID</th>
+                    <th className="py-3 px-4">Title / Description</th>
+                    <th className="py-3 px-4">Date</th>
+                    <th className="py-3 px-4 text-right">Amount (LKR)</th>
+                    <th className="py-3 px-4 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/50 text-xs">
+                  {incomes.map((item) => (
+                    <tr key={item.id} className="hover:bg-slate-900/70 transition-colors">
+                      <td className="py-3 px-4 font-semibold text-slate-400">#{item.id}</td>
+                      <td className="py-3 px-4 font-bold text-slate-200">{item.title}</td>
+                      <td className="py-3 px-4 text-slate-300">{item.date}</td>
+                      <td className="py-3 px-4 text-right font-black text-red-400">
+                        {Number(item.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <button
+                          onClick={() => handleDeleteIncome(item.id)}
+                          className="p-1.5 rounded-lg bg-slate-900 hover:bg-red-950/50 border border-slate-800 hover:border-red-500/50 text-slate-400 hover:text-red-400 transition-colors"
+                          title="Delete Entry"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
       </div>
     </div>
+  );
+}
+
+function FallbackLoader() {
+  return (
+    <div className="h-screen w-full flex flex-col items-center justify-center text-slate-500 bg-[#070a12] font-mono text-xs">
+      <div className="h-5 w-5 border-2 border-red-500 border-t-transparent rounded-full animate-spin mb-2" />
+      <p className="uppercase tracking-widest text-[10px]">Initializing Branch Ledger...</p>
+    </div>
+  );
+}
+
+export default function BranchSalesIncomesPage() {
+  return (
+    <Suspense fallback={<FallbackLoader />}>
+      <BranchSalesIncomesContent />
+    </Suspense>
   );
 }
