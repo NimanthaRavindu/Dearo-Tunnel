@@ -1,49 +1,60 @@
 import { NextResponse } from 'next/server';
-import {db} from '@/lib/db';
+import { db } from '@/lib/db';
 
-// GET: Fetch records
+// GET: Fetch branch-wise total incomes summary
 export async function GET(request: Request) {
   try {
-    const [rows] = await db.query('SELECT * FROM sales_incomes ORDER BY id DESC');
-    return NextResponse.json({ success: true, data: rows }, { status: 200 });
-  } catch (error) {
-    console.error("Database fetch error:", error);
-    return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
-  }
-}
-
-// POST: Insert record
-export async function POST(request: Request) {
-  try {
-    const body = await request.json();
-    const { name, date, amount, branchId } = body;
-
-    const query = 'INSERT INTO sales_incomes (name, date, amount, branch_id) VALUES (?, ?, ?, ?)';
-    await db.query(query, [name, date, amount, branchId || null]);
-
-    return NextResponse.json({ success: true, message: 'Saved successfully' }, { status: 201 });
-  } catch (error) {
-    console.error("Database insert error:", error);
-    return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
-  }
-}
-
-// DELETE: Remove record
-export async function DELETE(request: Request) {
-  try {
     const { searchParams } = new URL(request.url);
-    const itemId = searchParams.get('itemId');
+    const selectedSalesId = searchParams.get('selected_sales_id');
+    const selectedCapitalId = searchParams.get('selected_capital_id');
 
-    if (!itemId) {
-      return NextResponse.json({ success: false, error: 'Item ID is required' }, { status: 400 });
+    let query = `
+      SELECT 
+          b.id AS branchId,
+          b.branch_name AS branchName,
+          COUNT(s.id) AS entriesCount,
+          SUM(s.amount) AS totalAmount
+      FROM 
+          sales_incomes s
+      LEFT JOIN 
+          branches b ON s.branch_id = b.id
+      WHERE 1=1
+    `;
+
+    const queryParams: any[] = [];
+
+  
+    if (selectedSalesId) {
+      query += ` AND s.sales_id = ?`;
+      queryParams.push(selectedSalesId);
     }
 
-    const query = 'DELETE FROM sales_incomes WHERE id = ?';
-    await db.query(query, [itemId]);
+    if (selectedCapitalId) {
+      query += ` AND s.capital_id = ?`;
+      queryParams.push(selectedCapitalId);
+    }
 
-    return NextResponse.json({ success: true, message: 'Deleted successfully' }, { status: 200 });
+    query += ` GROUP BY b.id, b.branch_name;`;
+
+    const [rows]: any = await db.query(query, queryParams);
+
+    const data = rows.map((row: any) => ({
+      branchId: row.branchId ? row.branchId.toString() : "Unknown",
+      branchName: row.branchName || `Branch Unit #${row.branchId}`,
+      totalAmount: Number(row.totalAmount || 0),
+      entriesCount: Number(row.entriesCount || 0),
+    }));
+
+    const grandTotal = data.reduce((sum: number, item: any) => sum + item.totalAmount, 0);
+
+    return NextResponse.json({
+      success: true,
+      data,
+      grandTotal,
+    }, { status: 200 });
+
   } catch (error) {
-    console.error("Database delete error:", error);
+    console.error("Database fetch error:", error);
     return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
   }
 }
