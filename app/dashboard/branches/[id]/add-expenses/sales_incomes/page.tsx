@@ -6,7 +6,7 @@ import { ArrowLeft, Plus, Trash2, Loader2, TrendingUp, Filter, X, Building2 } fr
 
 interface SalesIncomeItem {
   id: string;
-  title: string;
+  name: string;
   amount: number;
   date: string;
   note?: string;
@@ -25,8 +25,8 @@ function BranchSalesIncomesContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Form states
-  const [title, setTitle] = useState("");
+  // Form states (title වෙනුවට name භාවිතා කරයි)
+  const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [note, setNote] = useState("");
@@ -47,7 +47,12 @@ function BranchSalesIncomesContent() {
       const result = await res.json();
       
       if (result.success) {
-        setIncomes(result.data);
+        // Backend එකෙන් title හෝ name ලෙස එන අගය 'name' ලෙස map කර ගැනීම
+        const formattedData = result.data.map((item: any) => ({
+          ...item,
+          name: item.name || item.title || "",
+        }));
+        setIncomes(formattedData);
       }
     } catch (error) {
       console.error("Failed to fetch branch sales incomes:", error);
@@ -58,7 +63,7 @@ function BranchSalesIncomesContent() {
 
   const handleAddIncome = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || !amount) return;
+    if (!name || !amount) return;
 
     try {
       setIsSubmitting(true);
@@ -66,7 +71,7 @@ function BranchSalesIncomesContent() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title,
+          name, // title වෙනුවට name යවනු ලැබේ
           amount: parseFloat(amount),
           date,
           note,
@@ -77,7 +82,7 @@ function BranchSalesIncomesContent() {
 
       const result = await res.json();
       if (result.success) {
-        setTitle("");
+        setName("");
         setAmount("");
         setNote("");
         fetchBranchSalesIncomes();
@@ -201,11 +206,11 @@ function BranchSalesIncomesContent() {
           </h2>
           <form onSubmit={handleAddIncome} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
-              <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Description / Title</label>
+              <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Name</label>
               <input
                 type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Daily POS Collection"
                 required
                 className="w-full bg-[#090e1a] border border-slate-800 rounded-xl px-3 py-2 text-slate-100 focus:outline-none focus:border-red-500/50 transition-colors text-xs"
@@ -267,7 +272,7 @@ function BranchSalesIncomesContent() {
                 <thead>
                   <tr className="border-b border-slate-800 bg-slate-900/60 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                     <th className="py-3 px-4">ID</th>
-                    <th className="py-3 px-4">Title / Description</th>
+                    <th className="py-3 px-4">Name</th>
                     <th className="py-3 px-4">Date</th>
                     <th className="py-3 px-4 text-right">Amount (LKR)</th>
                     <th className="py-3 px-4 text-center">Actions</th>
@@ -277,7 +282,7 @@ function BranchSalesIncomesContent() {
                   {incomes.map((item) => (
                     <tr key={item.id} className="hover:bg-slate-900/70 transition-colors">
                       <td className="py-3 px-4 font-semibold text-slate-400">#{item.id}</td>
-                      <td className="py-3 px-4 font-bold text-slate-200">{item.title}</td>
+                      <td className="py-3 px-4 font-bold text-slate-200">{item.name}</td>
                       <td className="py-3 px-4 text-slate-300">{item.date}</td>
                       <td className="py-3 px-4 text-right font-black text-red-400">
                         {Number(item.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
