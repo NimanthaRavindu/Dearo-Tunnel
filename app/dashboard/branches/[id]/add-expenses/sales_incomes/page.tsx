@@ -27,14 +27,14 @@ export default function SalesIncomesPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState(false);
 
-  // 1. Fetch Sales Incomes from Database on Load
+  // Fetch data from database on load
   useEffect(() => {
     fetchIncomes();
-  }, [id]);
+  }, []);
 
   const fetchIncomes = async () => {
     try {
-      const res = await fetch(`/api/branches/${id}/sales-incomes`);
+      const res = await fetch("/api/expences/sales-incomes");
       const result = await res.json();
       if (result.success) {
         setIncomes(result.data);
@@ -46,23 +46,22 @@ export default function SalesIncomesPage() {
     }
   };
 
-  // 2. Handle Form Submit (Save to Database via API)
+  // Handle Form Submit (Save to Database)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !date || !amount) return;
 
     setIsSubmitting(true);
     try {
-      const res = await fetch(`/api/branches/${id}/sales-incomes`, {
+      const res = await fetch("/api/expences/sales-incomes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, date, amount: parseFloat(amount) }),
+        body: JSON.stringify({ name, date, amount: parseFloat(amount), branchId: id }),
       });
 
       const result = await res.json();
       if (result.success) {
-        // Refresh list or append new item
-        fetchIncomes();
+        fetchIncomes(); // Refresh list from DB
         setName("");
         setDate("");
         setAmount("");
@@ -73,18 +72,17 @@ export default function SalesIncomesPage() {
       }
     } catch (error) {
       console.error("Error submitting form:", error);
-      alert("An error occurred while saving.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // 3. Delete item handler
+  // Delete item handler
   const handleDelete = async (itemId: string) => {
     if (!confirm("Are you sure you want to delete this record?")) return;
 
     try {
-      const res = await fetch(`/api/branches/${id}/sales-incomes?itemId=${itemId}`, {
+      const res = await fetch(`/api/expences/sales-incomes?itemId=${itemId}`, {
         method: "DELETE",
       });
       const result = await res.json();
@@ -103,7 +101,6 @@ export default function SalesIncomesPage() {
 
   return (
     <div className="min-h-screen bg-[#080d1a] text-slate-100 p-6 flex flex-col items-center relative overflow-hidden">
-      {/* Background Ambient Red/Rose Glow */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[300px] bg-red-600/10 blur-[120px] pointer-events-none rounded-full" />
 
       <div className="w-full max-w-4xl space-y-6 relative z-10">
@@ -142,7 +139,7 @@ export default function SalesIncomesPage() {
         {successMessage && (
           <div className="flex items-center gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs animate-fadeIn">
             <CheckCircle2 size={18} />
-            <span>Sales income record successfully logged into the database and ledger table!</span>
+            <span>Sales income record successfully saved to the database and ledger table!</span>
           </div>
         )}
 
@@ -161,7 +158,6 @@ export default function SalesIncomesPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Record Name / Description */}
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-slate-400 flex items-center gap-1.5">
                   <User size={13} className="text-red-400" /> Source / Name
@@ -176,7 +172,6 @@ export default function SalesIncomesPage() {
                 />
               </div>
 
-              {/* Date Field */}
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-slate-400 flex items-center gap-1.5">
                   <Calendar size={13} className="text-red-400" /> Transaction Date
@@ -190,10 +185,9 @@ export default function SalesIncomesPage() {
                 />
               </div>
 
-              {/* Amount Field */}
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-slate-400 flex items-center gap-1.5">
-                  <DollarSign size={13} className="text-red-400" /> Amount (LKR / USD)
+                  <DollarSign size={13} className="text-red-400" /> Amount (LKR)
                 </label>
                 <input
                   type="number"
@@ -206,7 +200,6 @@ export default function SalesIncomesPage() {
                 />
               </div>
 
-              {/* Submit Button */}
               <button
                 type="submit"
                 disabled={isSubmitting}
@@ -240,7 +233,7 @@ export default function SalesIncomesPage() {
                   <div className="p-4 rounded-full bg-slate-900/80 border border-slate-800 text-slate-600">
                     <TrendingUp size={28} />
                   </div>
-                  <p className="text-xs text-slate-400">No sales income records found. Fill out the form to add entries.</p>
+                  <p className="text-xs text-slate-400">No sales income records found in the database.</p>
                 </div>
               ) : (
                 <div className="overflow-x-auto max-h-[350px] overflow-y-auto pr-1">
@@ -268,7 +261,7 @@ export default function SalesIncomesPage() {
                               className="p-1.5 bg-slate-900 hover:bg-red-500/20 text-slate-500 hover:text-red-400 rounded-lg transition-all border border-slate-800"
                               title="Delete Record"
                             >
-                              <Trash2 size={14} />
+                              <Trash2 size="14"/>
                             </button>
                           </td>
                         </tr>
