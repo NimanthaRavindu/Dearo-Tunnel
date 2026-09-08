@@ -2,15 +2,7 @@
 
 import React from "react";
 import { useParams, useRouter } from "next/navigation";
-import { 
-  ArrowLeft, 
-  Wallet, 
-  Coins, 
-  Building2, 
-  TrendingUp, 
-  ChevronRight,
-  Sparkles
-} from "lucide-react";
+import { ArrowLeft,Wallet,Coins,Building2,TrendingUp,ChevronRight,Sparkles} from "lucide-react";
 
 export default function AddExpensesMainPage() {
   const params = useParams();
