@@ -39,7 +39,7 @@ export default function AddExpensesMainPage() {
       title: "Capital Expenses",
       description: "Track long-term fixed assets, infrastructure investments, machinery, property acquisitions, and major upgrades.",
       icon: Building2,
-      accentColor: "emerald",
+      accentColor: "red",
       hoverBorder: "hover:border-emerald-500/50",
       hoverShadow: "hover:shadow-emerald-500/10",
       iconBg: "group-hover:bg-emerald-500/10 group-hover:border-emerald-500/30 group-hover:text-emerald-400",
