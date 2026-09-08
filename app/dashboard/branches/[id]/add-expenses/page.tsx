@@ -47,28 +47,28 @@ export default function AddExpensesMainPage() {
       chevronHover: "group-hover:text-emerald-400"
     },
     {
-      id: "sales-expenses",
+      id: "sales_incomes",
       title: "Sales Income",
-      description: "Record marketing allocations, client acquisition costs, distribution logistics, and sales pipeline expenditures.",
+      description: "Record and manage daily cash sales, incoming revenue streams, and customer payment collections for the branch.",
       icon: TrendingUp,
+      accentColor: "emerald",
+      hoverBorder: "hover:border-emerald-500/50",
+      hoverShadow: "hover:shadow-emerald-500/10",
+      iconBg: "group-hover:bg-emerald-500/10 group-hover:border-emerald-500/30 group-hover:text-emerald-400",
+      titleHover: "group-hover:text-emerald-400",
+      chevronHover: "group-hover:text-emerald-400"
+    },
+    {
+      id: "sales-expenses",
+      title: "Sales Expenses",
+      description: "Record marketing allocations, client acquisition costs, distribution logistics, and sales pipeline expenditures.",
+      icon: TrendingDown,
       accentColor: "amber",
       hoverBorder: "hover:border-amber-500/50",
       hoverShadow: "hover:shadow-amber-500/10",
       iconBg: "group-hover:bg-amber-500/10 group-hover:border-amber-500/30 group-hover:text-amber-400",
       titleHover: "group-hover:text-amber-400",
       chevronHover: "group-hover:text-amber-400"
-    },
-    {
-      id: "sales",
-      title: "Sales Expenses",
-      description: "Record and manage daily cash sales, incoming revenue streams, and customer payment collections for the branch.",
-      icon: TrendingDown,
-      accentColor: "red",
-      hoverBorder: "hover:border-emerald-500/50",
-      hoverShadow: "hover:shadow-emerald-500/10",
-      iconBg: "group-hover:bg-emerald-500/10 group-hover:border-emerald-500/30 group-hover:text-emerald-400",
-      titleHover: "group-hover:text-emerald-400",
-      chevronHover: "group-hover:text-emerald-400"
     }
   ];
 
