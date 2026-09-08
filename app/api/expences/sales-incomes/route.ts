@@ -23,7 +23,7 @@ export async function GET(request: Request) {
 
     const queryParams: any[] = [];
 
-  
+    // Oyaage table eke sales_id / capital_id columns thiyena widihata methana column names check karaganna
     if (selectedSalesId) {
       query += ` AND s.sales_id = ?`;
       queryParams.push(selectedSalesId);
