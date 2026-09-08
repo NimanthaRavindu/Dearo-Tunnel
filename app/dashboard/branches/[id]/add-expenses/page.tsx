@@ -59,7 +59,7 @@ export default function AddExpensesMainPage() {
       chevronHover: "group-hover:text-emerald-400"
     },
     {
-      id: "sales_expenses",
+      id: "sales",
       title: "Sales Expenses",
       description: "Record marketing allocations, client acquisition costs, distribution logistics, and sales pipeline expenditures.",
       icon: TrendingDown,
