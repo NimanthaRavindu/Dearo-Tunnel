@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, TrendingUp, Calendar, User, DollarSign, PlusCircle, Trash2, Sparkles, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, TrendingUp, Calendar, User, DollarSign, PlusCircle, Trash2, Sparkles, CheckCircle2, Loader2 } from "lucide-react";
 
 interface SalesIncomeItem {
   id: string;
@@ -21,35 +21,81 @@ export default function SalesIncomesPage() {
   const [date, setDate] = useState("");
   const [amount, setAmount] = useState("");
 
-  // Submitted Data List State
+  // Data & Loading States
   const [incomes, setIncomes] = useState<SalesIncomeItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState(false);
 
-  // Handle Form Submit
-  const handleSubmit = (e: React.FormEvent) => {
+  // 1. Fetch Sales Incomes from Database on Load
+  useEffect(() => {
+    fetchIncomes();
+  }, [id]);
+
+  const fetchIncomes = async () => {
+    try {
+      const res = await fetch(`/api/branches/${id}/sales-incomes`);
+      const result = await res.json();
+      if (result.success) {
+        setIncomes(result.data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch sales incomes:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 2. Handle Form Submit (Save to Database via API)
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !date || !amount) return;
 
-    const newItem: SalesIncomeItem = {
-      id: Date.now().toString(),
-      name,
-      date,
-      amount: parseFloat(amount),
-    };
+    setIsSubmitting(true);
+    try {
+      const res = await fetch(`/api/branches/${id}/sales-incomes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, date, amount: parseFloat(amount) }),
+      });
 
-    setIncomes([newItem, ...incomes]);
-    setName("");
-    setDate("");
-    setAmount("");
-
-    // Show success notification briefly
-    setSuccessMessage(true);
-    setTimeout(() => setSuccessMessage(false), 3000);
+      const result = await res.json();
+      if (result.success) {
+        // Refresh list or append new item
+        fetchIncomes();
+        setName("");
+        setDate("");
+        setAmount("");
+        setSuccessMessage(true);
+        setTimeout(() => setSuccessMessage(false), 3000);
+      } else {
+        alert(result.error || "Failed to save record");
+      }
+    } catch (error) {
+      console.error("Error submitting form:", error);
+      alert("An error occurred while saving.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  // Delete item handler
-  const handleDelete = (itemId: string) => {
-    setIncomes(incomes.filter((item) => item.id !== itemId));
+  // 3. Delete item handler
+  const handleDelete = async (itemId: string) => {
+    if (!confirm("Are you sure you want to delete this record?")) return;
+
+    try {
+      const res = await fetch(`/api/branches/${id}/sales-incomes?itemId=${itemId}`, {
+        method: "DELETE",
+      });
+      const result = await res.json();
+      if (result.success) {
+        setIncomes(incomes.filter((item) => item.id !== itemId));
+      } else {
+        alert("Failed to delete record");
+      }
+    } catch (error) {
+      console.error("Error deleting record:", error);
+    }
   };
 
   // Calculate Total Sales Income
@@ -96,7 +142,7 @@ export default function SalesIncomesPage() {
         {successMessage && (
           <div className="flex items-center gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs animate-fadeIn">
             <CheckCircle2 size={18} />
-            <span>Sales income record successfully logged into the ledger table below!</span>
+            <span>Sales income record successfully logged into the database and ledger table!</span>
           </div>
         )}
 
@@ -163,9 +209,11 @@ export default function SalesIncomesPage() {
               {/* Submit Button */}
               <button
                 type="submit"
-                className="w-full mt-2 flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-bold text-xs uppercase tracking-wider shadow-lg shadow-red-600/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                disabled={isSubmitting}
+                className="w-full mt-2 flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-bold text-xs uppercase tracking-wider shadow-lg shadow-red-600/20 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
               >
-                <PlusCircle size={16} /> Submit Record
+                {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : <PlusCircle size={16} />}
+                {isSubmitting ? "Saving..." : "Submit Record"}
               </button>
             </form>
           </div>
@@ -182,12 +230,17 @@ export default function SalesIncomesPage() {
                 </span>
               </div>
 
-              {incomes.length === 0 ? (
+              {isLoading ? (
+                <div className="py-16 text-center flex flex-col items-center justify-center space-y-3">
+                  <Loader2 size={28} className="text-red-500 animate-spin" />
+                  <p className="text-xs text-slate-400">Loading records from database...</p>
+                </div>
+              ) : incomes.length === 0 ? (
                 <div className="py-16 text-center flex flex-col items-center justify-center space-y-3">
                   <div className="p-4 rounded-full bg-slate-900/80 border border-slate-800 text-slate-600">
                     <TrendingUp size={28} />
                   </div>
-                  <p className="text-xs text-slate-400">No sales income records added yet. Fill out the form to populate ledger entries.</p>
+                  <p className="text-xs text-slate-400">No sales income records found. Fill out the form to add entries.</p>
                 </div>
               ) : (
                 <div className="overflow-x-auto max-h-[350px] overflow-y-auto pr-1">
