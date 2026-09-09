@@ -1,5 +1,4 @@
 "use client";
-
 import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, TrendingUp, Building2, Loader2, Layers, Filter, X } from "lucide-react";
@@ -175,7 +174,7 @@ function TotalIncomesContent() {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-slate-800 bg-slate-900/60 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                    <th className="py-3.5 px-4">Branch Name</th>
+                    <th className="py-3.5 px-4">Branch Identifier</th>
                     <th className="py-3.5 px-4 text-center">Logged Entries</th>
                     <th className="py-3.5 px-4 text-right">Total Revenue (LKR)</th>
                   </tr>
@@ -199,7 +198,7 @@ function TotalIncomesContent() {
                             <Building2 size={14} />
                           </div>
                           <div>
-                            <span className="text-white font-bold block">{item.branchName}</span>
+                            <span className="text-white font-bold block">{item.branchName || `Branch Unit #${item.branchId}`}</span>
                             <span className="text-[10px] text-slate-500 font-mono">ID: {item.branchId}</span>
                           </div>
                         </td>
@@ -214,8 +213,10 @@ function TotalIncomesContent() {
                           LKR {item.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                         </td>
                       </tr>
+
                     );
                   })}
+
                 </tbody>
               </table>
             </div>

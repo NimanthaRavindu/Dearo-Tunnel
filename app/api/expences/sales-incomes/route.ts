@@ -24,18 +24,16 @@ export async function GET(request: Request) {
     const branchId = searchParams.get('branch_id') || extractBranchId(request);
     const isSummary = searchParams.get('summary') === 'true';
 
-    // 1. Total Incomes Page එක සඳහා branch table එක සමඟ join කර සැබෑ නම සමඟ summaries ලබා දීම
+    // 1. Total Incomes Page එක සඳහා සියලුම බ්‍රාන්ච් වල summaries සහ grandTotal ලබා දීම
     if (isSummary) {
       const summaryQuery = `
-        SELECT 
-            s.branch_id,
-            b.name as branch_name,
-            SUM(s.amount) as total_amount,
-            COUNT(s.id) as entries_count
-        FROM 
-            sales_incomes s
-        LEFT JOIN branch b ON s.branch_id = b.id
-        GROUP BY s.branch_id, b.name
+        SELECT
+            branch_id,
+            SUM(amount) as total_amount,
+            COUNT(id) as entries_count
+        FROM
+            sales_incomes
+        GROUP BY branch_id
         ORDER BY total_amount DESC;
       `;
 
@@ -48,8 +46,7 @@ export async function GET(request: Request) {
 
         return {
           branchId: row.branch_id ? row.branch_id.toString() : "Unknown",
-          // ඩේටාබේස් එකෙන් එන නම හෝ නැත්නම් default නමක් ලබා දීම
-          branchName: row.branch_name || `Branch Unit #${row.branch_id}`,
+          branchName: `Branch Unit #${row.branch_id}`,
           totalAmount: totalAmount,
           entriesCount: Number(row.entries_count || 0),
         };
@@ -67,14 +64,14 @@ export async function GET(request: Request) {
     }
 
     let query = `
-      SELECT 
+      SELECT
           id,
           name,
           amount,
           date,
           branch_id,
           created_at
-      FROM 
+      FROM
           sales_incomes
       WHERE branch_id = ?
     `;
@@ -169,6 +166,6 @@ export async function DELETE(request: Request) {
 
   } catch (error) {
     console.error("Database delete error:", error);
-    return NextResponse.json({ status: false, error: 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
   }
 }
