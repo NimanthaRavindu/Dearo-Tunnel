@@ -31,15 +31,12 @@ function BranchSalesIncomesContent() {
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
 
   useEffect(() => {
-    if (branchId) {
-      fetchBranchSalesIncomes();
-    }
+    fetchBranchSalesIncomes();
   }, [branchId]);
 
   const fetchBranchSalesIncomes = async () => {
     try {
       setIsLoading(true);
-      // නිවැරදි කළ API URL එක
       const res = await fetch(`/api/expences/sales-incomes`);
       const result = await res.json();
       
@@ -55,11 +52,10 @@ function BranchSalesIncomesContent() {
 
   const handleAddIncome = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !amount || !branchId) return;
+    if (!name || !amount) return;
 
     try {
       setIsSubmitting(true);
-
       const res = await fetch(`/api/expences/sales-incomes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -89,7 +85,6 @@ function BranchSalesIncomesContent() {
     if (!confirm("Are you sure you want to delete this sales income record?")) return;
 
     try {
-      // නිවැරදි කළ API URL එක
       const res = await fetch(`/api/expences/sales-incomes?id=${incomeId}`, {
         method: "DELETE",
       });
