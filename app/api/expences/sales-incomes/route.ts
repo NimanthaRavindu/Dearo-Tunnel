@@ -21,21 +21,21 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const recordId = searchParams.get('id');
-    const branchId = extractBranchId(request);
+    const branchId = searchParams.get('branch_id') || extractBranchId(request);
 
     if (!branchId) {
       return NextResponse.json({ success: false, error: 'Branch ID is missing' }, { status: 400 });
     }
 
     let query = `
-      SELECT
+      SELECT 
           id,
           name,
           amount,
           date,
           branch_id,
           created_at
-      FROM
+      FROM 
           sales_incomes
       WHERE branch_id = ?
     `;
@@ -77,7 +77,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { name, amount, date } = body;
 
-    const branchId = extractBranchId(request) || body.branch_id;
+    const branchId = body.branch_id || extractBranchId(request);
 
     if (!branchId || !name || amount === undefined || !date) {
       return NextResponse.json({
@@ -114,7 +114,7 @@ export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
-    const branchId = extractBranchId(request);
+    const branchId = searchParams.get('branch_id') || extractBranchId(request);
 
     if (!id || !branchId) {
       return NextResponse.json({ success: false, error: 'Income ID and Branch ID are required' }, { status: 400 });
