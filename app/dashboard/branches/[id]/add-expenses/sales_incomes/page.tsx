@@ -40,8 +40,8 @@ function BranchSalesIncomesContent() {
   const fetchBranchSalesIncomes = async () => {
     try {
       setIsLoading(true);
-
-      const res = await fetch(`/api/expences/sales-incomes`);
+      // මෙතැනදී අදාළ branch එකට අදාළ API එකට request එක යැවිය යුතුය
+      const res = await fetch(`/api/branches/${branchId}/sales-incomes`);
       const result = await res.json();
       
       if (result.success) {
@@ -61,7 +61,7 @@ function BranchSalesIncomesContent() {
     try {
       setIsSubmitting(true);
 
-      const res = await fetch(`/api/expences/sales-incomes`, {
+      const res = await fetch(`/api/branches/${branchId}/sales-incomes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -90,8 +90,7 @@ function BranchSalesIncomesContent() {
     if (!confirm("Are you sure you want to delete this sales income record?")) return;
 
     try {
-
-      const res = await fetch(`/api/expences/sales-incomes?id=${incomeId}`, {
+      const res = await fetch(`/api/branches/${branchId}/sales-incomes?id=${incomeId}`, {
         method: "DELETE",
       });
       const result = await res.json();

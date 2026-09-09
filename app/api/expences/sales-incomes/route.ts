@@ -16,7 +16,7 @@ function extractBranchId(request: Request): string | null {
   return null;
 }
 
-// GET: Fetch branch sales incomes entries
+// GET: Fetch branch-specific sales incomes entries
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -71,7 +71,7 @@ export async function GET(request: Request) {
   }
 }
 
-// POST: Add new sales income entry
+// POST: Add new sales income entry specifically for this branch
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -101,7 +101,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       insertId: result.insertId,
-      message: 'Sales income added successfully',
+      message: 'Sales income added successfully for the branch',
     }, { status: 201 });
 
   } catch (error) {
@@ -110,7 +110,7 @@ export async function POST(request: Request) {
   }
 }
 
-// DELETE: Remove sales income entry
+// DELETE: Remove sales income entry matching branch and id
 export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -131,6 +131,6 @@ export async function DELETE(request: Request) {
 
   } catch (error) {
     console.error("Database delete error:", error);
-    return NextResponse.json({ status: false, error: 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
   }
 }
