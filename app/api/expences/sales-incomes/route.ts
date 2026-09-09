@@ -56,6 +56,7 @@ export async function GET(request: Request) {
       name: row.name || "",
       amount: Number(row.amount || 0),
       date: row.date,
+      branch_id: row.branch_id ? row.branch_id.toString() : branchId,
       created_at: row.created_at,
     }));
 
@@ -130,6 +131,6 @@ export async function DELETE(request: Request) {
 
   } catch (error) {
     console.error("Database delete error:", error);
-    return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ status: false, error: 'Internal Server Error' }, { status: 500 });
   }
 }

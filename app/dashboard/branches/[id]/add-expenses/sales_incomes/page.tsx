@@ -9,6 +9,7 @@ interface SalesIncomeItem {
   name: string;
   amount: number;
   date: string;
+  branch_id?: string;
   created_at?: string;
 }
 
@@ -31,12 +32,15 @@ function BranchSalesIncomesContent() {
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
 
   useEffect(() => {
-    fetchBranchSalesIncomes();
+    if (branchId) {
+      fetchBranchSalesIncomes();
+    }
   }, [branchId]);
 
   const fetchBranchSalesIncomes = async () => {
     try {
       setIsLoading(true);
+
       const res = await fetch(`/api/expences/sales-incomes`);
       const result = await res.json();
       
@@ -52,10 +56,11 @@ function BranchSalesIncomesContent() {
 
   const handleAddIncome = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !amount) return;
+    if (!name || !amount || !branchId) return;
 
     try {
       setIsSubmitting(true);
+
       const res = await fetch(`/api/expences/sales-incomes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -85,6 +90,7 @@ function BranchSalesIncomesContent() {
     if (!confirm("Are you sure you want to delete this sales income record?")) return;
 
     try {
+
       const res = await fetch(`/api/expences/sales-incomes?id=${incomeId}`, {
         method: "DELETE",
       });
