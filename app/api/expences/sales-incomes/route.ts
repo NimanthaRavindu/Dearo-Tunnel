@@ -1,15 +1,31 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
+// Helper function to extract branch_id safely from URL
+function extractBranchId(request: Request): string | null {
+  try {
+    const url = new URL(request.url);
+    const urlParts = url.pathname.split('/');
+    const branchIndex = urlParts.indexOf('branches');
+    if (branchIndex !== -1 && urlParts[branchIndex + 1]) {
+      return urlParts[branchIndex + 1];
+    }
+  } catch (e) {
+    console.error("Error extracting branch id from URL", e);
+  }
+  return null;
+}
+
 // GET: Fetch branch sales incomes entries
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const recordId = searchParams.get('id');
+    const branchId = extractBranchId(request);
 
-    const urlParts = new URL(request.url).pathname.split('/');
-    const branchIdIndex = urlParts.indexOf('branches') + 1;
-    const branchId = urlParts[branchIdIndex];
+    if (!branchId) {
+      return NextResponse.json({ success: false, error: 'Branch ID is missing' }, { status: 400 });
+    }
 
     let query = `
       SELECT 
@@ -60,12 +76,13 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { name, amount, date } = body;
 
-    const urlParts = new URL(request.url).pathname.split('/');
-    const branchIdIndex = urlParts.indexOf('branches') + 1;
-    const branchId = urlParts[branchIdIndex];
+    const branchId = extractBranchId(request) || body.branch_id;
 
-    if (!name || amount === undefined || !date) {
-      return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
+    if (!branchId || !name || amount === undefined || !date) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Missing required fields (branch_id, name, amount, or date)' 
+      }, { status: 400 });
     }
 
     const query = `
@@ -97,13 +114,14 @@ export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
+    const branchId = extractBranchId(request);
 
-    if (!id) {
-      return NextResponse.json({ success: false, error: 'Income ID is required' }, { status: 400 });
+    if (!id || !branchId) {
+      return NextResponse.json({ success: false, error: 'Income ID and Branch ID are required' }, { status: 400 });
     }
 
-    const query = `DELETE FROM sales_incomes WHERE id = ?`;
-    await db.query(query, [id]);
+    const query = `DELETE FROM sales_incomes WHERE id = ? AND branch_id = ?`;
+    await db.query(query, [id, branchId]);
 
     return NextResponse.json({
       success: true,
