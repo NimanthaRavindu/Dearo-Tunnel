@@ -29,10 +29,12 @@ function TotalIncomesContent() {
   const fetchTotalIncomesSummary = async () => {
     try {
       const params = new URLSearchParams();
+      params.append("summary", "true"); // ඉතා වැදගත්: API එකෙන් summary ඉල්ලීමට මෙය එකතු කර ඇත
       if (selectedSalesId) params.append("selected_sales_id", selectedSalesId);
       if (selectedCapitalId) params.append("selected_capital_id", selectedCapitalId);
       const queryString = params.toString();
-      const url = `/api/dashboard/total-incomes${queryString ? `?${queryString}` : ""}`;
+      
+      const url = `/api/expences/sales-incomes?${queryString}`;
 
       const res = await fetch(url);
       const result = await res.json();

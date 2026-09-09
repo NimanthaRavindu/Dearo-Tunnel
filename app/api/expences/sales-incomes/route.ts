@@ -16,13 +16,50 @@ function extractBranchId(request: Request): string | null {
   return null;
 }
 
-// GET: Fetch branch sales incomes entries
+// GET: Fetch branch sales incomes entries or Branch-wise Summary
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const recordId = searchParams.get('id');
     const branchId = searchParams.get('branch_id') || extractBranchId(request);
+    const isSummary = searchParams.get('summary') === 'true';
 
+    // 1. Total Incomes Page එක සඳහා සියලුම බ්‍රාන්ච් වල summaries සහ grandTotal ලබා දීම
+    if (isSummary) {
+      const summaryQuery = `
+        SELECT 
+            branch_id,
+            SUM(amount) as total_amount,
+            COUNT(id) as entries_count
+        FROM 
+            sales_incomes
+        GROUP BY branch_id
+        ORDER BY total_amount DESC;
+      `;
+      
+      const [rows]: any = await db.query(summaryQuery);
+
+      let grandTotal = 0;
+      const data = rows.map((row: any) => {
+        const totalAmount = Number(row.total_amount || 0);
+        grandTotal += totalAmount;
+
+        return {
+          branchId: row.branch_id ? row.branch_id.toString() : "Unknown",
+          branchName: `Branch Unit #${row.branch_id}`,
+          totalAmount: totalAmount,
+          entriesCount: Number(row.entries_count || 0),
+        };
+      });
+
+      return NextResponse.json({
+        success: true,
+        grandTotal,
+        data,
+      }, { status: 200 });
+    }
+
+    // 2. සාමාන්‍ය පරිදි නිශ්චිත බ්‍රාන්ච් එකක දත්ත ලබා ගැනීම
     if (!branchId) {
       return NextResponse.json({ success: false, error: 'Branch ID is missing' }, { status: 400 });
     }
@@ -130,6 +167,6 @@ export async function DELETE(request: Request) {
 
   } catch (error) {
     console.error("Database delete error:", error);
-    return NextResponse.json({ status: false, error: 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
   }
 }
