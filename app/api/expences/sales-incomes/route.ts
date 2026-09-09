@@ -16,7 +16,7 @@ function extractBranchId(request: Request): string | null {
   return null;
 }
 
-// GET: Fetch branch-specific sales incomes entries
+// GET: Fetch branch sales incomes entries
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -28,14 +28,14 @@ export async function GET(request: Request) {
     }
 
     let query = `
-      SELECT 
+      SELECT
           id,
           name,
           amount,
           date,
           branch_id,
           created_at
-      FROM 
+      FROM
           sales_incomes
       WHERE branch_id = ?
     `;
@@ -71,7 +71,7 @@ export async function GET(request: Request) {
   }
 }
 
-// POST: Add new sales income entry specifically for this branch
+// POST: Add new sales income entry
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -80,9 +80,9 @@ export async function POST(request: Request) {
     const branchId = extractBranchId(request) || body.branch_id;
 
     if (!branchId || !name || amount === undefined || !date) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Missing required fields (branch_id, name, amount, or date)' 
+      return NextResponse.json({
+        success: false,
+        error: 'Missing required fields (branch_id, name, amount, or date)'
       }, { status: 400 });
     }
 
@@ -97,11 +97,10 @@ export async function POST(request: Request) {
       amount,
       date,
     ]);
-
     return NextResponse.json({
       success: true,
       insertId: result.insertId,
-      message: 'Sales income added successfully for the branch',
+      message: 'Sales income added successfully',
     }, { status: 201 });
 
   } catch (error) {
@@ -110,7 +109,7 @@ export async function POST(request: Request) {
   }
 }
 
-// DELETE: Remove sales income entry matching branch and id
+// DELETE: Remove sales income entry
 export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -131,6 +130,6 @@ export async function DELETE(request: Request) {
 
   } catch (error) {
     console.error("Database delete error:", error);
-    return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ status: false, error: 'Internal Server Error' }, { status: 500 });
   }
 }

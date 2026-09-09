@@ -1,5 +1,4 @@
 "use client";
-
 import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { ArrowLeft, Plus, Trash2, Loader2, TrendingUp, Building2 } from "lucide-react";
@@ -43,7 +42,7 @@ function BranchSalesIncomesContent() {
 
       const res = await fetch(`/api/expences/sales-incomes`);
       const result = await res.json();
-      
+
       if (result.success) {
         setIncomes(result.data);
       }
@@ -118,7 +117,7 @@ function BranchSalesIncomesContent() {
       <div className="absolute bottom-10 right-1/4 w-[400px] h-[250px] bg-rose-600/5 blur-[120px] pointer-events-none rounded-full" />
 
       <div className="w-full max-w-5xl space-y-6 relative z-10">
-        
+
         {/* Header & Navigation */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-6">
           <div className="flex items-center gap-4">
