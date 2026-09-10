@@ -24,6 +24,9 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [isTunnelDropdownOpen, setIsTunnelDropdownOpen] = useState(false);
 
+  // Total Incomes පේජ් එකෙන් එන හරියටම එකතුව සහ බ්‍රාන්ච් ගණන ලබා ගැනීමට
+  const [incomeSummary, setIncomeSummary] = useState({ grandTotal: 0, entriesCount: 0 });
+
   const fetchDashboardData = useCallback(async () => {
     try {
       const params = new URLSearchParams();
@@ -36,6 +39,17 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
       if (!response.ok) throw new Error("Failed to synchronize infrastructure core metrics.");
       const json = await response.json();
       setData(json);
+
+      // Total incomes summary එක API එකෙන් fetch කර ගැනීම
+      const incomeRes = await fetch(`/api/expences/sales-incomes?summary=true`);
+      const incomeJson = await incomeRes.json();
+      if (incomeJson.success) {
+        setIncomeSummary({
+          grandTotal: incomeJson.grandTotal || 0,
+          entriesCount: incomeJson.data?.length || 0,
+        });
+      }
+
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -235,7 +249,7 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
             </div>
           </div>
 
-          {/* Card 4: Total Incomes */}
+          {/* Card 4: Total Incomes (Updated with exact Total Incomes Page summary value) */}
           <div
             onClick={handleTotalIncomesClick}
             className="bg-[#0d1527]/60 border border-slate-800/60 rounded-xl p-4 flex items-center justify-between cursor-pointer hover:border-red-500/40 transition-all group"
@@ -243,7 +257,7 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Incomes</p>
               <p className="text-2xl font-mono font-bold text-red-400 mt-1">
-                LKR {Number(data?.cards?.totalIncomes || 0).toLocaleString("en-US")}
+                LKR {Number(incomeSummary.grandTotal || data?.cards?.totalIncomes || 0).toLocaleString("en-US")}
               </p>
             </div>
             <div className="p-2.5 bg-red-500/10 text-red-400 rounded-lg group-hover:scale-110 transition-transform">
