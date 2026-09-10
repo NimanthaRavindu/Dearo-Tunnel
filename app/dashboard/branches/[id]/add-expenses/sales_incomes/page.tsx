@@ -189,9 +189,9 @@ function TotalIncomesContent() {
                     return (
                       <tr
                         key={item.branchId}
-                        onClick={() => router.push(`/dashboard/branches/${item.branchId}/add-expenses${rowQuery ? `?${rowQuery}` : ""}`)}
+                        onClick={() => router.push(`/dashboard/branches/${item.branchId}/add-expenses/sales_incomes${rowQuery ? `?${rowQuery}` : ""}`)}
                         className="hover:bg-slate-900/70 transition-colors cursor-pointer group"
-                        title="Click to view branch details"
+                        title="Click to view branch sales incomes"
                       >
                         <td className="py-3.5 px-4 font-semibold text-slate-200 flex items-center gap-3">
                           <div className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-red-400 group-hover:scale-110 transition-transform">
@@ -213,10 +213,8 @@ function TotalIncomesContent() {
                           LKR {item.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                         </td>
                       </tr>
-
                     );
                   })}
-
                 </tbody>
               </table>
             </div>
