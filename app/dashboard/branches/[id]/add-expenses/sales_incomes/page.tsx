@@ -38,7 +38,8 @@ function SalesIncomesContent() {
 
   const fetchSalesIncomes = async () => {
     try {
-      const res = await fetch(`/api/expences/sales-incomes`);
+      // Corrected API endpoint with branchId query parameter
+      const res = await fetch(`/api/expences/sales-incomes?branch_id=${branchId}`);
       const result = await res.json();
       if (result.success) {
         setIncomes(result.data || []);
@@ -57,14 +58,16 @@ function SalesIncomesContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name || !formData.date || !formData.amount) return;
+    if (!formData.name || !formData.date || !formData.amount || !branchId) return;
 
     setIsSubmitting(true);
     try {
+      // Corrected API endpoint including branch_id in the payload body
       const res = await fetch(`/api/expences/sales-incomes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          branch_id: branchId,
           name: formData.name,
           date: formData.date,
           amount: Number(formData.amount),
