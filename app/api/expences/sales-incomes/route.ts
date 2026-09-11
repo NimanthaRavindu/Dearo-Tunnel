@@ -28,7 +28,7 @@ export async function GET(request: Request) {
       const summaryQuery = `
         SELECT 
             s.branch_id,
-            b.name as branch_name,
+            b.branch_name as branch_name,
             SUM(s.amount) as total_amount,
             COUNT(s.id) as entries_count
         FROM 
@@ -36,7 +36,7 @@ export async function GET(request: Request) {
         LEFT JOIN 
             branch b ON s.branch_id = b.id
         GROUP BY 
-            s.branch_id, b.name
+            s.branch_id, b.branch_name
         ORDER BY 
             total_amount DESC;
       `;
@@ -50,7 +50,7 @@ export async function GET(request: Request) {
 
         return {
           branchId: row.branch_id ? row.branch_id.toString() : "Unknown",
-          branchName: row.branch_name || `Branch Unit #${row.branch_id}`, // බ්‍රාන්ච් නම තිබේ නම් එය පෙන්වයි, නැත්නම් පරණ විදිහට පෙන්වයි
+          branchName: row.branch_name || `Branch Unit #${row.branch_id}`, // ඩේටාබේස් එකෙන් එන නම මෙහි පෙන්වයි
           totalAmount: totalAmount,
           entriesCount: Number(row.entries_count || 0),
         };
