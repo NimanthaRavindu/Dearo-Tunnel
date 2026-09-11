@@ -24,17 +24,21 @@ export async function GET(request: Request) {
     const branchId = searchParams.get('branch_id') || extractBranchId(request);
     const isSummary = searchParams.get('summary') === 'true';
 
-    // 1. Total Incomes Page එක සඳහා සියලුම බ්‍රාන්ච් වල summaries සහ grandTotal ලබා දීම
     if (isSummary) {
       const summaryQuery = `
-        SELECT
-            branch_id,
-            SUM(amount) as total_amount,
-            COUNT(id) as entries_count
-        FROM
-            sales_incomes
-        GROUP BY branch_id
-        ORDER BY total_amount DESC;
+        SELECT 
+            s.branch_id,
+            b.name as branch_name,
+            SUM(s.amount) as total_amount,
+            COUNT(s.id) as entries_count
+        FROM 
+            sales_incomes s
+        LEFT JOIN 
+            branch b ON s.branch_id = b.id
+        GROUP BY 
+            s.branch_id, b.name
+        ORDER BY 
+            total_amount DESC;
       `;
 
       const [rows]: any = await db.query(summaryQuery);
@@ -46,7 +50,7 @@ export async function GET(request: Request) {
 
         return {
           branchId: row.branch_id ? row.branch_id.toString() : "Unknown",
-          branchName: `Branch Unit #${row.branch_id}`,
+          branchName: row.branch_name || `Branch Unit #${row.branch_id}`, // බ්‍රාන්ච් නම තිබේ නම් එය පෙන්වයි, නැත්නම් පරණ විදිහට පෙන්වයි
           totalAmount: totalAmount,
           entriesCount: Number(row.entries_count || 0),
         };
@@ -64,14 +68,14 @@ export async function GET(request: Request) {
     }
 
     let query = `
-      SELECT
+      SELECT 
           id,
           name,
           amount,
           date,
           branch_id,
           created_at
-      FROM
+      FROM 
           sales_incomes
       WHERE branch_id = ?
     `;
@@ -116,9 +120,9 @@ export async function POST(request: Request) {
     const branchId = body.branch_id || extractBranchId(request);
 
     if (!branchId || !name || amount === undefined || !date) {
-      return NextResponse.json({
-        success: false,
-        error: 'Missing required fields (branch_id, name, amount, or date)'
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Missing required fields (branch_id, name, amount, or date)' 
       }, { status: 400 });
     }
 
@@ -133,6 +137,7 @@ export async function POST(request: Request) {
       amount,
       date,
     ]);
+
     return NextResponse.json({
       success: true,
       insertId: result.insertId,
