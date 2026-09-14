@@ -1,8 +1,7 @@
 "use client";
-
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import {ArrowLeft,Fuel,Plus,Trash2,Save,CalendarDays,Truck,Droplets,Wallet,CircleDollarSign,CreditCard,RefreshCw} from "lucide-react";
+import { ArrowLeft,Fuel,Plus,Trash2,Save,CalendarDays,Truck,Droplets,Wallet,CircleDollarSign,CreditCard,RefreshCw} from "lucide-react";
 
 type DieselExpense = {
   id: number;
@@ -126,7 +125,11 @@ export default function DieselExpensesPage() {
       return;
     }
 
-    if (Number(amount) < 0 || Number(payable) < 0 || Number(paid) < 0) {
+    if (
+      Number(amount) < 0 ||
+      Number(payable) < 0 ||
+      Number(paid) < 0
+    ) {
       alert("Amounts cannot be negative.");
       return;
     }
@@ -238,7 +241,11 @@ export default function DieselExpensesPage() {
 
             <div>
               <div className="flex items-center gap-2">
-                <Fuel className="text-cyan-400" size={23} />
+                <Fuel
+                  className="text-cyan-400"
+                  size={23}
+                />
+
                 <h1 className="text-xl md:text-2xl font-bold">
                   Diesel Expenses
                 </h1>
@@ -308,13 +315,21 @@ export default function DieselExpensesPage() {
         {/* Form */}
         <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-6 shadow-xl">
           <div className="flex items-center gap-2 mb-6">
-            <Plus size={18} className="text-cyan-400" />
+            <Plus
+              size={18}
+              className="text-cyan-400"
+            />
+
             <h2 className="text-sm font-bold uppercase tracking-wider">
               Add Diesel Expense
             </h2>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form
+            onSubmit={handleSubmit}
+            className="space-y-6"
+          >
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
 
               {/* Machine */}
@@ -331,13 +346,21 @@ export default function DieselExpensesPage() {
 
                   <select
                     value={machine}
-                    onChange={(e) => setMachine(e.target.value)}
+                    onChange={(e) =>
+                      setMachine(e.target.value)
+                    }
                     className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-900 border border-slate-800 text-sm outline-none focus:border-cyan-500"
                   >
-                    <option value="">Select Machine</option>
+
+                    <option value="">
+                      Select Machine
+                    </option>
 
                     {MACHINE_OPTIONS.map((item) => (
-                      <option key={item} value={item}>
+                      <option
+                        key={item}
+                        value={item}
+                      >
                         {item}
                       </option>
                     ))}
@@ -379,12 +402,15 @@ export default function DieselExpensesPage() {
                   <input
                     type="date"
                     value={date}
-                    onChange={(e) => setDate(e.target.value)}
+                    onChange={(e) =>
+                      setDate(e.target.value)
+                    }
                     className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-900 border border-slate-800 text-sm outline-none focus:border-cyan-500"
                   />
                 </div>
               </div>
 
+              {/* Diesel */}
               <InputField
                 label="Total Diesel Quantity (L)"
                 value={diesel}
@@ -392,6 +418,7 @@ export default function DieselExpensesPage() {
                 placeholder="0.00"
               />
 
+              {/* Amount */}
               <InputField
                 label="Amount (Rs.)"
                 value={amount}
@@ -399,6 +426,7 @@ export default function DieselExpensesPage() {
                 placeholder="0.00"
               />
 
+              {/* Payable */}
               <InputField
                 label="Total Payable (Rs.)"
                 value={payable}
@@ -406,6 +434,7 @@ export default function DieselExpensesPage() {
                 placeholder="0.00"
               />
 
+              {/* Paid */}
               <InputField
                 label="Total Paid (Rs.)"
                 value={paid}
@@ -433,7 +462,10 @@ export default function DieselExpensesPage() {
               >
                 {submitting ? (
                   <>
-                    <RefreshCw size={17} className="animate-spin" />
+                    <RefreshCw
+                      size={17}
+                      className="animate-spin"
+                    />
                     Saving...
                   </>
                 ) : (
@@ -506,7 +538,12 @@ export default function DieselExpensesPage() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="py-16 text-center">
+
+                    <td
+                      colSpan={8}
+                      className="py-16 text-center"
+                    >
+
                       <RefreshCw
                         size={25}
                         className="mx-auto text-cyan-400 animate-spin mb-3"
@@ -518,7 +555,12 @@ export default function DieselExpensesPage() {
                   </tr>
                 ) : expenses.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-16 text-center">
+
+                    <td
+                      colSpan={8}
+                      className="py-16 text-center"
+                    >
+
                       <Fuel
                         size={35}
                         className="mx-auto text-slate-700 mb-3"
@@ -536,7 +578,9 @@ export default function DieselExpensesPage() {
                       className="border-b border-slate-800/70 hover:bg-slate-900/40 transition"
                     >
                       <td className="px-5 py-4 text-slate-300">
-                        {new Date(item.date).toLocaleDateString()}
+                        {new Date(
+                          item.date
+                        ).toLocaleDateString()}
                       </td>
 
                       <td className="px-5 py-4">
@@ -547,19 +591,30 @@ export default function DieselExpensesPage() {
                       </td>
 
                       <td className="px-5 py-4 text-right font-semibold text-slate-200">
-                        {Number(item.diesel).toFixed(2)}
+                        {Number(
+                          item.diesel
+                        ).toFixed(2)}
                       </td>
 
                       <td className="px-5 py-4 text-right text-slate-300">
-                        Rs. {Number(item.amount).toFixed(2)}
+                        Rs.{" "}
+                        {Number(
+                          item.amount
+                        ).toFixed(2)}
                       </td>
 
                       <td className="px-5 py-4 text-right text-slate-300">
-                        Rs. {Number(item.payable).toFixed(2)}
+                        Rs.{" "}
+                        {Number(
+                          item.payable
+                        ).toFixed(2)}
                       </td>
 
                       <td className="px-5 py-4 text-right text-emerald-400">
-                        Rs. {Number(item.paid).toFixed(2)}
+                        Rs.{" "}
+                        {Number(
+                          item.paid
+                        ).toFixed(2)}
                       </td>
 
                       <td className="px-5 py-4 text-right text-amber-400 font-bold">
@@ -573,7 +628,9 @@ export default function DieselExpensesPage() {
                       <td className="px-5 py-4 text-center">
                         <button
                           type="button"
-                          onClick={() => deleteExpense(item.id)}
+                          onClick={() =>
+                            deleteExpense(item.id)
+                          }
                           className="p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 transition"
                           title="Delete"
                         >
@@ -615,7 +672,9 @@ function InputField({
         min="0"
         step="0.01"
         value={value}
-        onChange={(e) => setValue(e.target.value)}
+        onChange={(e) =>
+          setValue(e.target.value)
+        }
         placeholder={placeholder}
         className="w-full px-4 py-3 rounded-xl bg-slate-900 border border-slate-800 text-sm outline-none focus:border-cyan-500 transition"
       />
