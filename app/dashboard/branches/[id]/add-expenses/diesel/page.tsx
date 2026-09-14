@@ -1,7 +1,7 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft,Fuel,Plus,Trash2,Save,CalendarDays,Truck,Droplets,Wallet,CircleDollarSign,CreditCard,RefreshCw} from "lucide-react";
+import {ArrowLeft,Fuel,Plus,Trash2,Save,CalendarDays,Truck,Droplets,Wallet,CircleDollarSign,CreditCard,RefreshCw} from "lucide-react";
 
 type DieselExpense = {
   id: number;
@@ -32,9 +32,11 @@ export default function DieselExpensesPage() {
 
   const [machine, setMachine] = useState("");
   const [otherMachine, setOtherMachine] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [date, setDate] = useState(
+    new Date().toISOString().split("T")[0]
+  );
+
   const [diesel, setDiesel] = useState("");
-  const [amount, setAmount] = useState("");
   const [payable, setPayable] = useState("");
   const [paid, setPaid] = useState("");
 
@@ -45,17 +47,25 @@ export default function DieselExpensesPage() {
   const selectedMachine =
     machine === "Other Machine" ? otherMachine : machine;
 
+  // Current form balance
   const balance = Math.max(
     0,
     Number(payable || 0) - Number(paid || 0)
   );
 
+  // Current form total amount
+  const formTotalAmount =
+    Number(payable || 0) + Number(paid || 0);
+
+  // Load expenses
   const loadExpenses = async () => {
     try {
       setLoading(true);
 
       const response = await fetch(
-        `/api/expences/diesel?branch_id=${encodeURIComponent(branchId)}`,
+        `/api/expences/diesel?branch_id=${encodeURIComponent(
+          branchId
+        )}`,
         {
           method: "GET",
           cache: "no-store",
@@ -65,7 +75,9 @@ export default function DieselExpensesPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to load expenses");
+        throw new Error(
+          data.error || "Failed to load expenses"
+        );
       }
 
       setExpenses(data.expenses || []);
@@ -81,13 +93,19 @@ export default function DieselExpensesPage() {
     loadExpenses();
   }, [branchId]);
 
+  // Summary totals
   const totals = useMemo(() => {
     return expenses.reduce(
       (acc, item) => {
         acc.diesel += Number(item.diesel);
-        acc.amount += Number(item.amount);
+
+        // Total Amount = Payable + Paid
+        acc.amount +=
+          Number(item.payable) + Number(item.paid);
+
         acc.payable += Number(item.payable);
         acc.paid += Number(item.paid);
+
         return acc;
       },
       {
@@ -99,8 +117,12 @@ export default function DieselExpensesPage() {
     );
   }, [expenses]);
 
-  const outstanding = totals.payable - totals.paid;
+  const outstanding = Math.max(
+    0,
+    totals.payable - totals.paid
+  );
 
+  // Submit
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -109,10 +131,14 @@ export default function DieselExpensesPage() {
       return;
     }
 
+    if (machine === "Other Machine" && !otherMachine.trim()) {
+      alert("Please enter the machine name.");
+      return;
+    }
+
     if (
       !date ||
       !diesel ||
-      !amount ||
       !payable ||
       !paid
     ) {
@@ -126,7 +152,6 @@ export default function DieselExpensesPage() {
     }
 
     if (
-      Number(amount) < 0 ||
       Number(payable) < 0 ||
       Number(paid) < 0
     ) {
@@ -135,47 +160,57 @@ export default function DieselExpensesPage() {
     }
 
     if (Number(paid) > Number(payable)) {
-      alert("Total Paid cannot be greater than Total Payable.");
+      alert(
+        "Total Paid cannot be greater than Total Payable."
+      );
       return;
     }
 
     try {
       setSubmitting(true);
 
-      const response = await fetch("/api/expences/diesel", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          branch_id: branchId,
-          date,
-          machine: selectedMachine,
-          diesel: Number(diesel),
-          amount: Number(amount),
-          payable: Number(payable),
-          paid: Number(paid),
-        }),
-      });
+      const response = await fetch(
+        "/api/expences/diesel",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            branch_id: branchId,
+            date,
+            machine: selectedMachine,
+            diesel: Number(diesel),
+            payable: Number(payable),
+            paid: Number(paid),
+          }),
+        }
+      );
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to save expense");
+        throw new Error(
+          data.error || "Failed to save expense"
+        );
       }
 
-      setExpenses((prev) => [data.expense, ...prev]);
+      setExpenses((prev) => [
+        data.expense,
+        ...prev,
+      ]);
 
+      // Reset form
       setMachine("");
       setOtherMachine("");
       setDiesel("");
-      setAmount("");
       setPayable("");
       setPaid("");
 
       alert("Diesel expense saved successfully.");
     } catch (error) {
       console.error(error);
+
       alert(
         error instanceof Error
           ? error.message
@@ -186,7 +221,10 @@ export default function DieselExpensesPage() {
     }
   };
 
-  const deleteExpense = async (expenseId: number) => {
+  // Delete
+  const deleteExpense = async (
+    expenseId: number
+  ) => {
     const confirmed = window.confirm(
       "Are you sure you want to delete this diesel expense?"
     );
@@ -204,11 +242,15 @@ export default function DieselExpensesPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to delete expense");
+        throw new Error(
+          data.error || "Failed to delete expense"
+        );
       }
 
       setExpenses((prev) =>
-        prev.filter((item) => item.id !== expenseId)
+        prev.filter(
+          (item) => item.id !== expenseId
+        )
       );
     } catch (error) {
       console.error(error);
@@ -266,7 +308,9 @@ export default function DieselExpensesPage() {
             >
               <RefreshCw
                 size={17}
-                className={loading ? "animate-spin" : ""}
+                className={
+                  loading ? "animate-spin" : ""
+                }
               />
             </button>
 
@@ -351,19 +395,20 @@ export default function DieselExpensesPage() {
                     }
                     className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-900 border border-slate-800 text-sm outline-none focus:border-cyan-500"
                   >
-
                     <option value="">
                       Select Machine
                     </option>
 
-                    {MACHINE_OPTIONS.map((item) => (
-                      <option
-                        key={item}
-                        value={item}
-                      >
-                        {item}
-                      </option>
-                    ))}
+                    {MACHINE_OPTIONS.map(
+                      (item) => (
+                        <option
+                          key={item}
+                          value={item}
+                        >
+                          {item}
+                        </option>
+                      )
+                    )}
                   </select>
                 </div>
               </div>
@@ -379,7 +424,9 @@ export default function DieselExpensesPage() {
                     type="text"
                     value={otherMachine}
                     onChange={(e) =>
-                      setOtherMachine(e.target.value)
+                      setOtherMachine(
+                        e.target.value
+                      )
                     }
                     placeholder="Enter machine name"
                     className="w-full px-4 py-3 rounded-xl bg-slate-900 border border-slate-800 text-sm outline-none focus:border-cyan-500"
@@ -418,14 +465,6 @@ export default function DieselExpensesPage() {
                 placeholder="0.00"
               />
 
-              {/* Amount */}
-              <InputField
-                label="Amount (Rs.)"
-                value={amount}
-                setValue={setAmount}
-                placeholder="0.00"
-              />
-
               {/* Payable */}
               <InputField
                 label="Total Payable (Rs.)"
@@ -441,6 +480,16 @@ export default function DieselExpensesPage() {
                 setValue={setPaid}
                 placeholder="0.00"
               />
+
+              {/* Total Amount */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-2">
+                  Total Amount (Rs.)
+                </label>
+                <div className="w-full px-4 py-3 rounded-xl bg-slate-900/70 border border-slate-800 text-sm text-cyan-400 font-bold">
+                  Rs. {formTotalAmount.toFixed(2)}
+                </div>
+              </div>
 
               {/* Balance */}
               <div>
@@ -514,7 +563,7 @@ export default function DieselExpensesPage() {
                   </th>
 
                   <th className="text-right px-5 py-4 text-xs font-bold text-slate-400 uppercase">
-                    Amount
+                    Total Amount
                   </th>
 
                   <th className="text-right px-5 py-4 text-xs font-bold text-slate-400 uppercase">
@@ -538,12 +587,10 @@ export default function DieselExpensesPage() {
               <tbody>
                 {loading ? (
                   <tr>
-
                     <td
                       colSpan={8}
                       className="py-16 text-center"
                     >
-
                       <RefreshCw
                         size={25}
                         className="mx-auto text-cyan-400 animate-spin mb-3"
@@ -555,12 +602,10 @@ export default function DieselExpensesPage() {
                   </tr>
                 ) : expenses.length === 0 ? (
                   <tr>
-
                     <td
                       colSpan={8}
                       className="py-16 text-center"
                     >
-
                       <Fuel
                         size={35}
                         className="mx-auto text-slate-700 mb-3"
@@ -572,79 +617,91 @@ export default function DieselExpensesPage() {
                     </td>
                   </tr>
                 ) : (
-                  expenses.map((item) => (
-                    <tr
-                      key={item.id}
-                      className="border-b border-slate-800/70 hover:bg-slate-900/40 transition"
-                    >
-                      <td className="px-5 py-4 text-slate-300">
-                        {new Date(
-                          item.date
-                        ).toLocaleDateString()}
-                      </td>
+                  expenses.map((item) => {
 
-                      <td className="px-5 py-4">
-                        <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 font-semibold">
-                          <Truck size={14} />
-                          {item.machine}
-                        </span>
-                      </td>
+                    const itemTotalAmount =
+                      Number(item.payable) +
+                      Number(item.paid);
 
-                      <td className="px-5 py-4 text-right font-semibold text-slate-200">
-                        {Number(
-                          item.diesel
-                        ).toFixed(2)}
-                      </td>
+                    const itemBalance =
+                      Number(item.payable) -
+                      Number(item.paid);
 
-                      <td className="px-5 py-4 text-right text-slate-300">
-                        Rs.{" "}
-                        {Number(
-                          item.amount
-                        ).toFixed(2)}
-                      </td>
+                    return (
+                      <tr
+                        key={item.id}
+                        className="border-b border-slate-800/70 hover:bg-slate-900/40 transition"
+                      >
 
-                      <td className="px-5 py-4 text-right text-slate-300">
-                        Rs.{" "}
-                        {Number(
-                          item.payable
-                        ).toFixed(2)}
-                      </td>
+                        <td className="px-5 py-4 text-slate-300">
+                          {new Date(
+                            item.date
+                          ).toLocaleDateString()}
+                        </td>
 
-                      <td className="px-5 py-4 text-right text-emerald-400">
-                        Rs.{" "}
-                        {Number(
-                          item.paid
-                        ).toFixed(2)}
-                      </td>
+                        <td className="px-5 py-4">
+                          <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 font-semibold">
+                            <Truck size={14} />
+                            {item.machine}
+                          </span>
+                        </td>
 
-                      <td className="px-5 py-4 text-right text-amber-400 font-bold">
-                        Rs.{" "}
-                        {(
-                          Number(item.payable) -
-                          Number(item.paid)
-                        ).toFixed(2)}
-                      </td>
+                        <td className="px-5 py-4 text-right font-semibold text-slate-200">
+                          {Number(
+                            item.diesel
+                          ).toFixed(2)}
+                        </td>
 
-                      <td className="px-5 py-4 text-center">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            deleteExpense(item.id)
-                          }
-                          className="p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 transition"
-                          title="Delete"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                        {/* Total Amount = Payable + Paid */}
+                        <td className="px-5 py-4 text-right text-cyan-400 font-bold">
+                          Rs.{" "}
+                          {itemTotalAmount.toFixed(2)}
+                        </td>
+
+                        <td className="px-5 py-4 text-right text-slate-300">
+                          Rs.{" "}
+                          {Number(
+                            item.payable
+                          ).toFixed(2)}
+                        </td>
+
+                        <td className="px-5 py-4 text-right text-emerald-400">
+                          Rs.{" "}
+                          {Number(
+                            item.paid
+                          ).toFixed(2)}
+                        </td>
+
+                        <td className="px-5 py-4 text-right text-amber-400 font-bold">
+                          Rs.{" "}
+                          {itemBalance.toFixed(2)}
+                        </td>
+
+                        <td className="px-5 py-4 text-center">
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              deleteExpense(
+                                item.id
+                              )
+                            }
+                            className="p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 transition"
+                            title="Delete"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+
+                        </td>
+
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
           </div>
         </div>
-
       </div>
     </div>
   );
