@@ -1,20 +1,20 @@
 "use client";
-import React, { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import {ArrowLeft,Fuel,Plus,Trash2,Save,CalendarDays,Truck,Droplets,Wallet,CircleDollarSign,CreditCard,RefreshCw} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {Fuel,Plus,RefreshCw,Trash2,CalendarDays,Wallet,CreditCard,CircleDollarSign,Droplets,AlertCircle,Truck} from "lucide-react";
+import { useParams } from "next/navigation";
 
 type DieselExpense = {
   id: number;
   branch_id: string;
   date: string;
   machine: string;
-  diesel: number;
-  amount: number;
-  payable: number;
-  paid: number;
+  diesel: number | string;
+  amount: number | string;
+  payable: number | string;
+  paid: number | string;
 };
 
-const MACHINE_OPTIONS = [
+const machines = [
   "Komatsu",
   "CAT",
   "JCB",
@@ -26,46 +26,34 @@ const MACHINE_OPTIONS = [
 
 export default function DieselExpensesPage() {
   const params = useParams();
-  const router = useRouter();
 
-  const branchId = String(params.id);
+  const branchId = Array.isArray(params?.id)
+    ? params.id[0]
+    : String(params?.id || "");
 
-  const [machine, setMachine] = useState("");
+  const [expenses, setExpenses] = useState<DieselExpense[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const [selectedMachine, setSelectedMachine] = useState("");
   const [otherMachine, setOtherMachine] = useState("");
-  const [date, setDate] = useState(
-    new Date().toISOString().split("T")[0]
-  );
 
+  const [date, setDate] = useState("");
   const [diesel, setDiesel] = useState("");
   const [payable, setPayable] = useState("");
   const [paid, setPaid] = useState("");
 
-  const [expenses, setExpenses] = useState<DieselExpense[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
+  // ----------------------------------------------------
+  // LOAD DATA
+  // ----------------------------------------------------
 
-  const selectedMachine =
-    machine === "Other Machine" ? otherMachine : machine;
-
-  // Current form balance
-  const balance = Math.max(
-    0,
-    Number(payable || 0) - Number(paid || 0)
-  );
-
-  // Current form total amount
-  const formTotalAmount =
-    Number(payable || 0) + Number(paid || 0);
-
-  // Load expenses
   const loadExpenses = async () => {
+    if (!branchId) return;
     try {
       setLoading(true);
 
       const response = await fetch(
-        `/api/expences/diesel?branch_id=${encodeURIComponent(
-          branchId
-        )}`,
+        `/api/expences/diesel?branch_id=${encodeURIComponent(branchId)}`,
         {
           method: "GET",
           cache: "no-store",
@@ -75,36 +63,202 @@ export default function DieselExpensesPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(
-          data.error || "Failed to load expenses"
-        );
+        throw new Error(data?.error || "Failed to load diesel expenses");
       }
 
-      setExpenses(data.expenses || []);
+      setExpenses(Array.isArray(data.expenses) ? data.expenses : []);
     } catch (error) {
-      console.error(error);
-      alert("Failed to load diesel expenses.");
+      console.error("LOAD DIESEL EXPENSE ERROR:", error);
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Failed to load diesel expenses"
+      );
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadExpenses();
+    if (branchId) {
+      loadExpenses();
+    }
   }, [branchId]);
 
-  // Summary totals
+  // ----------------------------------------------------
+  // FORM RESET
+  // ----------------------------------------------------
+
+  const resetForm = () => {
+    setSelectedMachine("");
+    setOtherMachine("");
+    setDate("");
+    setDiesel("");
+    setPayable("");
+    setPaid("");
+  };
+
+  // ----------------------------------------------------
+  // CALCULATIONS
+  // ----------------------------------------------------
+
+  const formPayable = Number(payable || 0);
+  const formPaid = Number(paid || 0);
+
+  // Amount = Total Payable
+  const formAmount = formPayable;
+
+  // Balance = Total Payable - Total Paid
+  const formBalance = Math.max(0, formPayable - formPaid);
+
+  // ----------------------------------------------------
+  // SUBMIT
+  // ----------------------------------------------------
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!branchId) {
+      alert("Branch ID is missing.");
+      return;
+    }
+
+    if (!selectedMachine) {
+      alert("Please select a machine.");
+      return;
+    }
+
+    if (selectedMachine === "Other Machine" && !otherMachine.trim()) {
+      alert("Please enter the machine name.");
+      return;
+    }
+
+    if (!date) {
+      alert("Please select a date.");
+      return;
+    }
+
+    const dieselValue = Number(diesel);
+    const payableValue = Number(payable);
+    const paidValue = Number(paid);
+
+    if (!Number.isFinite(dieselValue) || dieselValue <= 0) {
+      alert("Please enter a valid diesel quantity.");
+      return;
+    }
+
+    if (!Number.isFinite(payableValue) || payableValue < 0) {
+      alert("Please enter a valid Total Payable amount.");
+      return;
+    }
+
+    if (!Number.isFinite(paidValue) || paidValue < 0) {
+      alert("Please enter a valid Total Paid amount.");
+      return;
+    }
+
+    if (paidValue > payableValue) {
+      alert("Total Paid cannot be greater than Total Payable.");
+      return;
+    }
+
+    const machineName =
+      selectedMachine === "Other Machine"
+        ? otherMachine.trim()
+        : selectedMachine;
+    try {
+      setSaving(true);
+
+      const response = await fetch("/api/expences/diesel", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          branch_id: branchId,
+          date,
+          machine: machineName,
+          diesel: dieselValue,
+          payable: payableValue,
+          paid: paidValue,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.error || "Failed to save diesel expense");
+      }
+
+      alert("Diesel expense saved successfully.");
+      resetForm();
+      await loadExpenses();
+    } catch (error) {
+      console.error("SAVE DIESEL EXPENSE ERROR:", error);
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Failed to save diesel expense"
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ----------------------------------------------------
+  // DELETE
+  // ----------------------------------------------------
+
+  const handleDelete = async (id: number) => {
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this diesel expense?"
+    );
+
+    if (!confirmed) return;
+
+    try {
+      const response = await fetch(
+        `/api/expences/diesel?id=${encodeURIComponent(String(id))}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.error || "Failed to delete diesel expense");
+      }
+
+      setExpenses((previous) =>
+        previous.filter((expense) => expense.id !== id)
+      );
+
+      alert("Diesel expense deleted successfully.");
+    } catch (error) {
+      console.error("DELETE DIESEL EXPENSE ERROR:", error);
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Failed to delete diesel expense"
+      );
+    }
+  };
+
+  // ----------------------------------------------------
+  // SUMMARY
+  // ----------------------------------------------------
   const totals = useMemo(() => {
     return expenses.reduce(
       (acc, item) => {
-        acc.diesel += Number(item.diesel);
+        acc.diesel += Number(item.diesel || 0);
 
-        // Total Amount = Payable + Paid
-        acc.amount +=
-          Number(item.payable) + Number(item.paid);
+        // Amount = Total Payable
+        acc.amount += Number(item.payable || 0);
 
-        acc.payable += Number(item.payable);
-        acc.paid += Number(item.paid);
+        acc.payable += Number(item.payable || 0);
+        acc.paid += Number(item.paid || 0);
 
         return acc;
       },
@@ -122,463 +276,432 @@ export default function DieselExpensesPage() {
     totals.payable - totals.paid
   );
 
-  // Submit
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // ----------------------------------------------------
+  // CURRENCY FORMAT
+  // ----------------------------------------------------
 
-    if (!selectedMachine) {
-      alert("Please select a machine.");
-      return;
-    }
-
-    if (machine === "Other Machine" && !otherMachine.trim()) {
-      alert("Please enter the machine name.");
-      return;
-    }
-
-    if (
-      !date ||
-      !diesel ||
-      !payable ||
-      !paid
-    ) {
-      alert("Please fill all required fields.");
-      return;
-    }
-
-    if (Number(diesel) <= 0) {
-      alert("Diesel quantity must be greater than 0.");
-      return;
-    }
-
-    if (
-      Number(payable) < 0 ||
-      Number(paid) < 0
-    ) {
-      alert("Amounts cannot be negative.");
-      return;
-    }
-
-    if (Number(paid) > Number(payable)) {
-      alert(
-        "Total Paid cannot be greater than Total Payable."
-      );
-      return;
-    }
-
-    try {
-      setSubmitting(true);
-
-      const response = await fetch(
-        "/api/expences/diesel",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            branch_id: branchId,
-            date,
-            machine: selectedMachine,
-            diesel: Number(diesel),
-            payable: Number(payable),
-            paid: Number(paid),
-          }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          data.error || "Failed to save expense"
-        );
-      }
-
-      setExpenses((prev) => [
-        data.expense,
-        ...prev,
-      ]);
-
-      // Reset form
-      setMachine("");
-      setOtherMachine("");
-      setDiesel("");
-      setPayable("");
-      setPaid("");
-
-      alert("Diesel expense saved successfully.");
-    } catch (error) {
-      console.error(error);
-
-      alert(
-        error instanceof Error
-          ? error.message
-          : "Failed to save diesel expense."
-      );
-    } finally {
-      setSubmitting(false);
-    }
+  const formatNumber = (value: number | string) => {
+    return Number(value || 0).toLocaleString("en-LK", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
   };
 
-  // Delete
-  const deleteExpense = async (
-    expenseId: number
-  ) => {
-    const confirmed = window.confirm(
-      "Are you sure you want to delete this diesel expense?"
-    );
-
-    if (!confirmed) return;
-
-    try {
-      const response = await fetch(
-        `/api/expences/diesel?id=${expenseId}`,
-        {
-          method: "DELETE",
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          data.error || "Failed to delete expense"
-        );
-      }
-
-      setExpenses((prev) =>
-        prev.filter(
-          (item) => item.id !== expenseId
-        )
-      );
-    } catch (error) {
-      console.error(error);
-      alert(
-        error instanceof Error
-          ? error.message
-          : "Failed to delete expense."
-      );
-    }
-  };
+  // ----------------------------------------------------
+  // UI
+  // ----------------------------------------------------
 
   return (
-    <div className="min-h-screen bg-[#070b14] text-slate-100 p-5 md:p-8">
-      <div className="max-w-7xl mx-auto space-y-7">
+    <div className="min-h-screen bg-slate-50 p-4 md:p-6">
+      <div className="mx-auto max-w-7xl space-y-6">
 
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-6">
+        {/* HEADER */}
+        <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:flex-row md:items-center md:justify-between">
+
           <div className="flex items-center gap-4">
-            <button
-              type="button"
-              onClick={() =>
-                router.push(
-                  `/dashboard/branches/${branchId}/add-expenses`
-                )
-              }
-              className="p-3 rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-800 hover:text-cyan-400 transition"
-            >
-              <ArrowLeft size={19} />
-            </button>
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-100 text-cyan-700">
+              <Fuel size={30} />
+            </div>
 
             <div>
-              <div className="flex items-center gap-2">
-                <Fuel
-                  className="text-cyan-400"
-                  size={23}
-                />
+              <h1 className="text-2xl font-bold text-slate-800">
+                Diesel Expenses
+              </h1>
 
-                <h1 className="text-xl md:text-2xl font-bold">
-                  Diesel Expenses
-                </h1>
-              </div>
-
-              <p className="text-xs text-slate-400 mt-1">
-                Machine-wise diesel consumption and payment management
+              <p className="mt-1 text-sm text-slate-500">
+                Manage machine-wise diesel expenses and payments
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={loadExpenses}
-              className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-800 transition"
-              title="Refresh"
-            >
-              <RefreshCw
-                size={17}
-                className={
-                  loading ? "animate-spin" : ""
-                }
-              />
-            </button>
+          <button
+            type="button"
+            onClick={loadExpenses}
+            disabled={loading}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-800 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <RefreshCw
+              size={18}
+              className={loading ? "animate-spin" : ""}
+            />
 
-            <div className="px-4 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-400">
-              Branch ID:{" "}
-              <span className="text-cyan-400 font-bold">
-                #{branchId}
-              </span>
+            {loading ? "Refreshing..." : "Refresh"}
+          </button>
+        </div>
+
+        {/* SUMMARY CARDS */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+
+          {/* Diesel Used */}
+          <div className="rounded-2xl border border-cyan-100 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-500">
+                  Diesel Used
+                </p>
+
+                <h2 className="mt-2 text-2xl font-bold text-slate-800">
+                  {formatNumber(totals.diesel)} L
+                </h2>
+              </div>
+
+              <div className="rounded-xl bg-cyan-100 p-3 text-cyan-700">
+                <Droplets size={24} />
+              </div>
+            </div>
+          </div>
+
+          {/* Total Amount */}
+          <div className="rounded-2xl border border-blue-100 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-500">
+                  Total Amount
+                </p>
+
+                <h2 className="mt-2 text-2xl font-bold text-slate-800">
+                  Rs. {formatNumber(totals.amount)}
+                </h2>
+              </div>
+
+              <div className="rounded-xl bg-blue-100 p-3 text-blue-700">
+                <CircleDollarSign size={24} />
+              </div>
+            </div>
+          </div>
+
+          {/* Payable */}
+          <div className="rounded-2xl border border-orange-100 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-500">
+                  Payable
+                </p>
+
+                <h2 className="mt-2 text-2xl font-bold text-slate-800">
+                  Rs. {formatNumber(totals.payable)}
+                </h2>
+              </div>
+
+              <div className="rounded-xl bg-orange-100 p-3 text-orange-700">
+                <Wallet size={24} />
+              </div>
+            </div>
+          </div>
+
+          {/* Paid */}
+          <div className="rounded-2xl border border-green-100 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-500">
+                  Paid
+                </p>
+
+                <h2 className="mt-2 text-2xl font-bold text-slate-800">
+                  Rs. {formatNumber(totals.paid)}
+                </h2>
+              </div>
+
+              <div className="rounded-xl bg-green-100 p-3 text-green-700">
+                <CreditCard size={24} />
+              </div>
+            </div>
+          </div>
+
+          {/* Outstanding */}
+          <div className="rounded-2xl border border-red-100 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-500">
+                  Outstanding
+                </p>
+
+                <h2 className="mt-2 text-2xl font-bold text-red-600">
+                  Rs. {formatNumber(outstanding)}
+                </h2>
+              </div>
+
+              <div className="rounded-xl bg-red-100 p-3 text-red-600">
+                <AlertCircle size={24} />
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Summary */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-          <SummaryCard
-            icon={<Droplets size={19} />}
-            title="Diesel Used"
-            value={`${totals.diesel.toFixed(2)} L`}
-          />
+        {/* ADD FORM */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
 
-          <SummaryCard
-            icon={<CircleDollarSign size={19} />}
-            title="Total Amount"
-            value={`Rs. ${totals.amount.toFixed(2)}`}
-          />
+          <div className="mb-6 flex items-center gap-3">
+            <div className="rounded-xl bg-cyan-100 p-3 text-cyan-700">
+              <Plus size={22} />
+            </div>
 
-          <SummaryCard
-            icon={<Wallet size={19} />}
-            title="Payable"
-            value={`Rs. ${totals.payable.toFixed(2)}`}
-          />
+            <div>
+              <h2 className="text-xl font-bold text-slate-800">
+                Add Diesel Expense
+              </h2>
 
-          <SummaryCard
-            icon={<CreditCard size={19} />}
-            title="Paid"
-            value={`Rs. ${totals.paid.toFixed(2)}`}
-          />
-
-          <SummaryCard
-            icon={<Wallet size={19} />}
-            title="Outstanding"
-            value={`Rs. ${outstanding.toFixed(2)}`}
-          />
-        </div>
-
-        {/* Form */}
-        <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-6 shadow-xl">
-          <div className="flex items-center gap-2 mb-6">
-            <Plus
-              size={18}
-              className="text-cyan-400"
-            />
-
-            <h2 className="text-sm font-bold uppercase tracking-wider">
-              Add Diesel Expense
-            </h2>
+              <p className="text-sm text-slate-500">
+                Enter machine diesel usage and payment details
+              </p>
+            </div>
           </div>
 
-          <form
-            onSubmit={handleSubmit}
-            className="space-y-6"
-          >
+          <form onSubmit={handleSubmit} className="space-y-6">
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {/* MACHINE + DATE */}
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
 
               {/* Machine */}
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-2">
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
                   Machine
                 </label>
 
                 <div className="relative">
                   <Truck
-                    size={16}
-                    className="absolute left-3 top-3.5 text-slate-500"
+                    size={18}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
                   />
 
                   <select
-                    value={machine}
-                    onChange={(e) =>
-                      setMachine(e.target.value)
-                    }
-                    className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-900 border border-slate-800 text-sm outline-none focus:border-cyan-500"
+                    value={selectedMachine}
+                    onChange={(e) => {
+                      setSelectedMachine(e.target.value);
+
+                      if (e.target.value !== "Other Machine") {
+                        setOtherMachine("");
+                      }
+                    }}
+                    className="w-full appearance-none rounded-xl border border-slate-300 bg-white py-3 pl-10 pr-4 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
                   >
                     <option value="">
                       Select Machine
                     </option>
 
-                    {MACHINE_OPTIONS.map(
-                      (item) => (
-                        <option
-                          key={item}
-                          value={item}
-                        >
-                          {item}
-                        </option>
-                      )
-                    )}
+                    {machines.map((machine) => (
+                      <option key={machine} value={machine}>
+                        {machine}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
 
-              {/* Other Machine */}
-              {machine === "Other Machine" && (
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-2">
-                    Machine Name
-                  </label>
-
-                  <input
-                    type="text"
-                    value={otherMachine}
-                    onChange={(e) =>
-                      setOtherMachine(
-                        e.target.value
-                      )
-                    }
-                    placeholder="Enter machine name"
-                    className="w-full px-4 py-3 rounded-xl bg-slate-900 border border-slate-800 text-sm outline-none focus:border-cyan-500"
-                  />
-                </div>
-              )}
-
               {/* Date */}
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-2">
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
                   Date
                 </label>
 
                 <div className="relative">
                   <CalendarDays
-                    size={16}
-                    className="absolute left-3 top-3.5 text-slate-500"
+                    size={18}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
                   />
 
                   <input
                     type="date"
                     value={date}
-                    onChange={(e) =>
-                      setDate(e.target.value)
-                    }
-                    className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-900 border border-slate-800 text-sm outline-none focus:border-cyan-500"
+                    onChange={(e) => setDate(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 bg-white py-3 pl-10 pr-4 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
                   />
-                </div>
-              </div>
-
-              {/* Diesel */}
-              <InputField
-                label="Total Diesel Quantity (L)"
-                value={diesel}
-                setValue={setDiesel}
-                placeholder="0.00"
-              />
-
-              {/* Payable */}
-              <InputField
-                label="Total Payable (Rs.)"
-                value={payable}
-                setValue={setPayable}
-                placeholder="0.00"
-              />
-
-              {/* Paid */}
-              <InputField
-                label="Total Paid (Rs.)"
-                value={paid}
-                setValue={setPaid}
-                placeholder="0.00"
-              />
-
-              {/* Total Amount */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-2">
-                  Total Amount (Rs.)
-                </label>
-                <div className="w-full px-4 py-3 rounded-xl bg-slate-900/70 border border-slate-800 text-sm text-cyan-400 font-bold">
-                  Rs. {formTotalAmount.toFixed(2)}
-                </div>
-              </div>
-
-              {/* Balance */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-2">
-                  Balance (Rs.)
-                </label>
-
-                <div className="w-full px-4 py-3 rounded-xl bg-slate-900/70 border border-slate-800 text-sm text-amber-400 font-bold">
-                  Rs. {balance.toFixed(2)}
                 </div>
               </div>
             </div>
 
-            <div className="flex justify-end">
+            {/* OTHER MACHINE */}
+            {selectedMachine === "Other Machine" && (
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  Machine Name
+                </label>
+
+                <input
+                  type="text"
+                  value={otherMachine}
+                  onChange={(e) => setOtherMachine(e.target.value)}
+                  placeholder="Enter machine name"
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
+                />
+              </div>
+            )}
+
+            {/* DIESEL + PAYMENTS */}
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
+
+              {/* Diesel */}
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  Total Diesel Quantity (L)
+                </label>
+
+                <div className="relative">
+                  <Droplets
+                    size={18}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-cyan-500"
+                  />
+
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={diesel}
+                    onChange={(e) => setDiesel(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full rounded-xl border border-slate-300 px-4 py-3 pl-10 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
+                  />
+                </div>
+              </div>
+
+              {/* Payable */}
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  Total Payable (Rs.)
+                </label>
+
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={payable}
+                  onChange={(e) => setPayable(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+                />
+              </div>
+
+              {/* Paid */}
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  Total Paid (Rs.)
+                </label>
+
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={paid}
+                  onChange={(e) => setPaid(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
+                />
+              </div>
+            </div>
+
+            {/* AMOUNT + BALANCE */}
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+
+              {/* Amount */}
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  Amount (Rs.)
+                </label>
+
+                <input
+                  type="text"
+                  value={formatNumber(formAmount)}
+                  readOnly
+                  className="w-full cursor-not-allowed rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 outline-none"
+                />
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Amount is based on Total Payable
+                </p>
+              </div>
+
+              {/* Balance */}
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  Balance (Rs.)
+                </label>
+
+                <input
+                  type="text"
+                  value={formatNumber(formBalance)}
+                  readOnly
+                  className="w-full cursor-not-allowed rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 outline-none"
+                />
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Total Payable − Total Paid
+                </p>
+              </div>
+            </div>
+
+            {/* SUBMIT */}
+            <div className="flex justify-end pt-2">
               <button
                 type="submit"
-                disabled={submitting}
-                className="flex items-center gap-2 px-6 py-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold transition shadow-lg shadow-cyan-500/10"
+                disabled={saving}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-600 px-7 py-3 font-semibold text-white shadow-sm transition hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {submitting ? (
-                  <>
-                    <RefreshCw
-                      size={17}
-                      className="animate-spin"
-                    />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Save size={17} />
-                    Submit Expense
-                  </>
-                )}
+                <Plus size={19} />
+
+                {saving
+                  ? "Saving..."
+                  : "Save Diesel Expense"}
               </button>
             </div>
           </form>
         </div>
 
-        {/* Table */}
-        <div className="bg-slate-950/70 border border-slate-800 rounded-2xl overflow-hidden">
-          <div className="px-6 py-5 border-b border-slate-800 flex items-center justify-between">
+        {/* TABLE */}
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+
+          <div className="flex flex-col gap-3 border-b border-slate-200 p-5 md:flex-row md:items-center md:justify-between">
+
             <div>
-              <h2 className="text-sm font-bold uppercase tracking-wider">
+              <h2 className="text-xl font-bold text-slate-800">
                 Diesel Expense Records
               </h2>
 
-              <p className="text-xs text-slate-500 mt-1">
-                Saved database records for this branch
+              <p className="mt-1 text-sm text-slate-500">
+                Saved diesel expense records for this branch
               </p>
             </div>
 
-            <span className="text-xs px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400">
+            <div className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-600">
               {expenses.length} Records
-            </span>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+
+            <table className="w-full min-w-[1100px] border-collapse">
+
               <thead>
-                <tr className="bg-slate-900/80 border-b border-slate-800">
-                  <th className="text-left px-5 py-4 text-xs font-bold text-slate-400 uppercase">
+                <tr className="border-b border-slate-200 bg-slate-50 text-left">
+
+                  <th className="px-5 py-4 text-xs font-bold uppercase tracking-wide text-slate-500">
                     Date
                   </th>
 
-                  <th className="text-left px-5 py-4 text-xs font-bold text-slate-400 uppercase">
+                  <th className="px-5 py-4 text-xs font-bold uppercase tracking-wide text-slate-500">
                     Machine
                   </th>
 
-                  <th className="text-right px-5 py-4 text-xs font-bold text-slate-400 uppercase">
+                  <th className="px-5 py-4 text-right text-xs font-bold uppercase tracking-wide text-slate-500">
                     Diesel (L)
                   </th>
 
-                  <th className="text-right px-5 py-4 text-xs font-bold text-slate-400 uppercase">
-                    Total Amount
+                  <th className="px-5 py-4 text-right text-xs font-bold uppercase tracking-wide text-slate-500">
+                    Amount
                   </th>
 
-                  <th className="text-right px-5 py-4 text-xs font-bold text-slate-400 uppercase">
-                    Payable
+                  <th className="px-5 py-4 text-right text-xs font-bold uppercase tracking-wide text-slate-500">
+                    Total Payable
                   </th>
 
-                  <th className="text-right px-5 py-4 text-xs font-bold text-slate-400 uppercase">
-                    Paid
+                  <th className="px-5 py-4 text-right text-xs font-bold uppercase tracking-wide text-slate-500">
+                    Total Paid
                   </th>
 
-                  <th className="text-right px-5 py-4 text-xs font-bold text-slate-400 uppercase">
+                  <th className="px-5 py-4 text-right text-xs font-bold uppercase tracking-wide text-slate-500">
                     Balance
                   </th>
 
-                  <th className="text-center px-5 py-4 text-xs font-bold text-slate-400 uppercase">
+                  <th className="px-5 py-4 text-center text-xs font-bold uppercase tracking-wide text-slate-500">
                     Action
                   </th>
                 </tr>
@@ -589,109 +712,123 @@ export default function DieselExpensesPage() {
                   <tr>
                     <td
                       colSpan={8}
-                      className="py-16 text-center"
+                      className="px-5 py-12 text-center text-sm text-slate-500"
                     >
-                      <RefreshCw
-                        size={25}
-                        className="mx-auto text-cyan-400 animate-spin mb-3"
-                      />
-                      <p className="text-sm text-slate-500">
-                        Loading records...
-                      </p>
+                      <div className="flex items-center justify-center gap-2">
+                        <RefreshCw
+                          size={18}
+                          className="animate-spin"
+                        />
+                        Loading diesel expenses...
+                      </div>
                     </td>
                   </tr>
                 ) : expenses.length === 0 ? (
                   <tr>
                     <td
                       colSpan={8}
-                      className="py-16 text-center"
+                      className="px-5 py-12 text-center"
                     >
-                      <Fuel
-                        size={35}
-                        className="mx-auto text-slate-700 mb-3"
-                      />
+                      <div className="mx-auto flex max-w-sm flex-col items-center">
 
-                      <p className="text-sm text-slate-500">
-                        No diesel expense records found.
-                      </p>
+                        <div className="mb-3 rounded-full bg-slate-100 p-4 text-slate-400">
+                          <Fuel size={28} />
+                        </div>
+
+                        <p className="font-semibold text-slate-700">
+                          No diesel expenses found
+                        </p>
+
+                        <p className="mt-1 text-sm text-slate-500">
+                          Add a diesel expense using the form above.
+                        </p>
+                      </div>
                     </td>
                   </tr>
                 ) : (
                   expenses.map((item) => {
 
-                    const itemTotalAmount =
-                      Number(item.payable) +
-                      Number(item.paid);
+                    const itemAmount =
+                      Number(item.payable || 0);
+
+                    const itemPayable =
+                      Number(item.payable || 0);
+
+                    const itemPaid =
+                      Number(item.paid || 0);
 
                     const itemBalance =
-                      Number(item.payable) -
-                      Number(item.paid);
+                      Math.max(
+                        0,
+                        itemPayable - itemPaid
+                      );
 
                     return (
                       <tr
                         key={item.id}
-                        className="border-b border-slate-800/70 hover:bg-slate-900/40 transition"
+                        className="border-b border-slate-100 transition hover:bg-slate-50"
                       >
 
-                        <td className="px-5 py-4 text-slate-300">
-                          {new Date(
-                            item.date
-                          ).toLocaleDateString()}
+                        {/* DATE */}
+                        <td className="px-5 py-4 text-sm text-slate-700">
+                          {item.date
+                            ? new Date(
+                                `${item.date}T00:00:00`
+                              ).toLocaleDateString("en-GB")
+                            : "-"}
                         </td>
 
+                        {/* MACHINE */}
                         <td className="px-5 py-4">
-                          <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 font-semibold">
-                            <Truck size={14} />
-                            {item.machine}
-                          </span>
+                          <div className="flex items-center gap-2">
+
+                            <div className="rounded-lg bg-cyan-100 p-2 text-cyan-700">
+                              <Truck size={16} />
+                            </div>
+
+                            <span className="font-semibold text-slate-700">
+                              {item.machine}
+                            </span>
+                          </div>
                         </td>
 
-                        <td className="px-5 py-4 text-right font-semibold text-slate-200">
-                          {Number(
-                            item.diesel
-                          ).toFixed(2)}
+                        {/* DIESEL */}
+                        <td className="px-5 py-4 text-right text-sm font-medium text-slate-700">
+                          {formatNumber(item.diesel)}
                         </td>
 
-                        {/* Total Amount = Payable + Paid */}
-                        <td className="px-5 py-4 text-right text-cyan-400 font-bold">
-                          Rs.{" "}
-                          {itemTotalAmount.toFixed(2)}
+                        {/* AMOUNT */}
+                        <td className="px-5 py-4 text-right text-sm font-semibold text-blue-700">
+                          Rs. {formatNumber(itemAmount)}
                         </td>
 
-                        <td className="px-5 py-4 text-right text-slate-300">
-                          Rs.{" "}
-                          {Number(
-                            item.payable
-                          ).toFixed(2)}
+                        {/* PAYABLE */}
+                        <td className="px-5 py-4 text-right text-sm font-semibold text-orange-700">
+                          Rs. {formatNumber(itemPayable)}
                         </td>
 
-                        <td className="px-5 py-4 text-right text-emerald-400">
-                          Rs.{" "}
-                          {Number(
-                            item.paid
-                          ).toFixed(2)}
+                        {/* PAID */}
+                        <td className="px-5 py-4 text-right text-sm font-semibold text-green-700">
+                          Rs. {formatNumber(itemPaid)}
                         </td>
 
-                        <td className="px-5 py-4 text-right text-amber-400 font-bold">
-                          Rs.{" "}
-                          {itemBalance.toFixed(2)}
+                        {/* BALANCE */}
+                        <td className="px-5 py-4 text-right text-sm font-semibold text-red-600">
+                          Rs. {formatNumber(itemBalance)}
                         </td>
 
+                        {/* DELETE */}
                         <td className="px-5 py-4 text-center">
-
                           <button
                             type="button"
                             onClick={() =>
-                              deleteExpense(
-                                item.id
-                              )
+                              handleDelete(item.id)
                             }
-                            className="p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 transition"
+                            className="inline-flex items-center justify-center rounded-lg bg-red-50 p-2 text-red-600 transition hover:bg-red-100 hover:text-red-700"
                             title="Delete"
                           >
-                            <Trash2 size={16} />
+                            <Trash2 size={17} />
                           </button>
-
                         </td>
 
                       </tr>
@@ -702,64 +839,36 @@ export default function DieselExpensesPage() {
             </table>
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
 
-function InputField({
-  label,
-  value,
-  setValue,
-  placeholder,
-}: {
-  label: string;
-  value: string;
-  setValue: (value: string) => void;
-  placeholder: string;
-}) {
-  return (
-    <div>
-      <label className="block text-xs font-semibold text-slate-400 mb-2">
-        {label}
-      </label>
+        {/* PAYMENT INFORMATION */}
+        <div className="rounded-2xl border border-blue-100 bg-blue-50 p-5">
 
-      <input
-        type="number"
-        min="0"
-        step="0.01"
-        value={value}
-        onChange={(e) =>
-          setValue(e.target.value)
-        }
-        placeholder={placeholder}
-        className="w-full px-4 py-3 rounded-xl bg-slate-900 border border-slate-800 text-sm outline-none focus:border-cyan-500 transition"
-      />
-    </div>
-  );
-}
+          <div className="flex gap-3">
 
-function SummaryCard({
-  icon,
-  title,
-  value,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  value: string;
-}) {
-  return (
-    <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-4 hover:border-cyan-500/30 transition">
-      <div className="flex items-center gap-2 text-cyan-400 mb-3">
-        {icon}
+            <div className="mt-0.5 text-blue-600">
+              <AlertCircle size={20} />
+            </div>
 
-        <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500">
-          {title}
-        </span>
-      </div>
+            <div>
+              <h3 className="font-semibold text-blue-800">
+                Payment Calculation
+              </h3>
 
-      <div className="text-base md:text-lg font-bold text-slate-100 truncate">
-        {value}
+              <p className="mt-1 text-sm leading-6 text-blue-700">
+                Amount is equal to Total Payable.
+                Balance is calculated as Total Payable
+                minus Total Paid.
+              </p>
+
+              <p className="mt-1 text-sm font-semibold text-blue-800">
+                Example: Payable Rs. 100,000 − Paid
+                Rs. 60,000 = Balance Rs. 40,000
+              </p>
+            </div>
+
+          </div>
+        </div>
+
       </div>
     </div>
   );
