@@ -39,10 +39,9 @@ type IncomeResponse = {
 export default function ViewEntriesPage() {
   const [entries, setEntries] = useState<Entry[]>([]);
 
-  // EXACT Dashboard values
+  // Dashboard values
   const [totalIncome, setTotalIncome] = useState(0);
   const [totalExpenses, setTotalExpenses] = useState(0);
-  const [totalRemaining, setTotalRemaining] = useState(0);
 
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -71,11 +70,7 @@ export default function ViewEntriesPage() {
       const dashboardExpenses =
         Number(result.cards?.totalExpenses ?? 0) || 0;
 
-      const dashboardRemaining =
-        Number(result.cards?.totalRemaining ?? 0) || 0;
-
       setTotalExpenses(dashboardExpenses);
-      setTotalRemaining(dashboardRemaining);
 
       const incomeResponse = await fetch(INCOME_API, {
         method: "GET",
@@ -98,7 +93,10 @@ export default function ViewEntriesPage() {
         ? result.sales.map((entry) => ({
             ...entry,
             type: entry.type || "Expense",
-            category: entry.category || "Sales Expense",
+
+            category:
+              entry.category || "Sales Expense",
+
             description:
               entry.description ||
               (entry.id
@@ -107,37 +105,46 @@ export default function ViewEntriesPage() {
           }))
         : [];
 
-      const capitalEntries: Entry[] = Array.isArray(result.capital)
-        ? result.capital.map((entry) => ({
-            ...entry,
-            type: entry.type || "Expense",
-            category: entry.category || "Capital Expense",
-            description:
-              entry.description ||
-              (entry.id
-                ? `Capital Expense #${entry.id}`
-                : "Capital Expense"),
-          }))
-        : [];
+      const capitalEntries: Entry[] =
+        Array.isArray(result.capital)
+          ? result.capital.map((entry) => ({
+              ...entry,
 
-      const incomeEntries: Entry[] = Array.isArray(
-        incomeResult.data
-      )
-        ? incomeResult.data.map((entry: any) => ({
-            ...entry,
-            type: entry.type || "Income",
-            category: entry.category || "Income",
-            description:
-              entry.description ||
-              entry.personName ||
-              entry.person_name ||
-              entry.name ||
-              (entry.id
-                ? `Income Entry #${entry.id}`
-                : "Income Entry"),
-            amount: entry.amount ?? 0,
-          }))
-        : [];
+              type: entry.type || "Expense",
+
+              category:
+                entry.category || "Capital Expense",
+
+              description:
+                entry.description ||
+                (entry.id
+                  ? `Capital Expense #${entry.id}`
+                  : "Capital Expense"),
+            }))
+          : [];
+
+      const incomeEntries: Entry[] =
+        Array.isArray(incomeResult.data)
+          ? incomeResult.data.map((entry: any) => ({
+              ...entry,
+
+              type: entry.type || "Income",
+
+              category:
+                entry.category || "Income",
+
+              description:
+                entry.description ||
+                entry.personName ||
+                entry.person_name ||
+                entry.name ||
+                (entry.id
+                  ? `Income Entry #${entry.id}`
+                  : "Income Entry"),
+
+              amount: entry.amount ?? 0,
+            }))
+          : [];
 
       const loadedEntries = [
         ...incomeEntries,
@@ -195,7 +202,6 @@ export default function ViewEntriesPage() {
       });
     }
 
-
     if (searchQuery.trim()) {
       const query = searchQuery.trim().toLowerCase();
 
@@ -224,29 +230,32 @@ export default function ViewEntriesPage() {
     }
 
     return result;
-  }, [entries, fromDate, toDate, searchQuery]);
+  }, [
+    entries,
+    fromDate,
+    toDate,
+    searchQuery,
+  ]);
 
   const filteredSummary = useMemo(() => {
     if (!fromDate && !toDate) {
       return {
         income: totalIncome,
         expenses: totalExpenses,
-        balance: totalRemaining,
       };
     }
 
     let income = 0;
     let expenses = 0;
     filteredEntries.forEach((entry) => {
-      const amount = Number(entry.amount ?? 0) || 0;
+      const amount =
+        Number(entry.amount ?? 0) || 0;
 
-      const entryType = String(
-        entry.type ?? ""
-      ).toLowerCase();
+      const entryType =
+        String(entry.type ?? "").toLowerCase();
 
-      const category = String(
-        entry.category ?? ""
-      ).toLowerCase();
+      const category =
+        String(entry.category ?? "").toLowerCase();
 
       const isIncome =
         entryType.includes("income") ||
@@ -264,7 +273,6 @@ export default function ViewEntriesPage() {
     return {
       income,
       expenses,
-      balance: income - expenses,
     };
   }, [
     fromDate,
@@ -272,10 +280,11 @@ export default function ViewEntriesPage() {
     filteredEntries,
     totalIncome,
     totalExpenses,
-    totalRemaining,
   ]);
 
-  const balance = filteredSummary.balance;
+  const balance =
+    filteredSummary.income -
+    filteredSummary.expenses;
 
   const isLoss = balance < 0;
 
@@ -289,7 +298,8 @@ export default function ViewEntriesPage() {
   const formatDate = (date?: string) => {
     if (!date) return "-";
 
-    const datePart = String(date).substring(0, 10);
+    const datePart =
+      String(date).substring(0, 10);
 
     const parts = datePart.split("-");
 
@@ -309,9 +319,7 @@ export default function ViewEntriesPage() {
   return (
     <div className="min-h-screen bg-[#070a13] text-slate-100 p-4 sm:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto">
-
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5 mb-8">
-
           <div>
             <div className="flex items-center gap-2 text-xs text-slate-500 mb-2">
               <Link
@@ -330,10 +338,7 @@ export default function ViewEntriesPage() {
 
             <div className="flex items-center gap-3">
               <div className="h-11 w-11 rounded-xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center">
-                <FileText
-                  size={22}
-                  className="text-blue-400"
-                />
+                <FileText size={22} className="text-blue-400" />
               </div>
               <div>
                 <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
@@ -354,10 +359,9 @@ export default function ViewEntriesPage() {
             disabled={loading}
             className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800/80 px-5 py-3 text-sm font-semibold text-slate-200 transition hover:border-blue-500/40 hover:bg-slate-800 hover:text-blue-400 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <RefreshCw size={17} className={loading ? "animate-spin" : ""} />
+            <RefreshCw size={17} className={loading ? "animate-spin" : "" } />
             {loading ? "Refreshing..." : "Refresh"}
           </button>
-
         </div>
 
         {error && (
@@ -367,7 +371,6 @@ export default function ViewEntriesPage() {
         )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 mb-7">
-
           {/* TOTAL INCOME */}
           <div className="rounded-2xl border border-slate-800 bg-[#0d1527] p-5 shadow-xl shadow-black/10">
             <div className="flex items-start justify-between">
@@ -377,12 +380,14 @@ export default function ViewEntriesPage() {
                 </p>
 
                 <h2 className="text-2xl sm:text-3xl font-bold text-white mt-2">
-                  {formatMoney(filteredSummary.income)}
+                  {formatMoney(
+                    filteredSummary.income
+                  )}
                 </h2>
               </div>
 
               <div className="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-                <TrendingUp size={20} className="text-emerald-400"/>
+                <TrendingUp size={20} className="text-emerald-400" />
               </div>
             </div>
 
@@ -401,7 +406,9 @@ export default function ViewEntriesPage() {
                 </p>
 
                 <h2 className="text-2xl sm:text-3xl font-bold text-white mt-2">
-                  {formatMoney(filteredSummary.expenses)}
+                  {formatMoney(
+                    filteredSummary.expenses
+                  )}
                 </h2>
               </div>
 
@@ -438,7 +445,9 @@ export default function ViewEntriesPage() {
                       : "text-blue-400"
                   }`}
                 >
-                  {formatMoney(Math.abs(balance))}
+                  {formatMoney(
+                    Math.abs(balance)
+                  )}
                 </h2>
               </div>
 
@@ -449,7 +458,9 @@ export default function ViewEntriesPage() {
                     : "bg-blue-500/10 border-blue-500/20"
                 }`}
               >
-                <Wallet size={20} className={ isLoss ? "text-red-400" : "text-blue-400" } />
+
+                <Wallet size={20} className={isLoss ? "text-red-400" : "text-blue-400" } />
+
               </div>
             </div>
 
@@ -488,7 +499,9 @@ export default function ViewEntriesPage() {
                   type="date"
                   value={fromDate}
                   onChange={(e) =>
-                    setFromDate(e.target.value)
+                    setFromDate(
+                      e.target.value
+                    )
                   }
                   className="w-full rounded-xl border border-slate-700 bg-[#070a13] pl-10 pr-3 py-3 text-sm text-slate-200 outline-none transition focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20"
                 />
@@ -503,13 +516,15 @@ export default function ViewEntriesPage() {
 
               <div className="relative">
 
-                <CalendarDays size={17}  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                <CalendarDays size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
 
                 <input
                   type="date"
                   value={toDate}
                   onChange={(e) =>
-                    setToDate(e.target.value)
+                    setToDate(
+                      e.target.value
+                    )
                   }
                   className="w-full rounded-xl border border-slate-700 bg-[#070a13] pl-10 pr-3 py-3 text-sm text-slate-200 outline-none transition focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20"
                 />
@@ -528,7 +543,9 @@ export default function ViewEntriesPage() {
                   type="text"
                   value={searchQuery}
                   onChange={(e) =>
-                    setSearchQuery(e.target.value)
+                    setSearchQuery(
+                      e.target.value
+                    )
                   }
                   placeholder="Search entries..."
                   className="w-full rounded-xl border border-slate-700 bg-[#070a13] pl-10 pr-3 py-3 text-sm text-slate-200 placeholder:text-slate-600 outline-none transition focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20"
@@ -587,10 +604,7 @@ export default function ViewEntriesPage() {
           {loading ? (
             <div className="py-16 flex flex-col items-center justify-center">
 
-              <RefreshCw
-                size={28}
-                className="animate-spin text-blue-400 mb-3"
-              />
+              <RefreshCw size={28} className="animate-spin text-blue-400 mb-3" />
 
               <p className="text-sm text-slate-500">
                 Loading entries...
@@ -601,12 +615,7 @@ export default function ViewEntriesPage() {
             /* EMPTY */
             <div className="py-16 flex flex-col items-center justify-center px-5">
               <div className="h-14 w-14 rounded-2xl bg-slate-800/70 border border-slate-700 flex items-center justify-center mb-4">
-
-                <FileText
-                  size={25}
-                  className="text-slate-500"
-                />
-
+                <FileText size={25} className="text-slate-500" />
               </div>
 
               <h3 className="text-sm font-semibold text-slate-300">
@@ -623,7 +632,6 @@ export default function ViewEntriesPage() {
               <table className="w-full min-w-[850px]">
                 <thead>
                   <tr className="border-b border-slate-800 bg-[#0a1020]">
-
                     <th className="text-left px-5 py-4 text-[10px] font-bold uppercase tracking-widest text-slate-500">
                       Date
                     </th>
@@ -650,100 +658,135 @@ export default function ViewEntriesPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredEntries.map((entry, index) => {
-                    const amount =
-                      Number(entry.amount ?? 0) || 0;
 
-                    const entryType =
-                      String(
-                        entry.type ?? ""
-                      ).toLowerCase();
+                  {filteredEntries.map(
+                    (entry, index) => {
 
-                    const category =
-                      String(
-                        entry.category ?? ""
-                      ).toLowerCase();
+                      const amount =
+                        Number(
+                          entry.amount ?? 0
+                        ) || 0;
 
-                    const isIncome =
-                      entryType.includes("income") ||
-                      entryType === "in" ||
-                      entryType === "credit" ||
-                      category.includes("income");
+                      const entryType =
+                        String(
+                          entry.type ?? ""
+                        ).toLowerCase();
 
-                    return (
-                      <tr
-                        key={
-                          entry.id ??
-                          `${entry.date}-${entry.description}-${index}`
-                        }
-                        className="border-b border-slate-800/70 last:border-0 hover:bg-slate-800/20 transition"
-                      >
+                      const category =
+                        String(
+                          entry.category ?? ""
+                        ).toLowerCase();
 
-                        {/* DATE */}
-                        <td className="px-5 py-4">
-                          <div className="flex items-center gap-2 text-sm text-slate-300">
-                            <CalendarDays size={15} className="text-slate-600" />
-                            {formatDate(entry.date)}
-                          </div>
-                        </td>
+                      const isIncome =
+                        entryType.includes(
+                          "income"
+                        ) ||
+                        entryType === "in" ||
+                        entryType === "credit" ||
+                        category.includes(
+                          "income"
+                        );
 
-                        {/* DESCRIPTION */}
-                        <td className="px-5 py-4">
-                          <div className="font-medium text-slate-200">
-                            {entry.description || "-"}
-                          </div>
-                        </td>
+                      return (
 
-                        {/* CATEGORY */}
-                        <td className="px-5 py-4">
-                          <span className="inline-flex rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 py-1 text-[11px] font-medium text-slate-400">
-                            {entry.category || "-"}
-                          </span>
-                        </td>
+                        <tr
+                          key={
+                            entry.id ??
+                            `${entry.date}-${entry.description}-${index}`
+                          }
+                          className="border-b border-slate-800/70 last:border-0 hover:bg-slate-800/20 transition"
+                        >
 
-                        {/* TYPE */}
-                        <td className="px-5 py-4">
-                          <span
-                            className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold uppercase ${
-                              isIncome
-                                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                                : "bg-orange-500/10 text-orange-400 border border-orange-500/20"
-                            }`}
-                          >
+                          {/* DATE */}
+                          <td className="px-5 py-4">
 
-                            {isIncome ? (
-                              <TrendingUp size={13} />
-                            ) : (
-                              <TrendingDown size={13} />
-                            )}
-                            {entry.type ||
-                              (isIncome ? "Income" : "Expense")}
-                          </span>
-                        </td>
+                            <div className="flex items-center gap-2 text-sm text-slate-300">
 
-                        {/* BRANCH */}
-                        <td className="px-5 py-4">
-                          <span className="text-sm text-slate-400">
-                            {entry.branch_name || entry.branch_id || "-"}
-                          </span>
-                        </td>
+                              <CalendarDays
+                                size={15}
+                                className="text-slate-600"
+                              />
 
-                        {/* AMOUNT */}
-                        <td className="px-5 py-4 text-right">
-                          <span
-                            className={`font-bold ${
-                              isIncome
-                                ? "text-emerald-400"
-                                : "text-orange-400"
-                            }`}
-                          >
-                            {isIncome ? "+" : "-"}
-                            {formatMoney(amount)}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                              {formatDate(
+                                entry.date
+                              )}
+
+                            </div>
+
+                          </td>
+
+                          {/* DESCRIPTION */}
+                          <td className="px-5 py-4">
+                            <div className="font-medium text-slate-200">
+                              {entry.description ||
+                                "-"}
+                            </div>
+
+                          </td>
+
+                          {/* CATEGORY */}
+                          <td className="px-5 py-4">
+                            <span className="inline-flex rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 py-1 text-[11px] font-medium text-slate-400">
+                              {entry.category ||
+                                "-"}
+                            </span>
+
+                          </td>
+
+                          {/* TYPE */}
+                          <td className="px-5 py-4">
+                            <span
+                              className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold uppercase ${
+                                isIncome
+                                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                  : "bg-orange-500/10 text-orange-400 border border-orange-500/20"
+                              }`}
+                            >
+
+                              {isIncome ? ( <TrendingUp size={13} /> ) : ( <TrendingDown size={13} /> )}
+
+                              {entry.type ||
+                                (isIncome ? "Income" : "Expense")}
+
+                            </span>
+
+                          </td>
+
+                          {/* BRANCH */}
+                          <td className="px-5 py-4">
+
+                            <span className="text-sm text-slate-400">
+                              {entry.branch_name ||
+                                entry.branch_id ||
+                                "-"}
+                            </span>
+
+                          </td>
+
+                          {/* AMOUNT */}
+                          <td className="px-5 py-4 text-right">
+
+                            <span
+                              className={`font-bold ${
+                                isIncome
+                                  ? "text-emerald-400"
+                                  : "text-orange-400"
+                              }`}
+                            >
+
+                              {isIncome ? "+" : "-"}
+
+                              {formatMoney(
+                                amount
+                              )}
+
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    }
+                  )}
+
                 </tbody>
               </table>
             </div>
