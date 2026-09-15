@@ -5,6 +5,7 @@ interface SalesIncomeRequestBody {
   branch_id?: string | number;
   name?: string;
   amount?: number | string;
+  credit?: number | string;
   date?: string;
 }
 
@@ -25,10 +26,27 @@ function extractBranchId(request: Request): string | null {
 }
 
 function isValidDate(date: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(date);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return false;
+  }
+
+  const parsedDate = new Date(`${date}T00:00:00Z`);
+
+  return (
+    !Number.isNaN(parsedDate.getTime()) &&
+    parsedDate.toISOString().slice(0, 10) === date
+  );
 }
 
-// GET: Fetch sales incomes or branch-wise summary
+function formatDate(value: unknown): string {
+  if (value instanceof Date) {
+    return value.toISOString().slice(0, 10);
+  }
+
+  return String(value ?? "").slice(0, 10);
+}
+
+// GET: Fetch sales income records or branch-wise summary
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -49,7 +67,6 @@ export async function GET(request: Request) {
       );
     }
 
-    // Branch-wise summary
     if (isSummary) {
       const queryParams: string[] = [];
 
@@ -58,6 +75,7 @@ export async function GET(request: Request) {
           s.branch_id,
           b.branch_name AS branch_name,
           SUM(s.amount) AS total_amount,
+          SUM(s.credit) AS total_credit,
           COUNT(s.id) AS entries_count
         FROM sales_incomes s
         LEFT JOIN branch b ON s.branch_id = b.id
@@ -87,10 +105,14 @@ export async function GET(request: Request) {
       const [rows]: any = await db.query(summaryQuery, queryParams);
 
       let grandTotal = 0;
+      let grandCredit = 0;
 
       const data = rows.map((row: any) => {
         const totalAmount = Number(row.total_amount || 0);
+        const totalCredit = Number(row.total_credit || 0);
+
         grandTotal += totalAmount;
+        grandCredit += totalCredit;
 
         return {
           branchId:
@@ -98,8 +120,10 @@ export async function GET(request: Request) {
               ? String(row.branch_id)
               : "Unknown",
           branchName:
-            row.branch_name || `Branch Unit #${row.branch_id ?? "Unknown"}`,
+            row.branch_name ||
+            `Branch Unit #${row.branch_id ?? "Unknown"}`,
           totalAmount,
+          totalCredit,
           entriesCount: Number(row.entries_count || 0),
         };
       });
@@ -108,6 +132,7 @@ export async function GET(request: Request) {
         {
           success: true,
           grandTotal,
+          grandCredit,
           data,
         },
         { status: 200 },
@@ -118,7 +143,7 @@ export async function GET(request: Request) {
       return NextResponse.json(
         {
           success: false,
-          error: "Branch ID is missing",
+          error: "Branch ID is missing.",
         },
         { status: 400 },
       );
@@ -129,6 +154,7 @@ export async function GET(request: Request) {
         id,
         name,
         amount,
+        credit,
         date,
         branch_id,
         created_at
@@ -156,10 +182,8 @@ export async function GET(request: Request) {
       id: String(row.id),
       name: row.name || "",
       amount: Number(row.amount || 0),
-      date:
-        row.date instanceof Date
-          ? row.date.toISOString().split("T")[0]
-          : String(row.date).slice(0, 10),
+      credit: Number(row.credit || 0),
+      date: formatDate(row.date),
       branch_id:
         row.branch_id !== null && row.branch_id !== undefined
           ? String(row.branch_id)
@@ -180,7 +204,7 @@ export async function GET(request: Request) {
     return NextResponse.json(
       {
         success: false,
-        error: "Internal Server Error",
+        error: "Internal Server Error.",
       },
       { status: 500 },
     );
@@ -194,17 +218,21 @@ export async function POST(request: Request) {
 
     const name = typeof body.name === "string" ? body.name.trim() : "";
     const date = typeof body.date === "string" ? body.date : "";
-    const branchId = body.branch_id
-      ? String(body.branch_id)
-      : extractBranchId(request);
+
+    const branchId =
+      body.branch_id !== undefined && body.branch_id !== null
+        ? String(body.branch_id)
+        : extractBranchId(request);
 
     const amount = Number(body.amount);
+    const credit = Number(body.credit ?? 0);
 
     if (!branchId || !name || !date || body.amount === undefined) {
       return NextResponse.json(
         {
           success: false,
-          error: "Missing required fields: branch_id, name, amount, or date",
+          error:
+            "Missing required fields: branch_id, name, amount, or date.",
         },
         { status: 400 },
       );
@@ -230,16 +258,37 @@ export async function POST(request: Request) {
       );
     }
 
+    if (!Number.isFinite(credit) || credit < 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Credit must be a valid non-negative number.",
+        },
+        { status: 400 },
+      );
+    }
+
+    if (credit > amount) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Credit cannot be greater than the total amount.",
+        },
+        { status: 400 },
+      );
+    }
+
     const insertQuery = `
       INSERT INTO sales_incomes
-        (branch_id, name, amount, date)
-      VALUES (?, ?, ?, ?)
+        (branch_id, name, amount, credit, date)
+      VALUES (?, ?, ?, ?, ?)
     `;
 
     const [result]: any = await db.query(insertQuery, [
       branchId,
       name,
       amount,
+      credit,
       date,
     ]);
 
@@ -247,7 +296,7 @@ export async function POST(request: Request) {
       {
         success: true,
         insertId: result.insertId,
-        message: "Sales income added successfully",
+        message: "Sales income added successfully.",
       },
       { status: 201 },
     );
@@ -257,7 +306,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         success: false,
-        error: "Internal Server Error",
+        error: "Internal Server Error.",
       },
       { status: 500 },
     );
@@ -277,7 +326,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json(
         {
           success: false,
-          error: "Income ID and Branch ID are required",
+          error: "Income ID and Branch ID are required.",
         },
         { status: 400 },
       );
@@ -294,7 +343,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json(
         {
           success: false,
-          error: "Sales income record not found",
+          error: "Sales income record not found.",
         },
         { status: 404 },
       );
@@ -303,7 +352,7 @@ export async function DELETE(request: Request) {
     return NextResponse.json(
       {
         success: true,
-        message: "Sales income deleted successfully",
+        message: "Sales income deleted successfully.",
       },
       { status: 200 },
     );
@@ -313,7 +362,7 @@ export async function DELETE(request: Request) {
     return NextResponse.json(
       {
         success: false,
-        error: "Internal Server Error",
+        error: "Internal Server Error.",
       },
       { status: 500 },
     );
