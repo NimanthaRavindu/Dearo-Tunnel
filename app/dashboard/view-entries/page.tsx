@@ -1,6 +1,7 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
-import { ArrowDownToLine,BarChart3,CalendarDays,CheckCircle2,CircleDollarSign,FileText,Filter,RefreshCw,RotateCcw,TrendingDown,TrendingUp,Wallet} from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { BarChart3,CalendarDays,CheckCircle2,CircleDollarSign,FileText,Filter,RefreshCw,RotateCcw,Search,TrendingDown,TrendingUp, Wallet} from "lucide-react";
 
 const SUMMARY_API = "/api/dashboard/summary";
 
@@ -8,24 +9,26 @@ type Entry = {
   id?: number | string;
   date?: string;
   description?: string;
-  name?: string;
   category?: string;
-  income?: number | string;
-  expense?: number | string;
-  amount?: number | string;
   type?: string;
+  amount?: number | string;
+  branch_name?: string;
+  branch_id?: string | number;
 };
 
 type SummaryResponse = {
   totalIncome?: number | string;
-  totalExpenses?: number | string;
-  entries?: Entry[];
-
-  // Alternative names supported
   total_income?: number | string;
+
+  totalExpenses?: number | string;
   total_expenses?: number | string;
+
+  balance?: number | string;
+
+  entries?: Entry[];
+  data?: Entry[];
   expenses?: Entry[];
-  incomes?: Entry[];
+  income?: Entry[];
 };
 
 export default function ViewEntriesPage() {
@@ -37,18 +40,16 @@ export default function ViewEntriesPage() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
-  const [loading, setLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
-  const formatMoney = (value: number) => {
-    return Number(value || 0).toLocaleString("en-LK", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-  };
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
 
   const loadEntries = async () => {
     try {
       setLoading(true);
+      setError("");
 
       const response = await fetch(SUMMARY_API, {
         method: "GET",
@@ -56,64 +57,36 @@ export default function ViewEntriesPage() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to load dashboard entries");
+        throw new Error("Failed to load entries");
       }
 
-      const data: SummaryResponse = await response.json();
+      const result: SummaryResponse = await response.json();
 
-      const income = Number(
-        data.totalIncome ??
-          data.total_income ??
-          0
-      );
+      // Total Income
+      const income =
+        Number(result.totalIncome ?? result.total_income ?? 0) || 0;
 
-      const expenses = Number(
-        data.totalExpenses ??
-          data.total_expenses ??
-          0
-      );
+      // Total Expenses
+      const expenses =
+        Number(result.totalExpenses ?? result.total_expenses ?? 0) || 0;
 
-      setTotalIncome(
-        Number.isFinite(income) ? income : 0
-      );
+      setTotalIncome(income);
+      setTotalExpenses(expenses);
 
-      setTotalExpenses(
-        Number.isFinite(expenses)
-          ? expenses
-          : 0
-      );
+      // Entries
+      const loadedEntries =
+        result.entries ??
+        result.data ??
+        [
+          ...(result.income ?? []),
+          ...(result.expenses ?? []),
+        ];
 
-      if (Array.isArray(data.entries)) {
-        setEntries(data.entries);
-      } else {
-        const incomeEntries = Array.isArray(
-          data.incomes
-        )
-          ? data.incomes.map((item) => ({
-              ...item,
-              type: "Income",
-            }))
-          : [];
-
-        const expenseEntries = Array.isArray(
-          data.expenses
-        )
-          ? data.expenses.map((item) => ({
-              ...item,
-              type: "Expense",
-            }))
-          : [];
-
-        setEntries([
-          ...incomeEntries,
-          ...expenseEntries,
-        ]);
-      }
-    } catch (error) {
-      console.error(
-        "VIEW ENTRIES ERROR:",
-        error
-      );
+      setEntries(Array.isArray(loadedEntries) ? loadedEntries : []);
+    } catch (err) {
+      console.error("VIEW ENTRIES ERROR:", err);
+      setError("Unable to load entries.");
+      setEntries([]);
     } finally {
       setLoading(false);
     }
@@ -124,674 +97,557 @@ export default function ViewEntriesPage() {
   }, []);
 
   const filteredEntries = useMemo(() => {
-    return entries.filter((entry) => {
-      if (!entry.date) {
-        return false;
-      }
+    let result = [...entries];
 
-      const entryDate =
-        entry.date.substring(0, 10);
+    if (fromDate) {
+      result = result.filter((entry) => {
+        if (!entry.date) return false;
 
-      if (
-        fromDate &&
-        entryDate < fromDate
-      ) {
-        return false;
-      }
+        const entryDate = entry.date.substring(0, 10);
+        return entryDate >= fromDate;
+      });
+    }
 
-      if (
-        toDate &&
-        entryDate > toDate
-      ) {
-        return false;
-      }
+    if (toDate) {
+      result = result.filter((entry) => {
+        if (!entry.date) return false;
 
-      return true;
-    });
-  }, [entries, fromDate, toDate]);
+        const entryDate = entry.date.substring(0, 10);
+        return entryDate <= toDate;
+      });
+    }
 
-  const filteredTotals = useMemo(() => {
+    // Search
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+
+      result = result.filter((entry) => {
+        return (
+          String(entry.description ?? "")
+            .toLowerCase()
+            .includes(query) ||
+          String(entry.category ?? "")
+            .toLowerCase()
+            .includes(query) ||
+          String(entry.type ?? "")
+            .toLowerCase()
+            .includes(query) ||
+          String(entry.branch_name ?? "")
+            .toLowerCase()
+            .includes(query) ||
+          String(entry.branch_id ?? "")
+            .toLowerCase()
+            .includes(query)
+        );
+      });
+    }
+
+    return result;
+  }, [entries, fromDate, toDate, searchQuery]);
+
+  const filteredSummary = useMemo(() => {
+    // If no date filter is selected, use dashboard totals
+    if (!fromDate && !toDate) {
+      return {
+        income: totalIncome,
+        expenses: totalExpenses,
+      };
+    }
+
     let income = 0;
     let expenses = 0;
-
     filteredEntries.forEach((entry) => {
-      const amount = Number(
-        entry.amount ??
-          entry.income ??
-          entry.expense ??
-          0
-      );
-
-      const entryType =
-        String(entry.type || "")
-          .toLowerCase();
-
+      const amount = Number(entry.amount ?? 0) || 0;
+      const entryType = String(entry.type ?? "").toLowerCase();
       if (
-        entryType.includes("income")
+        entryType.includes("income") ||
+        entryType.includes("in") ||
+        entryType === "credit"
       ) {
         income += amount;
-      }
-
-      if (
-        entryType.includes("expense")
-      ) {
+      } else {
         expenses += amount;
       }
     });
 
-    if (
-      filteredEntries.length === 0 &&
-      !fromDate &&
-      !toDate
-    ) {
-      income = totalIncome;
-      expenses = totalExpenses;
-    }
-
     return {
       income,
       expenses,
-      balance: income - expenses,
     };
   }, [
-    filteredEntries,
     fromDate,
     toDate,
+    filteredEntries,
     totalIncome,
     totalExpenses,
   ]);
 
   const balance =
-    filteredTotals.balance;
+    filteredSummary.income - filteredSummary.expenses;
 
-  const isProfit = balance > 0;
   const isLoss = balance < 0;
-  const isEqual = balance === 0;
 
-  const resetFilters = () => {
-    setFromDate("");
-    setToDate("");
+  const formatMoney = (value: number) => {
+    return `Rs. ${value.toLocaleString("en-LK", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
   };
 
-  const displayEntries = useMemo(() => {
-    return filteredEntries.map(
-      (entry, index) => {
-        const amount = Number(
-          entry.amount ??
-            entry.income ??
-            entry.expense ??
-            0
-        );
+  const formatDate = (date?: string) => {
+    if (!date) return "-";
 
-        const entryType =
-          String(entry.type || "")
-            .toLowerCase();
+    const datePart = date.substring(0, 10);
 
-        let finalType = "Entry";
+    const parts = datePart.split("-");
 
-        if (
-          entryType.includes("income")
-        ) {
-          finalType = "Income";
-        } else if (
-          entryType.includes("expense")
-        ) {
-          finalType = "Expense";
-        }
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
 
-        return {
-          ...entry,
-          id:
-            entry.id ??
-            `${entry.date}-${index}`,
-          amount,
-          finalType,
-        };
-      }
-    );
-  }, [filteredEntries]);
+    return datePart;
+  };
+
+  const resetFilter = () => {
+    setFromDate("");
+    setToDate("");
+    setSearchQuery("");
+  };
 
   return (
-    <div className="min-h-screen bg-[#070a13] px-4 py-6 text-slate-100 md:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl space-y-6">
+    <div className="min-h-screen bg-[#070a13] text-slate-100 p-4 sm:p-6 lg:p-8">
 
-        <div className="overflow-hidden rounded-2xl border border-slate-800/80 bg-[#0d1527] shadow-2xl">
-          <div className="flex flex-col gap-5 p-6 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-4">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500/20 to-blue-600/20 ring-1 ring-cyan-500/20">
-                <FileText size={27} className="text-cyan-400"
-                />
+      {/* PAGE HEADER */}
+      <div className="max-w-7xl mx-auto">
+
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5 mb-8">
+
+          <div>
+            <div className="flex items-center gap-2 text-xs text-slate-500 mb-2">
+              <Link
+                href="/dashboard"
+                className="hover:text-blue-400 transition"
+              >
+                Dashboard
+              </Link>
+
+              <span>/</span>
+
+              <span className="text-slate-400">
+                View Entries
+              </span>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="h-11 w-11 rounded-xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center">
+                <FileText size={22} className="text-blue-400" />
               </div>
               <div>
+                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
+                  View Entries
+                </h1>
 
-                <div className="flex items-center gap-2">
-                  <h1 className="text-2xl font-bold tracking-tight text-white">
-                    View Entries
-                  </h1>
-
-                  <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-cyan-400">
-                    Financial Overview
-                  </span>
-                </div>
-
-                <p className="mt-1 text-sm text-slate-500">
-                  Review income, expenses and overall financial performance
+                <p className="text-sm text-slate-500 mt-1">
+                  Review income, expenses and financial entries
                 </p>
               </div>
             </div>
+          </div>
 
-            <button
-              type="button"
-              onClick={loadEntries}
-              disabled={loading}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800/80 px-5 py-3 text-sm font-semibold text-slate-200 transition hover:border-cyan-500/30 hover:bg-slate-800 hover:text-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
+          {/* REFRESH BUTTON */}
+          <button
+            type="button"
+            onClick={loadEntries}
+            disabled={loading}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800/80 px-5 py-3 text-sm font-semibold text-slate-200 transition hover:border-blue-500/40 hover:bg-slate-800 hover:text-blue-400 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <RefreshCw size={17} className={loading ? "animate-spin" : ""} />
+            {loading ? "Refreshing..." : "Refresh"}
+          </button>
+
+        </div>
+
+        {/* ERROR */}
+        {error && (
+          <div className="mb-6 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+            {error}
+          </div>
+        )}
+
+        {/* SUMMARY CARDS */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 mb-7">
+
+          {/* TOTAL INCOME */}
+          <div className="rounded-2xl border border-slate-800 bg-[#0d1527] p-5 shadow-xl shadow-black/10">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-widest font-semibold text-slate-500">
+                  Total Income
+                </p>
+
+                <h2 className="text-2xl sm:text-3xl font-bold text-white mt-2">
+                  {formatMoney(filteredSummary.income)}
+                </h2>
+              </div>
+
+              <div className="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                <TrendingUp size={20} className="text-emerald-400" />
+              </div>
+            </div>
+
+            <div className="mt-4 flex items-center gap-2 text-xs text-emerald-400">
+              <CheckCircle2 size={14} />
+              Income recorded
+            </div>
+          </div>
+
+          {/* TOTAL EXPENSES */}
+          <div className="rounded-2xl border border-slate-800 bg-[#0d1527] p-5 shadow-xl shadow-black/10">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-widest font-semibold text-slate-500">
+                  Total Expenses
+                </p>
+
+                <h2 className="text-2xl sm:text-3xl font-bold text-white mt-2">
+                  {formatMoney(filteredSummary.expenses)}
+                </h2>
+              </div>
+
+              <div className="h-10 w-10 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center">
+                <TrendingDown size={20} className="text-orange-400" />
+              </div>
+            </div>
+
+            <div className="mt-4 flex items-center gap-2 text-xs text-orange-400">
+              <CircleDollarSign size={14} />
+              Expenses recorded
+            </div>
+          </div>
+
+          {/* BALANCE */}
+          <div
+            className={`rounded-2xl border p-5 shadow-xl shadow-black/10 ${
+              isLoss
+                ? "border-red-500/20 bg-red-500/[0.04]"
+                : "border-blue-500/20 bg-blue-500/[0.04]"
+            }`}
+          >
+
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-widest font-semibold text-slate-500">
+                  Balance
+                </p>
+
+                <h2
+                  className={`text-2xl sm:text-3xl font-bold mt-2 ${
+                    isLoss
+                      ? "text-red-400"
+                      : "text-blue-400"
+                  }`}
+                >
+                  {formatMoney(Math.abs(balance))}
+                </h2>
+              </div>
+
+              <div
+                className={`h-10 w-10 rounded-xl border flex items-center justify-center ${
+                  isLoss
+                    ? "bg-red-500/10 border-red-500/20"
+                    : "bg-blue-500/10 border-blue-500/20"
+                }`}
+              >
+                <Wallet size={20} className={ isLoss ? "text-red-400" : "text-blue-400" } />
+              </div>
+            </div>
+
+            <div
+              className={`mt-4 text-xs font-bold uppercase tracking-wider ${
+                isLoss
+                  ? "text-red-400"
+                  : "text-emerald-400"
+              }`}
             >
-              <RefreshCw size={17} className={ loading ? "animate-spin" : "" } />
-              {loading ? "Refreshing..." : "Refresh"}
-            </button>
+              {isLoss ? "LOSS" : "PROFIT"}
+            </div>
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-800/80 bg-[#0d1527] p-5 shadow-xl">
-          <div className="mb-5 flex items-center gap-3">
-            <div className="rounded-xl bg-blue-500/10 p-2.5 text-blue-400">
-              <Filter size={19} />
-            </div>
+        {/* FILTER AREA */}
+        <div className="rounded-2xl border border-slate-800 bg-[#0d1527] p-5 mb-7">
+          <div className="flex items-center gap-2 mb-5">
+            <Filter size={18} className="text-blue-400" />
 
-            <div>
-              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-200">
-                Filter Entries
-              </h2>
-
-              <p className="mt-0.5 text-xs text-slate-500">
-                Select a date range to view financial entries
-              </p>
-            </div>
+            <h2 className="text-sm font-bold uppercase tracking-wider text-white">
+              Filter Entries
+            </h2>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* FROM DATE */}
             <div>
-              <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">
                 From Date
               </label>
 
               <div className="relative">
-                <CalendarDays size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                <CalendarDays size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
 
                 <input
                   type="date"
                   value={fromDate}
-                  max={toDate || undefined}
                   onChange={(e) =>
-                    setFromDate(
-                      e.target.value
-                    )
+                    setFromDate(e.target.value)
                   }
-                  className="w-full rounded-xl border border-slate-800 bg-[#080d19] py-3 pl-10 pr-4 text-sm text-slate-200 outline-none transition focus:border-cyan-500/60 focus:ring-2 focus:ring-cyan-500/10"
+                  className="w-full rounded-xl border border-slate-700 bg-[#070a13] pl-10 pr-3 py-3 text-sm text-slate-200 outline-none transition focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20"
                 />
               </div>
             </div>
 
             {/* TO DATE */}
             <div>
-              <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">
                 To Date
               </label>
 
               <div className="relative">
-                <CalendarDays size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                <CalendarDays size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
 
                 <input
                   type="date"
                   value={toDate}
-                  min={fromDate || undefined}
                   onChange={(e) =>
-                    setToDate(
-                      e.target.value
-                    )
+                    setToDate(e.target.value)
                   }
-                  className="w-full rounded-xl border border-slate-800 bg-[#080d19] py-3 pl-10 pr-4 text-sm text-slate-200 outline-none transition focus:border-cyan-500/60 focus:ring-2 focus:ring-cyan-500/10"
+                  className="w-full rounded-xl border border-slate-700 bg-[#070a13] pl-10 pr-3 py-3 text-sm text-slate-200 outline-none transition focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20"
                 />
               </div>
             </div>
 
-            {/* FILTER BUTTON */}
-            <div className="flex items-end">
-              <button
-                type="button"
-                onClick={() => {
-                  if (
-                    fromDate &&
-                    toDate &&
-                    fromDate > toDate
-                  ) {
-                    alert(
-                      "From Date cannot be greater than To Date."
-                    );
-                    return;
+            {/* SEARCH */}
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">
+                Search
+              </label>
+
+              <div className="relative">
+                <Search size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) =>
+                    setSearchQuery(e.target.value)
                   }
-                }}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-cyan-950/20 transition hover:from-cyan-500 hover:to-blue-500"
-              >
-                <Filter size={17} />
-                Apply Filter
-              </button>
-            </div>
-
-            {/* RESET */}
-            <div className="flex items-end">
-              <button
-                type="button"
-                onClick={resetFilters}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800 px-5 py-3 text-sm font-semibold text-slate-300 transition hover:border-slate-600 hover:bg-slate-700 hover:text-white"
-              >
-                <RotateCcw size={17} />
-                Reset
-              </button>
-            </div>
-          </div>
-
-          {(fromDate || toDate) && (
-            <div className="mt-4 flex items-center gap-2 rounded-xl border border-cyan-500/10 bg-cyan-500/5 px-4 py-3 text-xs text-cyan-400">
-              <CalendarDays size={15} />
-              <span>
-                Showing entries
-                {fromDate ? ` from ${fromDate}` : ""}
-                {toDate ? ` to ${toDate}` : ""}
-              </span>
-            </div>
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          {/* TOTAL INCOME */}
-          <div className="group relative overflow-hidden rounded-2xl border border-emerald-500/15 bg-[#0d1527] p-5 shadow-xl transition hover:border-emerald-500/30">
-            <div className="absolute -right-10 -top-10 h-28 w-28 rounded-full bg-emerald-500/5 blur-2xl" />
-            <div className="relative flex items-start justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-widest text-slate-500">
-                  Total Income
-                </p>
-
-                <h2 className="mt-3 text-2xl font-bold text-white">
-                  Rs.{" "}
-                  {formatMoney(
-                    filteredTotals.income
-                  )}
-                </h2>
-
-                <p className="mt-2 text-xs text-emerald-400">
-                  Income generated
-                </p>
-              </div>
-
-              <div className="rounded-xl bg-emerald-500/10 p-3 text-emerald-400">
-                <TrendingUp size={22} />
+                  placeholder="Search entries..."
+                  className="w-full rounded-xl border border-slate-700 bg-[#070a13] pl-10 pr-3 py-3 text-sm text-slate-200 placeholder:text-slate-600 outline-none transition focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20"
+                />
               </div>
             </div>
           </div>
 
-          {/* TOTAL EXPENSES */}
-          <div className="group relative overflow-hidden rounded-2xl border border-orange-500/15 bg-[#0d1527] p-5 shadow-xl transition hover:border-orange-500/30">
-            <div className="absolute -right-10 -top-10 h-28 w-28 rounded-full bg-orange-500/5 blur-2xl" />
-            <div className="relative flex items-start justify-between">
-              <div>
-
-                <p className="text-xs font-bold uppercase tracking-widest text-slate-500">
-                  Total Expenses
-                </p>
-
-                <h2 className="mt-3 text-2xl font-bold text-white">
-                  Rs.{" "}
-                  {formatMoney(
-                    filteredTotals.expenses
-                  )}
-                </h2>
-
-                <p className="mt-2 text-xs text-orange-400">
-                  Total expenditure
-                </p>
-              </div>
-
-              <div className="rounded-xl bg-orange-500/10 p-3 text-orange-400">
-                <Wallet size={22} />
-              </div>
+          {/* FILTER ACTIONS */}
+          <div className="flex flex-wrap items-center justify-between gap-3 mt-5">
+            <div className="text-xs text-slate-500">
+              Showing{" "}
+              <span className="font-semibold text-slate-300">
+                {filteredEntries.length}
+              </span>{" "}
+              entries
             </div>
-          </div>
 
-          {/* BALANCE */}
-          <div
-            className={`group relative overflow-hidden rounded-2xl border bg-[#0d1527] p-5 shadow-xl transition ${
-              isProfit
-                ? "border-emerald-500/25 hover:border-emerald-500/40"
-                : isLoss
-                ? "border-red-500/25 hover:border-red-500/40"
-                : "border-slate-700"
-            }`}
-          >
-
-            <div
-              className={`absolute -right-10 -top-10 h-28 w-28 rounded-full blur-2xl ${
-                isProfit
-                  ? "bg-emerald-500/10"
-                  : isLoss
-                  ? "bg-red-500/10"
-                  : "bg-slate-500/10"
-              }`}
-            />
-
-            <div className="relative flex items-start justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-widest text-slate-500">
-                  Total Balance
-                </p>
-                <h2
-                  className={`mt-3 text-2xl font-bold ${
-                    isProfit
-                      ? "text-emerald-400"
-                      : isLoss
-                      ? "text-red-400"
-                      : "text-slate-300"
-                  }`}
-                >
-                  Rs.{" "}
-                  {formatMoney(
-                    Math.abs(balance)
-                  )}
-                </h2>
-
-                <div className="mt-2 flex items-center gap-2">
-                  {isProfit && (
-                    <>
-                      <TrendingUp size={15} className="text-emerald-400" />
-
-                      <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
-                        Profit
-                      </span>
-                    </>
-                  )}
-
-                  {isLoss && (
-                    <>
-                      <TrendingDown size={15}  className="text-red-400" />
-
-                      <span className="text-xs font-bold uppercase tracking-wider text-red-400">
-                        Loss
-                      </span>
-                    </>
-                  )}
-
-                  {isEqual && (
-                    <>
-                      <CheckCircle2 size={15} className="text-slate-400" />
-                      <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                        No Profit / No Loss
-                      </span>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              <div
-                className={`rounded-xl p-3 ${
-                  isProfit
-                    ? "bg-emerald-500/10 text-emerald-400"
-                    : isLoss
-                    ? "bg-red-500/10 text-red-400"
-                    : "bg-slate-800 text-slate-400"
-                }`}
-              >
-                <CircleDollarSign size={22} />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div
-          className={`flex flex-col gap-4 rounded-2xl border p-5 md:flex-row md:items-center md:justify-between ${
-            isProfit
-              ? "border-emerald-500/20 bg-emerald-500/5"
-              : isLoss
-              ? "border-red-500/20 bg-red-500/5"
-              : "border-slate-700 bg-slate-800/30"
-          }`}
-        >
-
-          <div className="flex items-center gap-4">
-
-            <div
-              className={`flex h-11 w-11 items-center justify-center rounded-xl ${
-                isProfit
-                  ? "bg-emerald-500/10 text-emerald-400"
-                  : isLoss
-                  ? "bg-red-500/10 text-red-400"
-                  : "bg-slate-700 text-slate-400"
-              }`}
+            <button
+              type="button"
+              onClick={resetFilter}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/60 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-400 transition hover:bg-slate-800 hover:text-white"
             >
-              {isProfit ? (
-                <TrendingUp size={21} />
-              ) : isLoss ? (
-                <TrendingDown size={21} />
-              ) : (
-                <BarChart3 size={21} />
-              )}
+              <RotateCcw size={15} />
+              Reset Filter
+            </button>
+          </div>
+        </div>
+
+        {/* ENTRIES TABLE */}
+        <div className="rounded-2xl border border-slate-800 bg-[#0d1527] overflow-hidden shadow-xl shadow-black/10">
+          {/* TABLE HEADER */}
+          <div className="px-5 py-5 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
+                <BarChart3
+                  size={18}
+                  className="text-indigo-400"
+                />
+              </div>
+
+              <div>
+                <h2 className="text-sm font-bold text-white uppercase tracking-wider">
+                  Financial Entries
+                </h2>
+
+                <p className="text-xs text-slate-500 mt-1">
+                  Income and expense records
+                </p>
+              </div>
             </div>
 
-            <div>
-              <p className="text-xs font-bold uppercase tracking-widest text-slate-500">
-                Financial Status
+            <div className="text-xs text-slate-500">
+              {filteredEntries.length} Records
+            </div>
+          </div>
+
+          {/* LOADING */}
+          {loading ? (
+            <div className="py-16 flex flex-col items-center justify-center">
+              <RefreshCw size={28} className="animate-spin text-blue-400 mb-3" />
+
+              <p className="text-sm text-slate-500">
+                Loading entries...
               </p>
-              <h3
-                className={`mt-1 text-lg font-bold ${
-                  isProfit
-                    ? "text-emerald-400"
-                    : isLoss
-                    ? "text-red-400"
-                    : "text-slate-300"
-                }`}
-              >
-                {isProfit ? "PROFIT" : isLoss ? "LOSS" : "NO PROFIT / NO LOSS"}
+
+            </div>
+          ) : filteredEntries.length === 0 ? (
+            /* EMPTY */
+            <div className="py-16 flex flex-col items-center justify-center px-5">
+              <div className="h-14 w-14 rounded-2xl bg-slate-800/70 border border-slate-700 flex items-center justify-center mb-4">
+                <FileText size={25} className="text-slate-500" />
+              </div>
+
+              <h3 className="text-sm font-semibold text-slate-300">
+                No Entries Found
               </h3>
-            </div>
-          </div>
 
-          <div className="text-left md:text-right">
-            <p className="text-xs text-slate-500">
-              Total Income − Total Expenses
-            </p>
-
-            <p
-              className={`mt-1 text-xl font-bold ${
-                isProfit
-                  ? "text-emerald-400"
-                  : isLoss
-                  ? "text-red-400"
-                  : "text-slate-300"
-              }`}
-            >
-              {isLoss ? "-" : ""}
-              Rs.{" "}
-              {formatMoney( Math.abs(balance))}
-            </p>
-          </div>
-        </div>
-
-        <div className="overflow-hidden rounded-2xl border border-slate-800/80 bg-[#0d1527] shadow-xl">
-
-          <div className="flex flex-col gap-3 border-b border-slate-800/80 p-5 md:flex-row md:items-center md:justify-between">
-
-            <div>
-
-              <h2 className="text-lg font-bold text-white">
-                Financial Entries
-              </h2>
-
-              <p className="mt-1 text-xs text-slate-500">
-                {displayEntries.length}{" "}
-                entries found for the selected period
+              <p className="text-xs text-slate-600 mt-1 text-center">
+                There are no entries matching the selected filters.
               </p>
             </div>
+          ) : (
+            /* TABLE */
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[850px]">
+                <thead>
+                  <tr className="border-b border-slate-800 bg-[#0a1020]">
 
-            <div className="flex items-center gap-2 rounded-lg border border-slate-800 bg-[#080d19] px-3 py-2">
-              <BarChart3 size={15} className="text-cyan-400" />
-              <span className="text-xs font-semibold text-slate-400">
-                Live Summary
-              </span>
-            </div>
-          </div>
+                    <th className="text-left px-5 py-4 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                      Date
+                    </th>
 
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[850px]">
-              <thead>
-                <tr className="border-b border-slate-800 bg-[#080d19]">
-                  <th className="px-5 py-4 text-left text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                    Date
-                  </th>
-                  <th className="px-5 py-4 text-left text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                    Description
-                  </th>
-                  <th className="px-5 py-4 text-left text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                    Category
-                  </th>
-                  <th className="px-5 py-4 text-left text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                    Type
-                  </th>
-                  <th className="px-5 py-4 text-right text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                    Amount
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
+                    <th className="text-left px-5 py-4 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                      Description
+                    </th>
 
-                {loading ? (
-                  <tr>
-                    <td
-                      colSpan={5}
-                      className="px-5 py-14 text-center"
-                    >
+                    <th className="text-left px-5 py-4 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                      Category
+                    </th>
 
-                      <div className="flex items-center justify-center gap-3 text-sm text-slate-500">
-                        <RefreshCw size={18} className="animate-spin text-cyan-400" />
-                        Loading entries...
-                      </div>
-                    </td>
+                    <th className="text-left px-5 py-4 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                      Type
+                    </th>
+
+                    <th className="text-left px-5 py-4 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                      Branch
+                    </th>
+
+                    <th className="text-right px-5 py-4 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                      Amount
+                    </th>
                   </tr>
+                </thead>
 
-                ) : displayEntries.length ===
-                  0 ? (
+                <tbody>
+                  {filteredEntries.map((entry, index) => {
+                    const amount =
+                      Number(entry.amount ?? 0) || 0;
 
-                  <tr>
-                    <td
-                      colSpan={5}
-                      className="px-5 py-14 text-center"
-                    >
-                      <div className="mx-auto flex max-w-sm flex-col items-center">
-                        <div className="mb-4 rounded-2xl bg-slate-800/70 p-4 text-slate-500">
-                          <FileText size={27} />
-                        </div>
+                    const entryType =
+                      String(entry.type ?? "").toLowerCase();
 
-                        <p className="font-semibold text-slate-300">
-                          No entries found
-                        </p>
+                    const isIncome =
+                      entryType.includes("income") ||
+                      entryType === "in" ||
+                      entryType === "credit";
 
-                        <p className="mt-1 text-xs text-slate-500">
-                          Try changing the selected date range.
-                        </p>
-                      </div>
-                    </td>
-                  </tr>
-
-                ) : (
-                  displayEntries.map(
-                    (entry) => (
-
+                    return (
                       <tr
-                        key={String(
-                          entry.id
-                        )}
-                        className="border-b border-slate-800/70 transition hover:bg-slate-800/30"
+                        key={
+                          entry.id ??
+                          `${entry.date}-${index}`
+                        }
+                        className="border-b border-slate-800/70 last:border-0 hover:bg-slate-800/20 transition"
                       >
 
                         {/* DATE */}
-                        <td className="whitespace-nowrap px-5 py-4 text-sm text-slate-300">
-                          {entry.date ? new Date(`${entry.date.substring( 0, 10 )}T00:00:00` ).toLocaleDateString( "en-GB" ) : "-"}
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-2 text-sm text-slate-300">
+                            <CalendarDays size={15} className="text-slate-600" />
+                            {formatDate(entry.date)}
+                          </div>
                         </td>
 
                         {/* DESCRIPTION */}
                         <td className="px-5 py-4">
-                          <p className="max-w-xs truncate text-sm font-semibold text-slate-200">
-                            {entry.description ||  entry.name || "Financial Entry"}
-                          </p>
+                          <div className="font-medium text-slate-200">
+                            {entry.description || "-"}
+                          </div>
                         </td>
 
                         {/* CATEGORY */}
-                        <td className="px-5 py-4 text-sm text-slate-400">
-                          {entry.category || "-"}
+                        <td className="px-5 py-4">
+                          <span className="inline-flex rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 py-1 text-[11px] font-medium text-slate-400">
+                            {entry.category || "-"}
+                          </span>
                         </td>
 
                         {/* TYPE */}
                         <td className="px-5 py-4">
                           <span
-                            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${
-                              entry.finalType ===
-                              "Income"
-                                ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
-                                : entry.finalType ===
-                                  "Expense"
-                                ? "border-red-500/20 bg-red-500/10 text-red-400"
-                                : "border-slate-700 bg-slate-800 text-slate-400"
+                            className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold uppercase ${
+                              isIncome
+                                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                : "bg-orange-500/10 text-orange-400 border border-orange-500/20"
                             }`}
                           >
-                            {entry.finalType ===
-                            "Income" ? (
-                              <TrendingUp size={12} />
-                            ) : (
-                              <TrendingDown size={12}/>
-                            )}
-                            {entry.finalType}
+                            {isIncome ? ( <TrendingUp size={13} /> ) : ( <TrendingDown size={13} />)}
+                            {entry.type || (isIncome ? "Income": "Expense")}
+                          </span>
+                        </td>
+
+                        {/* BRANCH */}
+                        <td className="px-5 py-4">
+                          <span className="text-sm text-slate-400">
+                            {entry.branch_name || entry.branch_id || "-"}
                           </span>
                         </td>
 
                         {/* AMOUNT */}
-                        <td
-                          className={`px-5 py-4 text-right text-sm font-bold ${
-                            entry.finalType ===
-                            "Income"
-                              ? "text-emerald-400"
-                              : entry.finalType ===
-                                "Expense"
-                              ? "text-red-400"
-                              : "text-slate-300"
-                          }`}
-                        >
-                          {entry.finalType ===
-                          "Expense"
-                            ? "-"
-                            : "+"}
-                          {" Rs. "}
-                          {formatMoney(
-                            entry.amount
-                          )}
+                        <td className="px-5 py-4 text-right">
+                          <span
+                            className={`font-bold ${
+                              isIncome
+                                ? "text-emerald-400"
+                                : "text-orange-400"
+                            }`}
+                          >
+                            {isIncome ? "+" : "-"}
+                            {formatMoney(amount)}
+                          </span>
                         </td>
                       </tr>
-                    )
-                  )
-                )}
-              </tbody>
-            </table>
-          </div>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
-        <div className="flex flex-col gap-2 border-t border-slate-800/70 pt-4 text-xs text-slate-600 md:flex-row md:items-center md:justify-between">
-          <p>
-            View Entries • Financial
-            Overview
-          </p>
-          <p>
-            Income − Expenses = Balance
-          </p>
+        {/* FOOTER INFORMATION */}
+        <div className="mt-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-[11px] text-slate-600">
+          <div>
+            View Entries • Financial Overview
+          </div>
+          <div>
+            Balance = Total Income - Total Expenses
+          </div>
         </div>
       </div>
     </div>
