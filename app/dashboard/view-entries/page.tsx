@@ -1,9 +1,10 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { BarChart3,CalendarDays,CheckCircle2,CircleDollarSign,FileText,Filter,RefreshCw,RotateCcw,Search,TrendingDown,TrendingUp, Wallet} from "lucide-react";
+import {BarChart3,CalendarDays,CheckCircle2,CircleDollarSign,FileText,Filter,RefreshCw,RotateCcw,Search,TrendingDown,TrendingUp,Wallet} from "lucide-react";
 
 const SUMMARY_API = "/api/dashboard/summary";
+const INCOME_API = "/api/expences/sales-incomes?summary=true";
 
 type Entry = {
   id?: number | string;
@@ -16,26 +17,32 @@ type Entry = {
   branch_id?: string | number;
 };
 
-type SummaryResponse = {
-  totalIncome?: number | string;
-  total_income?: number | string;
+type DashboardResponse = {
+  cards?: {
+    totalBranches?: number | string;
+    totalExpenses?: number | string;
+    totalRemaining?: number | string;
+  };
 
-  totalExpenses?: number | string;
-  total_expenses?: number | string;
+  branches?: any[];
 
-  balance?: number | string;
+  sales?: Entry[];
+  capital?: Entry[];
+};
 
-  entries?: Entry[];
+type IncomeResponse = {
+  success?: boolean;
+  grandTotal?: number | string;
   data?: Entry[];
-  expenses?: Entry[];
-  income?: Entry[];
 };
 
 export default function ViewEntriesPage() {
   const [entries, setEntries] = useState<Entry[]>([]);
 
+  // EXACT Dashboard values
   const [totalIncome, setTotalIncome] = useState(0);
   const [totalExpenses, setTotalExpenses] = useState(0);
+  const [totalRemaining, setTotalRemaining] = useState(0);
 
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -44,7 +51,6 @@ export default function ViewEntriesPage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
 
   const loadEntries = async () => {
     try {
@@ -57,35 +63,105 @@ export default function ViewEntriesPage() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to load entries");
+        throw new Error("Failed to load dashboard summary");
       }
 
-      const result: SummaryResponse = await response.json();
+      const result: DashboardResponse = await response.json();
 
-      // Total Income
-      const income =
-        Number(result.totalIncome ?? result.total_income ?? 0) || 0;
+      const dashboardExpenses =
+        Number(result.cards?.totalExpenses ?? 0) || 0;
 
-      // Total Expenses
-      const expenses =
-        Number(result.totalExpenses ?? result.total_expenses ?? 0) || 0;
+      const dashboardRemaining =
+        Number(result.cards?.totalRemaining ?? 0) || 0;
 
-      setTotalIncome(income);
-      setTotalExpenses(expenses);
+      setTotalExpenses(dashboardExpenses);
+      setTotalRemaining(dashboardRemaining);
 
-      // Entries
-      const loadedEntries =
-        result.entries ??
-        result.data ??
-        [
-          ...(result.income ?? []),
-          ...(result.expenses ?? []),
-        ];
+      const incomeResponse = await fetch(INCOME_API, {
+        method: "GET",
+        cache: "no-store",
+      });
 
-      setEntries(Array.isArray(loadedEntries) ? loadedEntries : []);
+      if (!incomeResponse.ok) {
+        throw new Error("Failed to load income summary");
+      }
+
+      const incomeResult: IncomeResponse =
+        await incomeResponse.json();
+
+      const dashboardIncome =
+        Number(incomeResult.grandTotal ?? 0) || 0;
+
+      setTotalIncome(dashboardIncome);
+
+      const salesEntries: Entry[] = Array.isArray(result.sales)
+        ? result.sales.map((entry) => ({
+            ...entry,
+            type: entry.type || "Expense",
+            category: entry.category || "Sales Expense",
+            description:
+              entry.description ||
+              (entry.id
+                ? `Sales Expense #${entry.id}`
+                : "Sales Expense"),
+          }))
+        : [];
+
+      const capitalEntries: Entry[] = Array.isArray(result.capital)
+        ? result.capital.map((entry) => ({
+            ...entry,
+            type: entry.type || "Expense",
+            category: entry.category || "Capital Expense",
+            description:
+              entry.description ||
+              (entry.id
+                ? `Capital Expense #${entry.id}`
+                : "Capital Expense"),
+          }))
+        : [];
+
+      const incomeEntries: Entry[] = Array.isArray(
+        incomeResult.data
+      )
+        ? incomeResult.data.map((entry: any) => ({
+            ...entry,
+            type: entry.type || "Income",
+            category: entry.category || "Income",
+            description:
+              entry.description ||
+              entry.personName ||
+              entry.person_name ||
+              entry.name ||
+              (entry.id
+                ? `Income Entry #${entry.id}`
+                : "Income Entry"),
+            amount: entry.amount ?? 0,
+          }))
+        : [];
+
+      const loadedEntries = [
+        ...incomeEntries,
+        ...salesEntries,
+        ...capitalEntries,
+      ];
+
+      loadedEntries.sort((a, b) => {
+        const dateA = String(a.date ?? "");
+        const dateB = String(b.date ?? "");
+
+        return dateB.localeCompare(dateA);
+      });
+
+      setEntries(loadedEntries);
     } catch (err) {
       console.error("VIEW ENTRIES ERROR:", err);
-      setError("Unable to load entries.");
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to load entries."
+      );
+
       setEntries([]);
     } finally {
       setLoading(false);
@@ -103,7 +179,8 @@ export default function ViewEntriesPage() {
       result = result.filter((entry) => {
         if (!entry.date) return false;
 
-        const entryDate = entry.date.substring(0, 10);
+        const entryDate = String(entry.date).substring(0, 10);
+
         return entryDate >= fromDate;
       });
     }
@@ -112,14 +189,15 @@ export default function ViewEntriesPage() {
       result = result.filter((entry) => {
         if (!entry.date) return false;
 
-        const entryDate = entry.date.substring(0, 10);
+        const entryDate = String(entry.date).substring(0, 10);
+
         return entryDate <= toDate;
       });
     }
 
-    // Search
+
     if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
+      const query = searchQuery.trim().toLowerCase();
 
       result = result.filter((entry) => {
         return (
@@ -137,6 +215,9 @@ export default function ViewEntriesPage() {
             .includes(query) ||
           String(entry.branch_id ?? "")
             .toLowerCase()
+            .includes(query) ||
+          String(entry.amount ?? "")
+            .toLowerCase()
             .includes(query)
         );
       });
@@ -146,11 +227,11 @@ export default function ViewEntriesPage() {
   }, [entries, fromDate, toDate, searchQuery]);
 
   const filteredSummary = useMemo(() => {
-    // If no date filter is selected, use dashboard totals
     if (!fromDate && !toDate) {
       return {
         income: totalIncome,
         expenses: totalExpenses,
+        balance: totalRemaining,
       };
     }
 
@@ -158,12 +239,22 @@ export default function ViewEntriesPage() {
     let expenses = 0;
     filteredEntries.forEach((entry) => {
       const amount = Number(entry.amount ?? 0) || 0;
-      const entryType = String(entry.type ?? "").toLowerCase();
-      if (
+
+      const entryType = String(
+        entry.type ?? ""
+      ).toLowerCase();
+
+      const category = String(
+        entry.category ?? ""
+      ).toLowerCase();
+
+      const isIncome =
         entryType.includes("income") ||
-        entryType.includes("in") ||
-        entryType === "credit"
-      ) {
+        entryType === "in" ||
+        entryType === "credit" ||
+        category.includes("income");
+
+      if (isIncome) {
         income += amount;
       } else {
         expenses += amount;
@@ -173,6 +264,7 @@ export default function ViewEntriesPage() {
     return {
       income,
       expenses,
+      balance: income - expenses,
     };
   }, [
     fromDate,
@@ -180,10 +272,10 @@ export default function ViewEntriesPage() {
     filteredEntries,
     totalIncome,
     totalExpenses,
+    totalRemaining,
   ]);
 
-  const balance =
-    filteredSummary.income - filteredSummary.expenses;
+  const balance = filteredSummary.balance;
 
   const isLoss = balance < 0;
 
@@ -197,7 +289,7 @@ export default function ViewEntriesPage() {
   const formatDate = (date?: string) => {
     if (!date) return "-";
 
-    const datePart = date.substring(0, 10);
+    const datePart = String(date).substring(0, 10);
 
     const parts = datePart.split("-");
 
@@ -216,8 +308,6 @@ export default function ViewEntriesPage() {
 
   return (
     <div className="min-h-screen bg-[#070a13] text-slate-100 p-4 sm:p-6 lg:p-8">
-
-      {/* PAGE HEADER */}
       <div className="max-w-7xl mx-auto">
 
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5 mb-8">
@@ -240,7 +330,10 @@ export default function ViewEntriesPage() {
 
             <div className="flex items-center gap-3">
               <div className="h-11 w-11 rounded-xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center">
-                <FileText size={22} className="text-blue-400" />
+                <FileText
+                  size={22}
+                  className="text-blue-400"
+                />
               </div>
               <div>
                 <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
@@ -254,7 +347,7 @@ export default function ViewEntriesPage() {
             </div>
           </div>
 
-          {/* REFRESH BUTTON */}
+          {/* REFRESH */}
           <button
             type="button"
             onClick={loadEntries}
@@ -267,14 +360,12 @@ export default function ViewEntriesPage() {
 
         </div>
 
-        {/* ERROR */}
         {error && (
           <div className="mb-6 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
             {error}
           </div>
         )}
 
-        {/* SUMMARY CARDS */}
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 mb-7">
 
           {/* TOTAL INCOME */}
@@ -291,7 +382,7 @@ export default function ViewEntriesPage() {
               </div>
 
               <div className="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-                <TrendingUp size={20} className="text-emerald-400" />
+                <TrendingUp size={20} className="text-emerald-400"/>
               </div>
             </div>
 
@@ -374,7 +465,6 @@ export default function ViewEntriesPage() {
           </div>
         </div>
 
-        {/* FILTER AREA */}
         <div className="rounded-2xl border border-slate-800 bg-[#0d1527] p-5 mb-7">
           <div className="flex items-center gap-2 mb-5">
             <Filter size={18} className="text-blue-400" />
@@ -412,7 +502,8 @@ export default function ViewEntriesPage() {
               </label>
 
               <div className="relative">
-                <CalendarDays size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+
+                <CalendarDays size={17}  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
 
                 <input
                   type="date"
@@ -467,16 +558,13 @@ export default function ViewEntriesPage() {
           </div>
         </div>
 
-        {/* ENTRIES TABLE */}
         <div className="rounded-2xl border border-slate-800 bg-[#0d1527] overflow-hidden shadow-xl shadow-black/10">
           {/* TABLE HEADER */}
           <div className="px-5 py-5 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="h-9 w-9 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
-                <BarChart3
-                  size={18}
-                  className="text-indigo-400"
-                />
+
+                <BarChart3 size={18} className="text-indigo-400" />
               </div>
 
               <div>
@@ -498,7 +586,11 @@ export default function ViewEntriesPage() {
           {/* LOADING */}
           {loading ? (
             <div className="py-16 flex flex-col items-center justify-center">
-              <RefreshCw size={28} className="animate-spin text-blue-400 mb-3" />
+
+              <RefreshCw
+                size={28}
+                className="animate-spin text-blue-400 mb-3"
+              />
 
               <p className="text-sm text-slate-500">
                 Loading entries...
@@ -509,7 +601,12 @@ export default function ViewEntriesPage() {
             /* EMPTY */
             <div className="py-16 flex flex-col items-center justify-center px-5">
               <div className="h-14 w-14 rounded-2xl bg-slate-800/70 border border-slate-700 flex items-center justify-center mb-4">
-                <FileText size={25} className="text-slate-500" />
+
+                <FileText
+                  size={25}
+                  className="text-slate-500"
+                />
+
               </div>
 
               <h3 className="text-sm font-semibold text-slate-300">
@@ -552,25 +649,32 @@ export default function ViewEntriesPage() {
                     </th>
                   </tr>
                 </thead>
-
                 <tbody>
                   {filteredEntries.map((entry, index) => {
                     const amount =
                       Number(entry.amount ?? 0) || 0;
 
                     const entryType =
-                      String(entry.type ?? "").toLowerCase();
+                      String(
+                        entry.type ?? ""
+                      ).toLowerCase();
+
+                    const category =
+                      String(
+                        entry.category ?? ""
+                      ).toLowerCase();
 
                     const isIncome =
                       entryType.includes("income") ||
                       entryType === "in" ||
-                      entryType === "credit";
+                      entryType === "credit" ||
+                      category.includes("income");
 
                     return (
                       <tr
                         key={
                           entry.id ??
-                          `${entry.date}-${index}`
+                          `${entry.date}-${entry.description}-${index}`
                         }
                         className="border-b border-slate-800/70 last:border-0 hover:bg-slate-800/20 transition"
                       >
@@ -606,8 +710,14 @@ export default function ViewEntriesPage() {
                                 : "bg-orange-500/10 text-orange-400 border border-orange-500/20"
                             }`}
                           >
-                            {isIncome ? ( <TrendingUp size={13} /> ) : ( <TrendingDown size={13} />)}
-                            {entry.type || (isIncome ? "Income": "Expense")}
+
+                            {isIncome ? (
+                              <TrendingUp size={13} />
+                            ) : (
+                              <TrendingDown size={13} />
+                            )}
+                            {entry.type ||
+                              (isIncome ? "Income" : "Expense")}
                           </span>
                         </td>
 
@@ -640,7 +750,6 @@ export default function ViewEntriesPage() {
           )}
         </div>
 
-        {/* FOOTER INFORMATION */}
         <div className="mt-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-[11px] text-slate-600">
           <div>
             View Entries • Financial Overview
