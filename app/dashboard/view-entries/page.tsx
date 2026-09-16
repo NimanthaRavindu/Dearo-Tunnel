@@ -39,9 +39,12 @@ type IncomeResponse = {
 export default function ViewEntriesPage() {
   const [entries, setEntries] = useState<Entry[]>([]);
 
-  // Dashboard values
+  // Dashboard exact values
   const [totalIncome, setTotalIncome] = useState(0);
   const [totalExpenses, setTotalExpenses] = useState(0);
+
+  // Income records coming from the same API used by Dashboard
+  const [incomeEntries, setIncomeEntries] = useState<Entry[]>([]);
 
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -67,6 +70,7 @@ export default function ViewEntriesPage() {
 
       const result: DashboardResponse = await response.json();
 
+      // Dashboard Total Expenses
       const dashboardExpenses =
         Number(result.cards?.totalExpenses ?? 0) || 0;
 
@@ -84,6 +88,7 @@ export default function ViewEntriesPage() {
       const incomeResult: IncomeResponse =
         await incomeResponse.json();
 
+      // Exact Dashboard Total Income
       const dashboardIncome =
         Number(incomeResult.grandTotal ?? 0) || 0;
 
@@ -102,6 +107,11 @@ export default function ViewEntriesPage() {
               (entry.id
                 ? `Sales Expense #${entry.id}`
                 : "Sales Expense"),
+            date: entry.date
+              ? String(entry.date).substring(0, 10)
+              : "",
+
+            amount: entry.amount ?? 0,
           }))
         : [];
 
@@ -120,10 +130,15 @@ export default function ViewEntriesPage() {
                 (entry.id
                   ? `Capital Expense #${entry.id}`
                   : "Capital Expense"),
+              date: entry.date
+                ? String(entry.date).substring(0, 10)
+                : "",
+
+              amount: entry.amount ?? 0,
             }))
           : [];
 
-      const incomeEntries: Entry[] =
+      const incomeRecords: Entry[] =
         Array.isArray(incomeResult.data)
           ? incomeResult.data.map((entry: any) => ({
               ...entry,
@@ -142,12 +157,20 @@ export default function ViewEntriesPage() {
                   ? `Income Entry #${entry.id}`
                   : "Income Entry"),
 
+              date: entry.date
+                ? String(entry.date).substring(0, 10)
+                : "",
+
               amount: entry.amount ?? 0,
             }))
           : [];
 
+      // Save income records separately.
+      // Date-filtered Total Income uses this array.
+      setIncomeEntries(incomeRecords);
+
       const loadedEntries = [
-        ...incomeEntries,
+        ...incomeRecords,
         ...salesEntries,
         ...capitalEntries,
       ];
@@ -170,6 +193,7 @@ export default function ViewEntriesPage() {
       );
 
       setEntries([]);
+      setIncomeEntries([]);
     } finally {
       setLoading(false);
     }
@@ -179,14 +203,15 @@ export default function ViewEntriesPage() {
     loadEntries();
   }, []);
 
-  const filteredEntries = useMemo(() => {
+  const dateFilteredEntries = useMemo(() => {
     let result = [...entries];
 
     if (fromDate) {
       result = result.filter((entry) => {
         if (!entry.date) return false;
 
-        const entryDate = String(entry.date).substring(0, 10);
+        const entryDate =
+          String(entry.date).substring(0, 10);
 
         return entryDate >= fromDate;
       });
@@ -196,14 +221,21 @@ export default function ViewEntriesPage() {
       result = result.filter((entry) => {
         if (!entry.date) return false;
 
-        const entryDate = String(entry.date).substring(0, 10);
+        const entryDate =
+          String(entry.date).substring(0, 10);
 
         return entryDate <= toDate;
       });
     }
+    return result;
+  }, [entries, fromDate, toDate]);
+
+  const filteredEntries = useMemo(() => {
+    let result = [...dateFilteredEntries];
 
     if (searchQuery.trim()) {
-      const query = searchQuery.trim().toLowerCase();
+      const query =
+        searchQuery.trim().toLowerCase();
 
       result = result.filter((entry) => {
         return (
@@ -231,13 +263,12 @@ export default function ViewEntriesPage() {
 
     return result;
   }, [
-    entries,
-    fromDate,
-    toDate,
+    dateFilteredEntries,
     searchQuery,
   ]);
 
   const filteredSummary = useMemo(() => {
+
     if (!fromDate && !toDate) {
       return {
         income: totalIncome,
@@ -246,8 +277,26 @@ export default function ViewEntriesPage() {
     }
 
     let income = 0;
+    incomeEntries.forEach((entry) => {
+      if (!entry.date) return;
+      const entryDate =
+        String(entry.date).substring(0, 10);
+
+      if (fromDate && entryDate < fromDate) {
+        return;
+      }
+
+      if (toDate && entryDate > toDate) {
+        return;
+      }
+
+      income +=
+        Number(entry.amount ?? 0) || 0;
+    });
+
     let expenses = 0;
-    filteredEntries.forEach((entry) => {
+
+    dateFilteredEntries.forEach((entry) => {
       const amount =
         Number(entry.amount ?? 0) || 0;
 
@@ -263,9 +312,7 @@ export default function ViewEntriesPage() {
         entryType === "credit" ||
         category.includes("income");
 
-      if (isIncome) {
-        income += amount;
-      } else {
+      if (!isIncome) {
         expenses += amount;
       }
     });
@@ -277,7 +324,8 @@ export default function ViewEntriesPage() {
   }, [
     fromDate,
     toDate,
-    filteredEntries,
+    incomeEntries,
+    dateFilteredEntries,
     totalIncome,
     totalExpenses,
   ]);
@@ -352,14 +400,14 @@ export default function ViewEntriesPage() {
             </div>
           </div>
 
-          {/* REFRESH */}
           <button
             type="button"
             onClick={loadEntries}
             disabled={loading}
             className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800/80 px-5 py-3 text-sm font-semibold text-slate-200 transition hover:border-blue-500/40 hover:bg-slate-800 hover:text-blue-400 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <RefreshCw size={17} className={loading ? "animate-spin" : "" } />
+            <RefreshCw size={17} className={ loading ? "animate-spin" : "" } />
+
             {loading ? "Refreshing..." : "Refresh"}
           </button>
         </div>
@@ -371,7 +419,6 @@ export default function ViewEntriesPage() {
         )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 mb-7">
-          {/* TOTAL INCOME */}
           <div className="rounded-2xl border border-slate-800 bg-[#0d1527] p-5 shadow-xl shadow-black/10">
             <div className="flex items-start justify-between">
               <div>
@@ -397,7 +444,6 @@ export default function ViewEntriesPage() {
             </div>
           </div>
 
-          {/* TOTAL EXPENSES */}
           <div className="rounded-2xl border border-slate-800 bg-[#0d1527] p-5 shadow-xl shadow-black/10">
             <div className="flex items-start justify-between">
               <div>
@@ -423,7 +469,6 @@ export default function ViewEntriesPage() {
             </div>
           </div>
 
-          {/* BALANCE */}
           <div
             className={`rounded-2xl border p-5 shadow-xl shadow-black/10 ${
               isLoss
@@ -459,7 +504,7 @@ export default function ViewEntriesPage() {
                 }`}
               >
 
-                <Wallet size={20} className={isLoss ? "text-red-400" : "text-blue-400" } />
+                <Wallet size={20} className={ isLoss ? "text-red-400" : "text-blue-400" } />
 
               </div>
             </div>
@@ -486,7 +531,7 @@ export default function ViewEntriesPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* FROM DATE */}
+
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">
                 From Date
@@ -508,7 +553,6 @@ export default function ViewEntriesPage() {
               </div>
             </div>
 
-            {/* TO DATE */}
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">
                 To Date
@@ -531,7 +575,6 @@ export default function ViewEntriesPage() {
               </div>
             </div>
 
-            {/* SEARCH */}
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">
                 Search
@@ -554,7 +597,6 @@ export default function ViewEntriesPage() {
             </div>
           </div>
 
-          {/* FILTER ACTIONS */}
           <div className="flex flex-wrap items-center justify-between gap-3 mt-5">
             <div className="text-xs text-slate-500">
               Showing{" "}
@@ -600,7 +642,6 @@ export default function ViewEntriesPage() {
             </div>
           </div>
 
-          {/* LOADING */}
           {loading ? (
             <div className="py-16 flex flex-col items-center justify-center">
 
@@ -612,7 +653,7 @@ export default function ViewEntriesPage() {
 
             </div>
           ) : filteredEntries.length === 0 ? (
-            /* EMPTY */
+
             <div className="py-16 flex flex-col items-center justify-center px-5">
               <div className="h-14 w-14 rounded-2xl bg-slate-800/70 border border-slate-700 flex items-center justify-center mb-4">
                 <FileText size={25} className="text-slate-500" />
@@ -627,7 +668,7 @@ export default function ViewEntriesPage() {
               </p>
             </div>
           ) : (
-            /* TABLE */
+
             <div className="overflow-x-auto">
               <table className="w-full min-w-[850px]">
                 <thead>
@@ -699,27 +740,17 @@ export default function ViewEntriesPage() {
 
                           {/* DATE */}
                           <td className="px-5 py-4">
-
                             <div className="flex items-center gap-2 text-sm text-slate-300">
+                              <CalendarDays size={15} className="text-slate-600" />
 
-                              <CalendarDays
-                                size={15}
-                                className="text-slate-600"
-                              />
-
-                              {formatDate(
-                                entry.date
-                              )}
-
+                              {formatDate( entry.date )}
                             </div>
-
                           </td>
 
                           {/* DESCRIPTION */}
                           <td className="px-5 py-4">
                             <div className="font-medium text-slate-200">
-                              {entry.description ||
-                                "-"}
+                              {entry.description || "-"}
                             </div>
 
                           </td>
@@ -727,10 +758,9 @@ export default function ViewEntriesPage() {
                           {/* CATEGORY */}
                           <td className="px-5 py-4">
                             <span className="inline-flex rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 py-1 text-[11px] font-medium text-slate-400">
-                              {entry.category ||
-                                "-"}
-                            </span>
+                              {entry.category || "-"}
 
+                            </span>
                           </td>
 
                           {/* TYPE */}
@@ -745,27 +775,20 @@ export default function ViewEntriesPage() {
 
                               {isIncome ? ( <TrendingUp size={13} /> ) : ( <TrendingDown size={13} /> )}
 
-                              {entry.type ||
-                                (isIncome ? "Income" : "Expense")}
+                              {entry.type || (isIncome ? "Income" : "Expense")}
 
                             </span>
-
                           </td>
 
                           {/* BRANCH */}
                           <td className="px-5 py-4">
-
                             <span className="text-sm text-slate-400">
-                              {entry.branch_name ||
-                                entry.branch_id ||
-                                "-"}
+                              {entry.branch_name || entry.branch_id || "-"}
                             </span>
-
                           </td>
 
                           {/* AMOUNT */}
                           <td className="px-5 py-4 text-right">
-
                             <span
                               className={`font-bold ${
                                 isIncome
