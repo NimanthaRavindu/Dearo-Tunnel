@@ -90,6 +90,10 @@ function TotalIncomesContent() {
     router.replace(
       `/dashboard/total-incomes${query ? `?${query}` : ""}`,
     );
+
+    router.replace(
+      `/dashboard/view-entries${query? `?${query}`:""}`
+    );
   };
 
   const clearDateFilter = () => {
@@ -379,6 +383,7 @@ function TotalIncomesContent() {
                     </th>
                   </tr>
                 </thead>
+
                 <tbody className="divide-y divide-slate-800/50 text-xs">
                   {summaries.map((item) => (
                     <tr
