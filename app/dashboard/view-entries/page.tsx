@@ -1,5 +1,5 @@
 "use client";
-import React, { useCallback,useEffect,useMemo,useState} from "react";
+import React, {Suspense,useCallback,useEffect,useMemo,useState} from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {BarChart3,CalendarDays,CheckCircle2,CircleDollarSign,FileText,Filter,RefreshCw,RotateCcw,Search,TrendingDown,TrendingUp,Wallet} from "lucide-react";
@@ -20,11 +20,8 @@ type Entry = {
 
 type DashboardResponse = {
   cards?: {
-    totalBranches?: number | string;
     totalExpenses?: number | string;
-    totalRemaining?: number | string;
   };
-  branches?: any[];
   sales?: Entry[];
   capital?: Entry[];
 };
@@ -35,7 +32,7 @@ type IncomeResponse = {
   data?: Entry[];
 };
 
-export default function ViewEntriesPage() {
+function ViewEntriesContent() {
   const searchParams = useSearchParams();
 
   const selectedSalesId = searchParams.get("selected_sales_id");
@@ -77,9 +74,7 @@ export default function ViewEntriesPage() {
       const dashboardQuery = dashboardParams.toString();
 
       const dashboardResponse = await fetch(
-        `${SUMMARY_API}${
-          dashboardQuery ? `?${dashboardQuery}` : ""
-        }`,
+        `${SUMMARY_API}${dashboardQuery ? `?${dashboardQuery}` : ""}`,
         {
           method: "GET",
           cache: "no-store",
@@ -97,8 +92,9 @@ export default function ViewEntriesPage() {
         Number(dashboardResult.cards?.totalExpenses ?? 0) || 0,
       );
 
-      const incomeParams = new URLSearchParams();
-      incomeParams.set("summary", "true");
+      const incomeParams = new URLSearchParams({
+        summary: "true",
+      });
 
       if (selectedSalesId) {
         incomeParams.set("selected_sales_id", selectedSalesId);
@@ -127,7 +123,7 @@ export default function ViewEntriesPage() {
       const incomeResult: IncomeResponse =
         await incomeResponse.json();
 
-      if (!incomeResult.success) {
+      if (incomeResult.success === false) {
         throw new Error("Income summary request failed.");
       }
 
@@ -230,17 +226,9 @@ export default function ViewEntriesPage() {
     return entries.filter((entry) => {
       const entryDate = String(entry.date ?? "").substring(0, 10);
 
-      if (!entryDate) {
-        return false;
-      }
-
-      if (fromDate && entryDate < fromDate) {
-        return false;
-      }
-
-      if (toDate && entryDate > toDate) {
-        return false;
-      }
+      if (!entryDate) return false;
+      if (fromDate && entryDate < fromDate) return false;
+      if (toDate && entryDate > toDate) return false;
 
       return true;
     });
@@ -249,9 +237,7 @@ export default function ViewEntriesPage() {
   const filteredEntries = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
-    if (!query) {
-      return dateFilteredEntries;
-    }
+    if (!query) return dateFilteredEntries;
 
     return dateFilteredEntries.filter((entry) =>
       [
@@ -267,6 +253,18 @@ export default function ViewEntriesPage() {
     );
   }, [dateFilteredEntries, searchQuery]);
 
+  const isIncomeEntry = (entry: Entry) => {
+    const type = String(entry.type ?? "").toLowerCase();
+    const category = String(entry.category ?? "").toLowerCase();
+
+    return (
+      type.includes("income") ||
+      type === "in" ||
+      type === "credit" ||
+      category.includes("income")
+    );
+  };
+
   const filteredSummary = useMemo(() => {
     if (!fromDate && !toDate) {
       return {
@@ -278,34 +276,17 @@ export default function ViewEntriesPage() {
     const income = incomeEntries.reduce((total, entry) => {
       const date = String(entry.date ?? "").substring(0, 10);
 
-      if (!date) {
-        return total;
-      }
-
-      if (fromDate && date < fromDate) {
-        return total;
-      }
-
-      if (toDate && date > toDate) {
-        return total;
-      }
+      if (!date) return total;
+      if (fromDate && date < fromDate) return total;
+      if (toDate && date > toDate) return total;
 
       return total + (Number(entry.amount ?? 0) || 0);
     }, 0);
 
     const expenses = dateFilteredEntries.reduce((total, entry) => {
-      const type = String(entry.type ?? "").toLowerCase();
-      const category = String(entry.category ?? "").toLowerCase();
+      if (isIncomeEntry(entry)) return total;
 
-      const isIncome =
-        type.includes("income") ||
-        type === "in" ||
-        type === "credit" ||
-        category.includes("income");
-
-      return isIncome
-        ? total
-        : total + (Number(entry.amount ?? 0) || 0);
+      return total + (Number(entry.amount ?? 0) || 0);
     }, 0);
 
     return { income, expenses };
@@ -330,9 +311,7 @@ export default function ViewEntriesPage() {
     })}`;
 
   const formatDate = (date?: string) => {
-    if (!date) {
-      return "-";
-    }
+    if (!date) return "-";
 
     const parts = String(date).substring(0, 10).split("-");
 
@@ -359,9 +338,7 @@ export default function ViewEntriesPage() {
               >
                 Dashboard
               </Link>
-
               <span>/</span>
-
               <span className="text-slate-400">
                 View Entries
               </span>
@@ -401,51 +378,25 @@ export default function ViewEntriesPage() {
         )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 mb-7">
-          <div className="rounded-2xl border border-slate-800 bg-[#0d1527] p-5 shadow-xl">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-xs uppercase tracking-widest font-semibold text-slate-500">
-                  Total Income
-                </p>
+          <SummaryCard
+            title="Total Income"
+            value={formatMoney(filteredSummary.income)}
+            icon={<TrendingUp size={20} className="text-emerald-400" />}
+            iconClass="bg-emerald-500/10 border-emerald-500/20"
+            footerIcon={<CheckCircle2 size={14} />}
+            footer="Income recorded"
+            footerClass="text-emerald-400"
+          />
 
-                <h2 className="text-2xl sm:text-3xl font-bold text-white mt-2">
-                  {formatMoney(filteredSummary.income)}
-                </h2>
-              </div>
-
-              <div className="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-                <TrendingUp size={20} className="text-emerald-400" />
-              </div>
-            </div>
-
-            <div className="mt-4 flex items-center gap-2 text-xs text-emerald-400">
-              <CheckCircle2 size={14} />
-              Income recorded
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-800 bg-[#0d1527] p-5 shadow-xl">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-xs uppercase tracking-widest font-semibold text-slate-500">
-                  Total Expenses
-                </p>
-
-                <h2 className="text-2xl sm:text-3xl font-bold text-white mt-2">
-                  {formatMoney(filteredSummary.expenses)}
-                </h2>
-              </div>
-
-              <div className="h-10 w-10 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center">
-                <TrendingDown size={20} className="text-orange-400" />
-              </div>
-            </div>
-
-            <div className="mt-4 flex items-center gap-2 text-xs text-orange-400">
-              <CircleDollarSign size={14} />
-              Expenses recorded
-            </div>
-          </div>
+          <SummaryCard
+            title="Total Expenses"
+            value={formatMoney(filteredSummary.expenses)}
+            icon={<TrendingDown size={20} className="text-orange-400" />}
+            iconClass="bg-orange-500/10 border-orange-500/20"
+            footerIcon={<CircleDollarSign size={14} />}
+            footer="Expenses recorded"
+            footerClass="text-orange-400"
+          />
 
           <div
             className={`rounded-2xl border p-5 shadow-xl ${
@@ -500,43 +451,17 @@ export default function ViewEntriesPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">
-                From Date
-              </label>
+            <DateInput
+              label="From Date"
+              value={fromDate}
+              onChange={setFromDate}
+            />
 
-              <div className="relative">
-                <CalendarDays size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
-
-                <input
-                  type="date"
-                  value={fromDate}
-                  onChange={(event) =>
-                    setFromDate(event.target.value)
-                  }
-                  className="w-full rounded-xl border border-slate-700 bg-[#070a13] pl-10 pr-3 py-3 text-sm text-slate-200 outline-none transition focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/20"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">
-                To Date
-              </label>
-
-              <div className="relative">
-                <CalendarDays size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
-
-                <input
-                  type="date"
-                  value={toDate}
-                  onChange={(event) =>
-                    setToDate(event.target.value)
-                  }
-                  className="w-full rounded-xl border border-slate-700 bg-[#070a13] pl-10 pr-3 py-3 text-sm text-slate-200 outline-none transition focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/20"
-                />
-              </div>
-            </div>
+            <DateInput
+              label="To Date"
+              value={toDate}
+              onChange={setToDate}
+            />
 
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">
@@ -605,7 +530,6 @@ export default function ViewEntriesPage() {
           {loading ? (
             <div className="py-16 flex flex-col items-center justify-center">
               <RefreshCw size={28} className="animate-spin text-cyan-400 mb-3" />
-
               <p className="text-sm text-slate-500">
                 Loading entries...
               </p>
@@ -650,24 +574,12 @@ export default function ViewEntriesPage() {
                     ))}
                   </tr>
                 </thead>
+
                 <tbody>
                   {filteredEntries.map((entry, index) => {
                     const amount =
                       Number(entry.amount ?? 0) || 0;
-
-                    const entryType = String(
-                      entry.type ?? "",
-                    ).toLowerCase();
-
-                    const category = String(
-                      entry.category ?? "",
-                    ).toLowerCase();
-
-                    const isIncome =
-                      entryType.includes("income") ||
-                      entryType === "in" ||
-                      entryType === "credit" ||
-                      category.includes("income");
+                    const income = isIncomeEntry(entry);
 
                     return (
                       <tr
@@ -699,19 +611,18 @@ export default function ViewEntriesPage() {
                         <td className="px-5 py-4">
                           <span
                             className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold uppercase ${
-                              isIncome
+                              income
                                 ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                                 : "bg-orange-500/10 text-orange-400 border border-orange-500/20"
                             }`}
                           >
-                            {isIncome ? (
+                            {income ? (
                               <TrendingUp size={13} />
                             ) : (
                               <TrendingDown size={13} />
                             )}
-
                             {entry.type ||
-                              (isIncome ? "Income" : "Expense")}
+                              (income ? "Income" : "Expense")}
                           </span>
                         </td>
 
@@ -726,12 +637,12 @@ export default function ViewEntriesPage() {
                         <td className="px-5 py-4 text-right">
                           <span
                             className={`font-bold ${
-                              isIncome
+                              income
                                 ? "text-emerald-400"
                                 : "text-orange-400"
                             }`}
                           >
-                            {isIncome ? "+" : "-"}
+                            {income ? "+" : "-"}
                             {formatMoney(amount)}
                           </span>
                         </td>
@@ -750,5 +661,95 @@ export default function ViewEntriesPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+function SummaryCard({
+  title,
+  value,
+  icon,
+  iconClass,
+  footerIcon,
+  footer,
+  footerClass,
+}: {
+  title: string;
+  value: string;
+  icon: React.ReactNode;
+  iconClass: string;
+  footerIcon: React.ReactNode;
+  footer: string;
+  footerClass: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-[#0d1527] p-5 shadow-xl">
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-xs uppercase tracking-widest font-semibold text-slate-500">
+            {title}
+          </p>
+
+          <h2 className="text-2xl sm:text-3xl font-bold text-white mt-2">
+            {value}
+          </h2>
+        </div>
+
+        <div
+          className={`h-10 w-10 rounded-xl border flex items-center justify-center ${iconClass}`}
+        >
+          {icon}
+        </div>
+      </div>
+
+      <div
+        className={`mt-4 flex items-center gap-2 text-xs ${footerClass}`}
+      >
+        {footerIcon}
+        {footer}
+      </div>
+    </div>
+  );
+}
+
+function DateInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div>
+      <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">
+        {label}
+      </label>
+
+      <div className="relative">
+        <CalendarDays size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+
+        <input
+          type="date"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className="w-full rounded-xl border border-slate-700 bg-[#070a13] pl-10 pr-3 py-3 text-sm text-slate-200 outline-none transition focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/20"
+        />
+      </div>
+    </div>
+  );
+}
+
+export default function ViewEntriesPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#070a13] flex items-center justify-center text-cyan-400">
+          Loading entries...
+        </div>
+      }
+    >
+      <ViewEntriesContent />
+    </Suspense>
   );
 }
