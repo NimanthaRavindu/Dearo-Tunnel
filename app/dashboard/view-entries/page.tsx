@@ -389,7 +389,7 @@ function ViewEntriesContent() {
           />
 
           <SummaryCard
-            title="Total Expenses"
+            title="Net Income"
             value={formatMoney(filteredSummary.expenses)}
             icon={<TrendingDown size={20} className="text-orange-400" />}
             iconClass="bg-orange-500/10 border-orange-500/20"
