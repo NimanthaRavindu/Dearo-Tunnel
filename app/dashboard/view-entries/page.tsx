@@ -823,7 +823,7 @@ export default function ViewEntriesPage() {
           <div>
             Balance = Total Income - Total Expenses
           </div>
-        </div>
+        </div> 
       </div>
     </div>
   );
