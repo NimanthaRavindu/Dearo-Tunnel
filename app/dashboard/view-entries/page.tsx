@@ -1,10 +1,11 @@
 "use client";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback,useEffect,useMemo,useState} from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {BarChart3,CalendarDays,CheckCircle2,CircleDollarSign,FileText,Filter,RefreshCw,RotateCcw,Search,TrendingDown,TrendingUp,Wallet} from "lucide-react";
 
 const SUMMARY_API = "/api/dashboard/summary";
-const INCOME_API = "/api/expences/sales-incomes?summary=true";
+const INCOME_API = "/api/expences/sales-incomes";
 
 type Entry = {
   id?: number | string;
@@ -23,9 +24,7 @@ type DashboardResponse = {
     totalExpenses?: number | string;
     totalRemaining?: number | string;
   };
-
   branches?: any[];
-
   sales?: Entry[];
   capital?: Entry[];
 };
@@ -37,71 +36,110 @@ type IncomeResponse = {
 };
 
 export default function ViewEntriesPage() {
-  const [entries, setEntries] = useState<Entry[]>([]);
+  const searchParams = useSearchParams();
 
-  // Dashboard exact values
+  const selectedSalesId = searchParams.get("selected_sales_id");
+  const selectedCapitalId = searchParams.get("selected_capital_id");
+  const selectedDate = searchParams.get("date") || "";
+
+  const [entries, setEntries] = useState<Entry[]>([]);
+  const [incomeEntries, setIncomeEntries] = useState<Entry[]>([]);
   const [totalIncome, setTotalIncome] = useState(0);
   const [totalExpenses, setTotalExpenses] = useState(0);
 
-  // Income records coming from the same API used by Dashboard
-  const [incomeEntries, setIncomeEntries] = useState<Entry[]>([]);
-
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
-
+  const [fromDate, setFromDate] = useState(selectedDate);
+  const [toDate, setToDate] = useState(selectedDate);
   const [searchQuery, setSearchQuery] = useState("");
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const loadEntries = async () => {
+  useEffect(() => {
+    setFromDate(selectedDate);
+    setToDate(selectedDate);
+  }, [selectedDate]);
+
+  const loadEntries = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
 
-      const response = await fetch(SUMMARY_API, {
-        method: "GET",
-        cache: "no-store",
-      });
+      const dashboardParams = new URLSearchParams();
 
-      if (!response.ok) {
-        throw new Error("Failed to load dashboard summary");
+      if (selectedSalesId) {
+        dashboardParams.set("selected_sales_id", selectedSalesId);
       }
 
-      const result: DashboardResponse = await response.json();
+      if (selectedCapitalId) {
+        dashboardParams.set("selected_capital_id", selectedCapitalId);
+      }
 
-      // Dashboard Total Expenses
-      const dashboardExpenses =
-        Number(result.cards?.totalExpenses ?? 0) || 0;
+      const dashboardQuery = dashboardParams.toString();
 
-      setTotalExpenses(dashboardExpenses);
+      const dashboardResponse = await fetch(
+        `${SUMMARY_API}${
+          dashboardQuery ? `?${dashboardQuery}` : ""
+        }`,
+        {
+          method: "GET",
+          cache: "no-store",
+        },
+      );
 
-      const incomeResponse = await fetch(INCOME_API, {
-        method: "GET",
-        cache: "no-store",
-      });
+      if (!dashboardResponse.ok) {
+        throw new Error("Failed to load dashboard summary.");
+      }
+
+      const dashboardResult: DashboardResponse =
+        await dashboardResponse.json();
+
+      setTotalExpenses(
+        Number(dashboardResult.cards?.totalExpenses ?? 0) || 0,
+      );
+
+      const incomeParams = new URLSearchParams();
+      incomeParams.set("summary", "true");
+
+      if (selectedSalesId) {
+        incomeParams.set("selected_sales_id", selectedSalesId);
+      }
+
+      if (selectedCapitalId) {
+        incomeParams.set("selected_capital_id", selectedCapitalId);
+      }
+
+      if (selectedDate) {
+        incomeParams.set("date", selectedDate);
+      }
+
+      const incomeResponse = await fetch(
+        `${INCOME_API}?${incomeParams.toString()}`,
+        {
+          method: "GET",
+          cache: "no-store",
+        },
+      );
 
       if (!incomeResponse.ok) {
-        throw new Error("Failed to load income summary");
+        throw new Error("Failed to load income summary.");
       }
 
       const incomeResult: IncomeResponse =
         await incomeResponse.json();
 
-      // Exact Dashboard Total Income
-      const dashboardIncome =
-        Number(incomeResult.grandTotal ?? 0) || 0;
+      if (!incomeResult.success) {
+        throw new Error("Income summary request failed.");
+      }
 
-      setTotalIncome(dashboardIncome);
+      setTotalIncome(Number(incomeResult.grandTotal ?? 0) || 0);
 
-      const salesEntries: Entry[] = Array.isArray(result.sales)
-        ? result.sales.map((entry) => ({
+      const salesEntries: Entry[] = Array.isArray(
+        dashboardResult.sales,
+      )
+        ? dashboardResult.sales.map((entry) => ({
             ...entry,
             type: entry.type || "Expense",
-
-            category:
-              entry.category || "Sales Expense",
-
+            category: entry.category || "Sales Expense",
             description:
               entry.description ||
               (entry.id
@@ -110,77 +148,60 @@ export default function ViewEntriesPage() {
             date: entry.date
               ? String(entry.date).substring(0, 10)
               : "",
-
             amount: entry.amount ?? 0,
           }))
         : [];
 
-      const capitalEntries: Entry[] =
-        Array.isArray(result.capital)
-          ? result.capital.map((entry) => ({
-              ...entry,
+      const capitalEntries: Entry[] = Array.isArray(
+        dashboardResult.capital,
+      )
+        ? dashboardResult.capital.map((entry) => ({
+            ...entry,
+            type: entry.type || "Expense",
+            category: entry.category || "Capital Expense",
+            description:
+              entry.description ||
+              (entry.id
+                ? `Capital Expense #${entry.id}`
+                : "Capital Expense"),
+            date: entry.date
+              ? String(entry.date).substring(0, 10)
+              : "",
+            amount: entry.amount ?? 0,
+          }))
+        : [];
 
-              type: entry.type || "Expense",
+      const incomeRecords: Entry[] = Array.isArray(
+        incomeResult.data,
+      )
+        ? incomeResult.data.map((entry: any) => ({
+            ...entry,
+            type: entry.type || "Income",
+            category: entry.category || "Income",
+            description:
+              entry.description ||
+              entry.personName ||
+              entry.person_name ||
+              entry.name ||
+              (entry.id
+                ? `Income Entry #${entry.id}`
+                : "Income Entry"),
+            date: entry.date
+              ? String(entry.date).substring(0, 10)
+              : "",
+            amount: entry.amount ?? 0,
+          }))
+        : [];
 
-              category:
-                entry.category || "Capital Expense",
-
-              description:
-                entry.description ||
-                (entry.id
-                  ? `Capital Expense #${entry.id}`
-                  : "Capital Expense"),
-              date: entry.date
-                ? String(entry.date).substring(0, 10)
-                : "",
-
-              amount: entry.amount ?? 0,
-            }))
-          : [];
-
-      const incomeRecords: Entry[] =
-        Array.isArray(incomeResult.data)
-          ? incomeResult.data.map((entry: any) => ({
-              ...entry,
-
-              type: entry.type || "Income",
-
-              category:
-                entry.category || "Income",
-
-              description:
-                entry.description ||
-                entry.personName ||
-                entry.person_name ||
-                entry.name ||
-                (entry.id
-                  ? `Income Entry #${entry.id}`
-                  : "Income Entry"),
-
-              date: entry.date
-                ? String(entry.date).substring(0, 10)
-                : "",
-
-              amount: entry.amount ?? 0,
-            }))
-          : [];
-
-      // Save income records separately.
-      // Date-filtered Total Income uses this array.
       setIncomeEntries(incomeRecords);
 
       const loadedEntries = [
         ...incomeRecords,
         ...salesEntries,
         ...capitalEntries,
-      ];
-
-      loadedEntries.sort((a, b) => {
-        const dateA = String(a.date ?? "");
-        const dateB = String(b.date ?? "");
-
-        return dateB.localeCompare(dateA);
-      });
+      ].sort((a, b) =>
+        String(b.date ?? "").localeCompare(String(a.date ?? "")),
+      );
 
       setEntries(loadedEntries);
     } catch (err) {
@@ -189,86 +210,64 @@ export default function ViewEntriesPage() {
       setError(
         err instanceof Error
           ? err.message
-          : "Unable to load entries."
+          : "Unable to load entries.",
       );
 
       setEntries([]);
       setIncomeEntries([]);
+      setTotalIncome(0);
+      setTotalExpenses(0);
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedSalesId, selectedCapitalId, selectedDate]);
 
   useEffect(() => {
     loadEntries();
-  }, []);
+  }, [loadEntries]);
 
   const dateFilteredEntries = useMemo(() => {
-    let result = [...entries];
+    return entries.filter((entry) => {
+      const entryDate = String(entry.date ?? "").substring(0, 10);
 
-    if (fromDate) {
-      result = result.filter((entry) => {
-        if (!entry.date) return false;
+      if (!entryDate) {
+        return false;
+      }
 
-        const entryDate =
-          String(entry.date).substring(0, 10);
+      if (fromDate && entryDate < fromDate) {
+        return false;
+      }
 
-        return entryDate >= fromDate;
-      });
-    }
+      if (toDate && entryDate > toDate) {
+        return false;
+      }
 
-    if (toDate) {
-      result = result.filter((entry) => {
-        if (!entry.date) return false;
-
-        const entryDate =
-          String(entry.date).substring(0, 10);
-
-        return entryDate <= toDate;
-      });
-    }
-    return result;
+      return true;
+    });
   }, [entries, fromDate, toDate]);
 
   const filteredEntries = useMemo(() => {
-    let result = [...dateFilteredEntries];
+    const query = searchQuery.trim().toLowerCase();
 
-    if (searchQuery.trim()) {
-      const query =
-        searchQuery.trim().toLowerCase();
-
-      result = result.filter((entry) => {
-        return (
-          String(entry.description ?? "")
-            .toLowerCase()
-            .includes(query) ||
-          String(entry.category ?? "")
-            .toLowerCase()
-            .includes(query) ||
-          String(entry.type ?? "")
-            .toLowerCase()
-            .includes(query) ||
-          String(entry.branch_name ?? "")
-            .toLowerCase()
-            .includes(query) ||
-          String(entry.branch_id ?? "")
-            .toLowerCase()
-            .includes(query) ||
-          String(entry.amount ?? "")
-            .toLowerCase()
-            .includes(query)
-        );
-      });
+    if (!query) {
+      return dateFilteredEntries;
     }
 
-    return result;
-  }, [
-    dateFilteredEntries,
-    searchQuery,
-  ]);
+    return dateFilteredEntries.filter((entry) =>
+      [
+        entry.description,
+        entry.category,
+        entry.type,
+        entry.branch_name,
+        entry.branch_id,
+        entry.amount,
+      ].some((value) =>
+        String(value ?? "").toLowerCase().includes(query),
+      ),
+    );
+  }, [dateFilteredEntries, searchQuery]);
 
   const filteredSummary = useMemo(() => {
-
     if (!fromDate && !toDate) {
       return {
         income: totalIncome,
@@ -276,51 +275,40 @@ export default function ViewEntriesPage() {
       };
     }
 
-    let income = 0;
-    incomeEntries.forEach((entry) => {
-      if (!entry.date) return;
-      const entryDate =
-        String(entry.date).substring(0, 10);
+    const income = incomeEntries.reduce((total, entry) => {
+      const date = String(entry.date ?? "").substring(0, 10);
 
-      if (fromDate && entryDate < fromDate) {
-        return;
+      if (!date) {
+        return total;
       }
 
-      if (toDate && entryDate > toDate) {
-        return;
+      if (fromDate && date < fromDate) {
+        return total;
       }
 
-      income +=
-        Number(entry.amount ?? 0) || 0;
-    });
+      if (toDate && date > toDate) {
+        return total;
+      }
 
-    let expenses = 0;
+      return total + (Number(entry.amount ?? 0) || 0);
+    }, 0);
 
-    dateFilteredEntries.forEach((entry) => {
-      const amount =
-        Number(entry.amount ?? 0) || 0;
-
-      const entryType =
-        String(entry.type ?? "").toLowerCase();
-
-      const category =
-        String(entry.category ?? "").toLowerCase();
+    const expenses = dateFilteredEntries.reduce((total, entry) => {
+      const type = String(entry.type ?? "").toLowerCase();
+      const category = String(entry.category ?? "").toLowerCase();
 
       const isIncome =
-        entryType.includes("income") ||
-        entryType === "in" ||
-        entryType === "credit" ||
+        type.includes("income") ||
+        type === "in" ||
+        type === "credit" ||
         category.includes("income");
 
-      if (!isIncome) {
-        expenses += amount;
-      }
-    });
+      return isIncome
+        ? total
+        : total + (Number(entry.amount ?? 0) || 0);
+    }, 0);
 
-    return {
-      income,
-      expenses,
-    };
+    return { income, expenses };
   }, [
     fromDate,
     toDate,
@@ -331,31 +319,26 @@ export default function ViewEntriesPage() {
   ]);
 
   const balance =
-    filteredSummary.income -
-    filteredSummary.expenses;
+    filteredSummary.income - filteredSummary.expenses;
 
   const isLoss = balance < 0;
 
-  const formatMoney = (value: number) => {
-    return `Rs. ${value.toLocaleString("en-LK", {
+  const formatMoney = (value: number) =>
+    `Rs. ${value.toLocaleString("en-LK", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`;
-  };
 
   const formatDate = (date?: string) => {
-    if (!date) return "-";
-
-    const datePart =
-      String(date).substring(0, 10);
-
-    const parts = datePart.split("-");
-
-    if (parts.length === 3) {
-      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    if (!date) {
+      return "-";
     }
 
-    return datePart;
+    const parts = String(date).substring(0, 10).split("-");
+
+    return parts.length === 3
+      ? `${parts[2]}/${parts[1]}/${parts[0]}`
+      : String(date);
   };
 
   const resetFilter = () => {
@@ -372,7 +355,7 @@ export default function ViewEntriesPage() {
             <div className="flex items-center gap-2 text-xs text-slate-500 mb-2">
               <Link
                 href="/dashboard"
-                className="hover:text-blue-400 transition"
+                className="hover:text-cyan-400 transition"
               >
                 Dashboard
               </Link>
@@ -385,8 +368,8 @@ export default function ViewEntriesPage() {
             </div>
 
             <div className="flex items-center gap-3">
-              <div className="h-11 w-11 rounded-xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center">
-                <FileText size={22} className="text-blue-400" />
+              <div className="h-11 w-11 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
+                <FileText size={22} className="text-cyan-400" />
               </div>
               <div>
                 <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
@@ -404,10 +387,9 @@ export default function ViewEntriesPage() {
             type="button"
             onClick={loadEntries}
             disabled={loading}
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800/80 px-5 py-3 text-sm font-semibold text-slate-200 transition hover:border-blue-500/40 hover:bg-slate-800 hover:text-blue-400 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800/80 px-5 py-3 text-sm font-semibold text-slate-200 transition hover:border-cyan-500/40 hover:bg-slate-800 hover:text-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <RefreshCw size={17} className={ loading ? "animate-spin" : "" } />
-
+            <RefreshCw size={17} className={loading ? "animate-spin" : ""} />
             {loading ? "Refreshing..." : "Refresh"}
           </button>
         </div>
@@ -419,7 +401,7 @@ export default function ViewEntriesPage() {
         )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 mb-7">
-          <div className="rounded-2xl border border-slate-800 bg-[#0d1527] p-5 shadow-xl shadow-black/10">
+          <div className="rounded-2xl border border-slate-800 bg-[#0d1527] p-5 shadow-xl">
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-xs uppercase tracking-widest font-semibold text-slate-500">
@@ -427,9 +409,7 @@ export default function ViewEntriesPage() {
                 </p>
 
                 <h2 className="text-2xl sm:text-3xl font-bold text-white mt-2">
-                  {formatMoney(
-                    filteredSummary.income
-                  )}
+                  {formatMoney(filteredSummary.income)}
                 </h2>
               </div>
 
@@ -444,7 +424,7 @@ export default function ViewEntriesPage() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-800 bg-[#0d1527] p-5 shadow-xl shadow-black/10">
+          <div className="rounded-2xl border border-slate-800 bg-[#0d1527] p-5 shadow-xl">
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-xs uppercase tracking-widest font-semibold text-slate-500">
@@ -452,9 +432,7 @@ export default function ViewEntriesPage() {
                 </p>
 
                 <h2 className="text-2xl sm:text-3xl font-bold text-white mt-2">
-                  {formatMoney(
-                    filteredSummary.expenses
-                  )}
+                  {formatMoney(filteredSummary.expenses)}
                 </h2>
               </div>
 
@@ -470,13 +448,12 @@ export default function ViewEntriesPage() {
           </div>
 
           <div
-            className={`rounded-2xl border p-5 shadow-xl shadow-black/10 ${
+            className={`rounded-2xl border p-5 shadow-xl ${
               isLoss
                 ? "border-red-500/20 bg-red-500/[0.04]"
                 : "border-blue-500/20 bg-blue-500/[0.04]"
             }`}
           >
-
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-xs uppercase tracking-widest font-semibold text-slate-500">
@@ -485,14 +462,10 @@ export default function ViewEntriesPage() {
 
                 <h2
                   className={`text-2xl sm:text-3xl font-bold mt-2 ${
-                    isLoss
-                      ? "text-red-400"
-                      : "text-blue-400"
+                    isLoss ? "text-red-400" : "text-blue-400"
                   }`}
                 >
-                  {formatMoney(
-                    Math.abs(balance)
-                  )}
+                  {formatMoney(Math.abs(balance))}
                 </h2>
               </div>
 
@@ -503,17 +476,13 @@ export default function ViewEntriesPage() {
                     : "bg-blue-500/10 border-blue-500/20"
                 }`}
               >
-
                 <Wallet size={20} className={ isLoss ? "text-red-400" : "text-blue-400" } />
-
               </div>
             </div>
 
             <div
               className={`mt-4 text-xs font-bold uppercase tracking-wider ${
-                isLoss
-                  ? "text-red-400"
-                  : "text-emerald-400"
+                isLoss ? "text-red-400" : "text-emerald-400"
               }`}
             >
               {isLoss ? "LOSS" : "PROFIT"}
@@ -523,7 +492,7 @@ export default function ViewEntriesPage() {
 
         <div className="rounded-2xl border border-slate-800 bg-[#0d1527] p-5 mb-7">
           <div className="flex items-center gap-2 mb-5">
-            <Filter size={18} className="text-blue-400" />
+            <Filter size={18} className="text-cyan-400" />
 
             <h2 className="text-sm font-bold uppercase tracking-wider text-white">
               Filter Entries
@@ -531,7 +500,6 @@ export default function ViewEntriesPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">
                 From Date
@@ -543,12 +511,10 @@ export default function ViewEntriesPage() {
                 <input
                   type="date"
                   value={fromDate}
-                  onChange={(e) =>
-                    setFromDate(
-                      e.target.value
-                    )
+                  onChange={(event) =>
+                    setFromDate(event.target.value)
                   }
-                  className="w-full rounded-xl border border-slate-700 bg-[#070a13] pl-10 pr-3 py-3 text-sm text-slate-200 outline-none transition focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20"
+                  className="w-full rounded-xl border border-slate-700 bg-[#070a13] pl-10 pr-3 py-3 text-sm text-slate-200 outline-none transition focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/20"
                 />
               </div>
             </div>
@@ -559,18 +525,15 @@ export default function ViewEntriesPage() {
               </label>
 
               <div className="relative">
-
                 <CalendarDays size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
 
                 <input
                   type="date"
                   value={toDate}
-                  onChange={(e) =>
-                    setToDate(
-                      e.target.value
-                    )
+                  onChange={(event) =>
+                    setToDate(event.target.value)
                   }
-                  className="w-full rounded-xl border border-slate-700 bg-[#070a13] pl-10 pr-3 py-3 text-sm text-slate-200 outline-none transition focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20"
+                  className="w-full rounded-xl border border-slate-700 bg-[#070a13] pl-10 pr-3 py-3 text-sm text-slate-200 outline-none transition focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/20"
                 />
               </div>
             </div>
@@ -582,16 +545,15 @@ export default function ViewEntriesPage() {
 
               <div className="relative">
                 <Search size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+
                 <input
                   type="text"
                   value={searchQuery}
-                  onChange={(e) =>
-                    setSearchQuery(
-                      e.target.value
-                    )
+                  onChange={(event) =>
+                    setSearchQuery(event.target.value)
                   }
                   placeholder="Search entries..."
-                  className="w-full rounded-xl border border-slate-700 bg-[#070a13] pl-10 pr-3 py-3 text-sm text-slate-200 placeholder:text-slate-600 outline-none transition focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20"
+                  className="w-full rounded-xl border border-slate-700 bg-[#070a13] pl-10 pr-3 py-3 text-sm text-slate-200 placeholder:text-slate-600 outline-none transition focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/20"
                 />
               </div>
             </div>
@@ -617,12 +579,10 @@ export default function ViewEntriesPage() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-800 bg-[#0d1527] overflow-hidden shadow-xl shadow-black/10">
-          {/* TABLE HEADER */}
+        <div className="rounded-2xl border border-slate-800 bg-[#0d1527] overflow-hidden shadow-xl">
           <div className="px-5 py-5 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="h-9 w-9 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
-
                 <BarChart3 size={18} className="text-indigo-400" />
               </div>
 
@@ -644,16 +604,13 @@ export default function ViewEntriesPage() {
 
           {loading ? (
             <div className="py-16 flex flex-col items-center justify-center">
-
-              <RefreshCw size={28} className="animate-spin text-blue-400 mb-3" />
+              <RefreshCw size={28} className="animate-spin text-cyan-400 mb-3" />
 
               <p className="text-sm text-slate-500">
                 Loading entries...
               </p>
-
             </div>
           ) : filteredEntries.length === 0 ? (
-
             <div className="py-16 flex flex-col items-center justify-center px-5">
               <div className="h-14 w-14 rounded-2xl bg-slate-800/70 border border-slate-700 flex items-center justify-center mb-4">
                 <FileText size={25} className="text-slate-500" />
@@ -668,148 +625,119 @@ export default function ViewEntriesPage() {
               </p>
             </div>
           ) : (
-
             <div className="overflow-x-auto">
               <table className="w-full min-w-[850px]">
                 <thead>
                   <tr className="border-b border-slate-800 bg-[#0a1020]">
-                    <th className="text-left px-5 py-4 text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                      Date
-                    </th>
-
-                    <th className="text-left px-5 py-4 text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                      Description
-                    </th>
-
-                    <th className="text-left px-5 py-4 text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                      Category
-                    </th>
-
-                    <th className="text-left px-5 py-4 text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                      Type
-                    </th>
-
-                    <th className="text-left px-5 py-4 text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                      Branch
-                    </th>
-
-                    <th className="text-right px-5 py-4 text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                      Amount
-                    </th>
+                    {[
+                      "Date",
+                      "Description",
+                      "Category",
+                      "Type",
+                      "Branch",
+                      "Amount",
+                    ].map((heading) => (
+                      <th
+                        key={heading}
+                        className={`px-5 py-4 text-[10px] font-bold uppercase tracking-widest text-slate-500 ${
+                          heading === "Amount"
+                            ? "text-right"
+                            : "text-left"
+                        }`}
+                      >
+                        {heading}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
+                  {filteredEntries.map((entry, index) => {
+                    const amount =
+                      Number(entry.amount ?? 0) || 0;
 
-                  {filteredEntries.map(
-                    (entry, index) => {
+                    const entryType = String(
+                      entry.type ?? "",
+                    ).toLowerCase();
 
-                      const amount =
-                        Number(
-                          entry.amount ?? 0
-                        ) || 0;
+                    const category = String(
+                      entry.category ?? "",
+                    ).toLowerCase();
 
-                      const entryType =
-                        String(
-                          entry.type ?? ""
-                        ).toLowerCase();
+                    const isIncome =
+                      entryType.includes("income") ||
+                      entryType === "in" ||
+                      entryType === "credit" ||
+                      category.includes("income");
 
-                      const category =
-                        String(
-                          entry.category ?? ""
-                        ).toLowerCase();
+                    return (
+                      <tr
+                        key={
+                          entry.id ??
+                          `${entry.date}-${entry.description}-${index}`
+                        }
+                        className="border-b border-slate-800/70 last:border-0 hover:bg-slate-800/20 transition"
+                      >
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-2 text-sm text-slate-300">
+                            <CalendarDays size={15} className="text-slate-600" />
+                            {formatDate(entry.date)}
+                          </div>
+                        </td>
 
-                      const isIncome =
-                        entryType.includes(
-                          "income"
-                        ) ||
-                        entryType === "in" ||
-                        entryType === "credit" ||
-                        category.includes(
-                          "income"
-                        );
+                        <td className="px-5 py-4">
+                          <div className="font-medium text-slate-200">
+                            {entry.description || "-"}
+                          </div>
+                        </td>
 
-                      return (
+                        <td className="px-5 py-4">
+                          <span className="inline-flex rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 py-1 text-[11px] font-medium text-slate-400">
+                            {entry.category || "-"}
+                          </span>
+                        </td>
 
-                        <tr
-                          key={
-                            entry.id ??
-                            `${entry.date}-${entry.description}-${index}`
-                          }
-                          className="border-b border-slate-800/70 last:border-0 hover:bg-slate-800/20 transition"
-                        >
+                        <td className="px-5 py-4">
+                          <span
+                            className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold uppercase ${
+                              isIncome
+                                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                : "bg-orange-500/10 text-orange-400 border border-orange-500/20"
+                            }`}
+                          >
+                            {isIncome ? (
+                              <TrendingUp size={13} />
+                            ) : (
+                              <TrendingDown size={13} />
+                            )}
 
-                          {/* DATE */}
-                          <td className="px-5 py-4">
-                            <div className="flex items-center gap-2 text-sm text-slate-300">
-                              <CalendarDays size={15} className="text-slate-600" />
+                            {entry.type ||
+                              (isIncome ? "Income" : "Expense")}
+                          </span>
+                        </td>
 
-                              {formatDate( entry.date )}
-                            </div>
-                          </td>
+                        <td className="px-5 py-4">
+                          <span className="text-sm text-slate-400">
+                            {entry.branch_name ||
+                              entry.branch_id ||
+                              "-"}
+                          </span>
+                        </td>
 
-                          {/* DESCRIPTION */}
-                          <td className="px-5 py-4">
-                            <div className="font-medium text-slate-200">
-                              {entry.description || "-"}
-                            </div>
-
-                          </td>
-
-                          {/* CATEGORY */}
-                          <td className="px-5 py-4">
-                            <span className="inline-flex rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 py-1 text-[11px] font-medium text-slate-400">
-                              {entry.category || "-"}
-
-                            </span>
-                          </td>
-
-                          {/* TYPE */}
-                          <td className="px-5 py-4">
-                            <span
-                              className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold uppercase ${
-                                isIncome
-                                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                                  : "bg-orange-500/10 text-orange-400 border border-orange-500/20"
-                              }`}
-                            >
-
-                              {isIncome ? ( <TrendingUp size={13} /> ) : ( <TrendingDown size={13} /> )}
-
-                              {entry.type || (isIncome ? "Income" : "Expense")}
-
-                            </span>
-                          </td>
-
-                          {/* BRANCH */}
-                          <td className="px-5 py-4">
-                            <span className="text-sm text-slate-400">
-                              {entry.branch_name || entry.branch_id || "-"}
-                            </span>
-                          </td>
-
-                          {/* AMOUNT */}
-                          <td className="px-5 py-4 text-right">
-                            <span
-                              className={`font-bold ${
-                                isIncome
-                                  ? "text-emerald-400"
-                                  : "text-orange-400"
-                              }`}
-                            >
-
-                              {isIncome ? "+" : "-"}
-
-                              {formatMoney(
-                                amount
-                              )}
-
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    }
-                  )}
-
+                        <td className="px-5 py-4 text-right">
+                          <span
+                            className={`font-bold ${
+                              isIncome
+                                ? "text-emerald-400"
+                                : "text-orange-400"
+                            }`}
+                          >
+                            {isIncome ? "+" : "-"}
+                            {formatMoney(amount)}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -817,13 +745,9 @@ export default function ViewEntriesPage() {
         </div>
 
         <div className="mt-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-[11px] text-slate-600">
-          <div>
-            View Entries • Financial Overview
-          </div>
-          <div>
-            Balance = Total Income - Total Expenses
-          </div>
-        </div> 
+          <div>View Entries • Financial Overview</div>
+          <div>Balance = Total Income - Total Expenses</div>
+        </div>
       </div>
     </div>
   );
