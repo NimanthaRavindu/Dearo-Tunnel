@@ -91,9 +91,6 @@ function TotalIncomesContent() {
       `/dashboard/total-incomes${query ? `?${query}` : ""}`,
     );
 
-    router.replace(
-      `/dashboard/view-entries${query? `?${query}`:""}`
-    );
   };
 
   const clearDateFilter = () => {
