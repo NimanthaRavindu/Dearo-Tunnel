@@ -1,6 +1,5 @@
 "use client";
-
-import React, { Suspense, useEffect, useState } from "react";
+import React, {Suspense,useCallback,useEffect,useState} from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {ArrowLeft,TrendingUp,Building2,Loader2,Layers,Filter,X,Calendar} from "lucide-react";
 
@@ -18,14 +17,14 @@ function TotalIncomesContent() {
 
   const selectedSalesId = searchParams.get("selected_sales_id");
   const selectedCapitalId = searchParams.get("selected_capital_id");
+  const filterDate = searchParams.get("date") || "";
 
   const [summaries, setSummaries] = useState<BranchIncomeSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [grandTotal, setGrandTotal] = useState(0);
   const [grandCredit, setGrandCredit] = useState(0);
-  const [filterDate, setFilterDate] = useState("");
 
-  const fetchTotalIncomesSummary = async () => {
+  const fetchTotalIncomesSummary = useCallback(async () => {
     try {
       setIsLoading(true);
 
@@ -60,9 +59,9 @@ function TotalIncomesContent() {
         );
       }
 
-      setSummaries(result.data || []);
-      setGrandTotal(Number(result.grandTotal || 0));
-      setGrandCredit(Number(result.grandCredit || 0));
+      setSummaries(Array.isArray(result.data) ? result.data : []);
+      setGrandTotal(Number(result.grandTotal ?? 0));
+      setGrandCredit(Number(result.grandCredit ?? 0));
     } catch (error) {
       console.error("Failed to fetch total incomes summary:", error);
       setSummaries([]);
@@ -71,11 +70,31 @@ function TotalIncomesContent() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [selectedSalesId, selectedCapitalId, filterDate]);
 
   useEffect(() => {
     fetchTotalIncomesSummary();
-  }, [selectedSalesId, selectedCapitalId, filterDate]);
+  }, [fetchTotalIncomesSummary]);
+
+  const updateDateFilter = (date: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+
+    if (date) {
+      params.set("date", date);
+    } else {
+      params.delete("date");
+    }
+
+    const query = params.toString();
+
+    router.replace(
+      `/dashboard/total-incomes${query ? `?${query}` : ""}`,
+    );
+  };
+
+  const clearDateFilter = () => {
+    updateDateFilter("");
+  };
 
   const clearFilter = (type: "sales" | "capital") => {
     const params = new URLSearchParams(searchParams.toString());
@@ -95,10 +114,6 @@ function TotalIncomesContent() {
     );
   };
 
-  const clearDateFilter = () => {
-    setFilterDate("");
-  };
-
   const handleBackToDashboard = () => {
     const params = new URLSearchParams();
 
@@ -108,6 +123,10 @@ function TotalIncomesContent() {
 
     if (selectedCapitalId) {
       params.set("selected_capital_id", selectedCapitalId);
+    }
+
+    if (filterDate) {
+      params.set("date", filterDate);
     }
 
     const query = params.toString();
@@ -132,9 +151,9 @@ function TotalIncomesContent() {
     const query = params.toString();
 
     router.push(
-      `/dashboard/branches/${encodeURIComponent(
-        branchId,
-      )}/add-expenses${query ? `?${query}` : ""}`,
+      `/dashboard/branches/${encodeURIComponent(branchId)}/add-expenses${
+        query ? `?${query}` : ""
+      }`,
     );
   };
 
@@ -152,10 +171,7 @@ function TotalIncomesContent() {
               className="p-3 bg-slate-900/90 hover:bg-slate-800/90 rounded-xl transition-all duration-200 border border-slate-800 text-slate-400 hover:text-white shadow-lg hover:scale-105 active:scale-95 group"
               title="Return to Dashboard"
             >
-              <ArrowLeft
-                size={16}
-                className="group-hover:-translate-x-0.5 transition-transform"
-              />
+              <ArrowLeft size={16} className="group-hover:-translate-x-0.5 transition-transform"/>
             </button>
             <div>
               <div className="flex items-center gap-2.5">
@@ -175,7 +191,6 @@ function TotalIncomesContent() {
             {selectedCapitalId && (
               <div className="flex items-center gap-2 bg-amber-950/40 border border-amber-500/30 px-3 py-1.5 rounded-lg text-amber-400 text-[11px]">
                 <Filter size={12} />
-
                 <span>Capital Record #{selectedCapitalId}</span>
 
                 <button
@@ -193,7 +208,6 @@ function TotalIncomesContent() {
             {selectedSalesId && (
               <div className="flex items-center gap-2 bg-cyan-950/40 border border-cyan-500/30 px-3 py-1.5 rounded-lg text-cyan-400 text-[11px]">
                 <Filter size={12} />
-
                 <span>Sales Record #{selectedSalesId}</span>
 
                 <button
@@ -209,11 +223,7 @@ function TotalIncomesContent() {
             )}
 
             <div className="flex items-center gap-2 bg-slate-950/60 border border-slate-800 px-3 py-1.5 rounded-lg">
-              <Calendar
-                size={14}
-                className="text-slate-300"
-                strokeWidth={2.5}
-              />
+              <Calendar size={14} className="text-slate-300" strokeWidth={2.5} />
 
               <label
                 htmlFor="total-income-date-filter"
@@ -226,7 +236,9 @@ function TotalIncomesContent() {
                 id="total-income-date-filter"
                 type="date"
                 value={filterDate}
-                onChange={(event) => setFilterDate(event.target.value)}
+                onChange={(event) =>
+                  updateDateFilter(event.target.value)
+                }
                 className="bg-transparent text-[11px] text-slate-200 outline-none cursor-pointer"
               />
 
@@ -277,9 +289,7 @@ function TotalIncomesContent() {
 
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  {filterDate
-                    ? `Credit for ${filterDate}`
-                    : "Grand Total Credit"}
+                  {filterDate ? `Credit for ${filterDate}` : "Grand Total Credit"}
                 </span>
 
                 <div className="text-2xl sm:text-3xl font-black text-amber-400 tracking-tight mt-1">
@@ -358,15 +368,12 @@ function TotalIncomesContent() {
                 <thead>
                   <tr className="border-b border-slate-800 bg-slate-900/60 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                     <th className="py-3.5 px-4">Branch Name</th>
-
                     <th className="py-3.5 px-4 text-center">
                       Logged Entries
                     </th>
-
                     <th className="py-3.5 px-4 text-right">
                       Total Revenue (LKR)
                     </th>
-
                     <th className="py-3.5 px-4 text-right">
                       Total Credit (LKR)
                     </th>

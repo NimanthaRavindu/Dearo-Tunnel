@@ -1,14 +1,26 @@
 "use client";
-import React, { useState, useEffect, useCallback, Suspense } from "react";
+import React, { Suspense,useCallback,useEffect,useState} from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from "chart.js";
+import {Chart as ChartJS,CategoryScale,LinearScale,BarElement,Title,Tooltip,Legend} from "chart.js";
 import { Bar } from "react-chartjs-2";
-import { Building2, TrendingUp, AlertCircle, RefreshCw, ChevronUp, ChevronDown, MapPin, Filter, X, Sparkles } from "lucide-react";
+import { Building2,TrendingUp,AlertCircle,RefreshCw,ChevronUp,ChevronDown,MapPin,Filter,X,Sparkles} from "lucide-react";
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+);
 
 interface PageProps {
   searchQuery?: string;
+}
+
+interface IncomeSummary {
+  grandTotal: number;
+  entriesCount: number;
 }
 
 function DashboardContent({ searchQuery = "" }: PageProps) {
@@ -17,6 +29,7 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
 
   const selectedSalesId = searchParams.get("selected_sales_id");
   const selectedCapitalId = searchParams.get("selected_capital_id");
+  const selectedDate = searchParams.get("date");
 
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -24,39 +37,91 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [isTunnelDropdownOpen, setIsTunnelDropdownOpen] = useState(false);
 
-  // Total Incomes පේජ් එකෙන් එන හරියටම එකතුව සහ බ්‍රාන්ච් ගණන ලබා ගැනීමට
-  const [incomeSummary, setIncomeSummary] = useState({ grandTotal: 0, entriesCount: 0 });
+  const [incomeSummary, setIncomeSummary] = useState<IncomeSummary>({
+    grandTotal: 0,
+    entriesCount: 0,
+  });
 
   const fetchDashboardData = useCallback(async () => {
     try {
-      const params = new URLSearchParams();
-      if (selectedSalesId) params.append("selected_sales_id", selectedSalesId);
-      if (selectedCapitalId) params.append("selected_capital_id", selectedCapitalId);
-      const queryString = params.toString();
-      const url = `/api/dashboard/summary${queryString ? `?${queryString}` : ""}`;
+      setError("");
 
-      const response = await fetch(url);
-      if (!response.ok) throw new Error("Failed to synchronize infrastructure core metrics.");
-      const json = await response.json();
-      setData(json);
+      const dashboardParams = new URLSearchParams();
 
-      // Total incomes summary එක API එකෙන් fetch කර ගැනීම
-      const incomeRes = await fetch(`/api/expences/sales-incomes?summary=true`);
-      const incomeJson = await incomeRes.json();
-      if (incomeJson.success) {
-        setIncomeSummary({
-          grandTotal: incomeJson.grandTotal || 0,
-          entriesCount: incomeJson.data?.length || 0,
-        });
+      if (selectedSalesId) {
+        dashboardParams.set("selected_sales_id", selectedSalesId);
       }
 
+      if (selectedCapitalId) {
+        dashboardParams.set("selected_capital_id", selectedCapitalId);
+      }
+
+      const dashboardQuery = dashboardParams.toString();
+
+      const dashboardUrl = `/api/dashboard/summary${
+        dashboardQuery ? `?${dashboardQuery}` : ""
+      }`;
+
+      const response = await fetch(dashboardUrl, {
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          "Failed to synchronize infrastructure core metrics.",
+        );
+      }
+
+      const dashboardJson = await response.json();
+      setData(dashboardJson);
+
+      const incomeParams = new URLSearchParams();
+      incomeParams.set("summary", "true");
+
+      if (selectedSalesId) {
+        incomeParams.set("selected_sales_id", selectedSalesId);
+      }
+
+      if (selectedCapitalId) {
+        incomeParams.set("selected_capital_id", selectedCapitalId);
+      }
+
+      if (selectedDate) {
+        incomeParams.set("date", selectedDate);
+      }
+
+      const incomeResponse = await fetch(
+        `/api/expences/sales-incomes?${incomeParams.toString()}`,
+        {
+          cache: "no-store",
+        },
+      );
+
+      if (!incomeResponse.ok) {
+        throw new Error("Failed to load total incomes.");
+      }
+
+      const incomeJson = await incomeResponse.json();
+
+      if (!incomeJson.success) {
+        throw new Error(
+          incomeJson.error || "Failed to load total incomes.",
+        );
+      }
+
+      setIncomeSummary({
+        grandTotal: Number(incomeJson.grandTotal ?? 0),
+        entriesCount: Array.isArray(incomeJson.data)
+          ? incomeJson.data.length
+          : 0,
+      });
     } catch (err: any) {
-      setError(err.message);
+      setError(err?.message || "Failed to load dashboard data.");
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [selectedSalesId, selectedCapitalId]);
+  }, [selectedSalesId, selectedCapitalId, selectedDate]);
 
   useEffect(() => {
     fetchDashboardData();
@@ -64,8 +129,14 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
 
   const clearFilter = (type: "sales" | "capital") => {
     const params = new URLSearchParams(searchParams.toString());
-    if (type === "sales") params.delete("selected_sales_id");
-    if (type === "capital") params.delete("selected_capital_id");
+
+    if (type === "sales") {
+      params.delete("selected_sales_id");
+    }
+
+    if (type === "capital") {
+      params.delete("selected_capital_id");
+    }
 
     const query = params.toString();
     router.push(`/dashboard${query ? `?${query}` : ""}`);
@@ -73,33 +144,69 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
 
   const handleTotalExpensesClick = () => {
     const params = new URLSearchParams();
-    if (selectedSalesId) params.append("selected_sales_id", selectedSalesId);
-    if (selectedCapitalId) params.append("selected_capital_id", selectedCapitalId);
+
+    if (selectedSalesId) {
+      params.set("selected_sales_id", selectedSalesId);
+    }
+
+    if (selectedCapitalId) {
+      params.set("selected_capital_id", selectedCapitalId);
+    }
+
     const query = params.toString();
-    router.push(`/dashboard/total-expenses${query ? `?${query}` : ""}`);
+
+    router.push(
+      `/dashboard/total-expenses${query ? `?${query}` : ""}`,
+    );
   };
 
   const handleRemainingBalanceClick = () => {
     const params = new URLSearchParams();
-    if (selectedSalesId) params.append("selected_sales_id", selectedSalesId);
-    if (selectedCapitalId) params.append("selected_capital_id", selectedCapitalId);
+
+    if (selectedSalesId) {
+      params.set("selected_sales_id", selectedSalesId);
+    }
+
+    if (selectedCapitalId) {
+      params.set("selected_capital_id", selectedCapitalId);
+    }
+
     const query = params.toString();
-    router.push(`/dashboard/remaining-balance${query ? `?${query}` : ""}`);
+
+    router.push(
+      `/dashboard/remaining-balance${query ? `?${query}` : ""}`,
+    );
   };
 
   const handleTotalIncomesClick = () => {
     const params = new URLSearchParams();
-    if (selectedSalesId) params.append("selected_sales_id", selectedSalesId);
-    if (selectedCapitalId) params.append("selected_capital_id", selectedCapitalId);
+
+    if (selectedSalesId) {
+      params.set("selected_sales_id", selectedSalesId);
+    }
+
+    if (selectedCapitalId) {
+      params.set("selected_capital_id", selectedCapitalId);
+    }
+
+    if (selectedDate) {
+      params.set("date", selectedDate);
+    }
+
     const query = params.toString();
-    router.push(`/dashboard/total-incomes${query ? `?${query}` : ""}`);
+
+    router.push(
+      `/dashboard/total-incomes${query ? `?${query}` : ""}`,
+    );
   };
 
   if (loading) {
     return (
       <div className="h-screen w-full flex flex-col items-center justify-center text-slate-500 bg-[#070a12] font-mono text-xs">
-        <div className="h-5 w-5 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin mb-2"></div>
-        <p className="uppercase tracking-widest text-[10px]">Initializing Operational Ledger Matrices...</p>
+        <div className="h-5 w-5 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin mb-2" />
+        <p className="uppercase tracking-widest text-[10px]">
+          Initializing Operational Ledger Matrices...
+        </p>
       </div>
     );
   }
@@ -113,7 +220,11 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
         </div>
 
         <button
-          onClick={() => { setLoading(true); fetchDashboardData(); }}
+          type="button"
+          onClick={() => {
+            setLoading(true);
+            fetchDashboardData();
+          }}
           className="text-[10px] uppercase font-bold text-slate-400 hover:text-white bg-slate-900 border border-slate-800 px-3 py-1.5 rounded transition-all"
         >
           Re-establish Data Pipeline
@@ -122,16 +233,21 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
     );
   }
 
-  const filteredBranches = data?.branches?.filter((b: any) =>
-    b.branch_name.toLowerCase().includes(searchQuery.toLowerCase())
-  ) || [];
+  const filteredBranches =
+    data?.branches?.filter((branch: any) =>
+      String(branch.branch_name || "")
+        .toLowerCase()
+        .includes(searchQuery.toLowerCase()),
+    ) || [];
 
   const chartData = {
-    labels: filteredBranches.map((b: any) => b.branch_name),
+    labels: filteredBranches.map((branch: any) => branch.branch_name),
     datasets: [
       {
         label: "Total Expenses (Rs.)",
-        data: filteredBranches.map((b: any) => Number(b.total_expenses || 0)),
+        data: filteredBranches.map((branch: any) =>
+          Number(branch.total_expenses || 0),
+        ),
         backgroundColor: "rgba(59, 130, 246, 0.8)",
         borderColor: "#3b82f6",
         borderWidth: 1,
@@ -145,11 +261,39 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: { labels: { color: "#94a3b8", font: { size: 11, weight: "600" } } },
+      legend: {
+        labels: {
+          color: "#94a3b8",
+          font: {
+            size: 11,
+            weight: "600" as const,
+          },
+        },
+      },
     },
     scales: {
-      x: { grid: { display: false }, ticks: { color: "#64748b", font: { size: 10 } } },
-      y: { grid: { color: "#1e293b" }, ticks: { color: "#64748b", font: { size: 10 } } },
+      x: {
+        grid: {
+          display: false,
+        },
+        ticks: {
+          color: "#64748b",
+          font: {
+            size: 10,
+          },
+        },
+      },
+      y: {
+        grid: {
+          color: "#1e293b",
+        },
+        ticks: {
+          color: "#64748b",
+          font: {
+            size: 10,
+          },
+        },
+      },
     },
   };
 
@@ -157,8 +301,13 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
     <div className="p-6 md:p-8 space-y-6 bg-[#070a12] min-h-screen text-slate-300 font-mono text-xs selection:bg-cyan-500/20 selection:text-cyan-300">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-white">Financial & Tunnel Logistics</h2>
-          <p className="text-xs text-slate-500 mt-0.5">Real-time centralized ledger for all active infrastructure branches.</p>
+          <h2 className="text-xl font-bold tracking-tight text-white">
+            Financial & Tunnel Logistics
+          </h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Real-time centralized ledger for all active infrastructure
+            branches.
+          </p>
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
@@ -166,7 +315,14 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
             <div className="flex items-center gap-2 bg-amber-950/40 border border-amber-500/30 px-3 py-1.5 rounded-lg text-amber-400 text-[11px]">
               <Filter size={12} />
               <span>Capital Record #{selectedCapitalId}</span>
-              <button onClick={() => clearFilter("capital")} className="hover:text-white p-0.5 rounded transition-colors" title="Clear Capital Filter">
+
+              <button
+                type="button"
+                onClick={() => clearFilter("capital")}
+                className="hover:text-white p-0.5 rounded transition-colors"
+                title="Clear Capital Filter"
+                aria-label="Clear Capital Filter"
+              >
                 <X size={13} />
               </button>
             </div>
@@ -175,18 +331,34 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
             <div className="flex items-center gap-2 bg-cyan-950/40 border border-cyan-500/30 px-3 py-1.5 rounded-lg text-cyan-400 text-[11px]">
               <Filter size={12} />
               <span>Sales Record #{selectedSalesId}</span>
-              <button onClick={() => clearFilter("sales")} className="hover:text-white p-0.5 rounded transition-colors" title="Clear Sales Filter">
+
+              <button
+                type="button"
+                onClick={() => clearFilter("sales")}
+                className="hover:text-white p-0.5 rounded transition-colors"
+                title="Clear Sales Filter"
+                aria-label="Clear Sales Filter"
+              >
                 <X size={13} />
               </button>
             </div>
           )}
 
           <button
-            onClick={() => { setRefreshing(true); fetchDashboardData(); }}
+            type="button"
+            onClick={() => {
+              setRefreshing(true);
+              fetchDashboardData();
+            }}
             disabled={refreshing}
             className="flex items-center gap-2 px-3 py-1.5 bg-[#0d1527]/80 border border-slate-800 rounded-lg hover:border-slate-700 hover:text-white transition-all text-[11px]"
           >
-            <RefreshCw size={13} className={`text-cyan-400 ${refreshing ? "animate-spin" : ""}`} />
+            <RefreshCw
+              size={13}
+              className={`text-cyan-400 ${
+                refreshing ? "animate-spin" : ""
+              }`}
+            />
             {refreshing ? "FETCHING" : "REFRESH DATA"}
           </button>
         </div>
@@ -194,70 +366,100 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
 
       <div className="relative z-40">
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Card 1: Total Tunnels */}
           <div
-            onClick={() => setIsTunnelDropdownOpen(!isTunnelDropdownOpen)}
+            onClick={() =>
+              setIsTunnelDropdownOpen(!isTunnelDropdownOpen)
+            }
             className={`bg-[#0d1527]/60 border rounded-xl p-4 flex items-center justify-between cursor-pointer transition-all active:scale-[0.99] shadow-sm select-none group relative overflow-hidden ${
-              isTunnelDropdownOpen ? "border-cyan-500/60 bg-[#0f1b35]/80" : "border-slate-800 hover:border-cyan-500/30"
+              isTunnelDropdownOpen
+                ? "border-cyan-500/60 bg-[#0f1b35]/80"
+                : "border-slate-800 hover:border-cyan-500/30"
             }`}
           >
             <div className="z-10">
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
                 Total Tunnels
-                {isTunnelDropdownOpen ? <ChevronUp size={12} className="text-cyan-400" /> : <ChevronDown size={12} className="text-slate-500 group-hover:text-cyan-400" />}
+                {isTunnelDropdownOpen ? (
+                  <ChevronUp size={12} className="text-cyan-400" />
+                ) : (
+                  <ChevronDown size={12} className="text-slate-500 group-hover:text-cyan-400" />
+                )}
               </p>
+
               <p className="text-2xl font-mono font-bold text-white mt-1">
-                {data?.cards?.totalBranches || filteredBranches.length || 0}
+                {data?.cards?.totalBranches ||
+                  filteredBranches.length ||
+                  0}
               </p>
             </div>
-            <div className={`p-2 bg-slate-900/80 border border-slate-800 text-slate-400 rounded-lg transition-all z-10 ${
-              isTunnelDropdownOpen ? "bg-cyan-500/10 border-cyan-500/40 text-cyan-400" : "group-hover:bg-cyan-500/10 group-hover:border-cyan-500/30"
-            }`}>
+
+            <div
+              className={`p-2 bg-slate-900/80 border border-slate-800 text-slate-400 rounded-lg transition-all z-10 ${
+                isTunnelDropdownOpen
+                  ? "bg-cyan-500/10 border-cyan-500/40 text-cyan-400"
+                  : "group-hover:bg-cyan-500/10 group-hover:border-cyan-500/30"
+              }`}
+            >
               <Building2 size={18} />
             </div>
           </div>
 
-          {/* Card 2: Total Expenses */}
           <div
             onClick={handleTotalExpensesClick}
             className="bg-[#0d1527]/60 border border-slate-800/60 rounded-xl p-4 flex items-center justify-between cursor-pointer hover:border-blue-500/40 transition-all"
           >
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Expenses</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Total Expenses
+              </p>
+
               <p className="text-2xl font-mono font-bold text-blue-400 mt-1">
-                LKR {Number(data?.cards?.totalExpenses || 0).toLocaleString("en-US")}
+                LKR{" "}
+                {Number(
+                  data?.cards?.totalExpenses || 0,
+                ).toLocaleString("en-US")}
               </p>
             </div>
+
             <div className="p-2.5 bg-blue-500/10 text-blue-400 rounded-lg">
               <span className="text-sm font-bold">$</span>
             </div>
           </div>
 
-          {/* Card 3: Remaining Balance */}
           <div
             onClick={handleRemainingBalanceClick}
             className="bg-[#0d1527]/60 border border-slate-800/60 rounded-xl p-4 flex items-center justify-between cursor-pointer hover:border-amber-500/40 transition-all"
           >
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Remaining Balance</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Remaining Balance
+              </p>
+
               <p className="text-2xl font-mono font-bold text-amber-500 mt-1">
-                LKR {Number(data?.cards?.totalRemaining || 0).toLocaleString("en-US")}
+                LKR{" "}
+                {Number(
+                  data?.cards?.totalRemaining || 0,
+                ).toLocaleString("en-US")}
               </p>
             </div>
+
             <div className="p-2.5 bg-amber-500/10 text-amber-400 rounded-lg">
               <TrendingUp size={18} />
             </div>
           </div>
 
-          {/* Card 4: Total Incomes (Updated with exact Total Incomes Page summary value) */}
           <div
             onClick={handleTotalIncomesClick}
             className="bg-[#0d1527]/60 border border-slate-800/60 rounded-xl p-4 flex items-center justify-between cursor-pointer hover:border-red-500/40 transition-all group"
           >
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Incomes</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Total Incomes
+              </p>
+
               <p className="text-2xl font-mono font-bold text-red-400 mt-1">
-                LKR {Number(incomeSummary.grandTotal || data?.cards?.totalIncomes || 0).toLocaleString("en-US")}
+                LKR{" "}
+                {incomeSummary.grandTotal.toLocaleString("en-US")}
               </p>
             </div>
             <div className="p-2.5 bg-red-500/10 text-red-400 rounded-lg group-hover:scale-110 transition-transform">
@@ -269,17 +471,24 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
         {isTunnelDropdownOpen && (
           <div className="absolute left-0 mt-2 w-full bg-[#0a101f] border border-cyan-500/40 rounded-xl p-5 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150">
             <div className="text-[10px] font-bold text-cyan-400 uppercase tracking-widest border-b border-slate-800/80 pb-2.5 mb-4 flex items-center justify-between">
-              <span>Active Node Branches List ({filteredBranches.length} Records Located)</span>
+              <span>
+                Active Node Branches List ({filteredBranches.length}{" "}
+                Records Located)
+              </span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-h-[250px] overflow-y-auto pr-2">
               {filteredBranches.map((branch: any) => (
                 <div
                   key={branch.id}
-                  onClick={() => router.push(`/dashboard/branches/${branch.id}`)}
+                  onClick={() =>
+                    router.push(`/dashboard/branches/${branch.id}`)
+                  }
                   className="flex items-center gap-3 p-2.5 bg-[#0e1626] border border-slate-900 rounded-lg hover:border-cyan-500/30 cursor-pointer"
                 >
-                  <MapPin size={12} className="text-slate-500"/>
-                  <span className="text-[11px] font-bold text-slate-200 truncate">{branch.branch_name}</span>
+                  <MapPin size={12} className="text-slate-500" />
+                  <span className="text-[11px] font-bold text-slate-200 truncate">
+                    {branch.branch_name}
+                  </span>
                 </div>
               ))}
             </div>
@@ -289,7 +498,9 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
 
       <section className="bg-[#0d1527]/40 border border-slate-800/60 rounded-xl p-5">
         <div className="mb-4">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">Branch Expense Distribution</h3>
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
+            Branch Expense Distribution
+          </h3>
         </div>
         <div className="h-72 w-full relative">
           <Bar data={chartData} options={chartOptions as any} />
@@ -302,8 +513,11 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
 function DashboardFallback() {
   return (
     <div className="h-screen w-full flex flex-col items-center justify-center text-slate-500 bg-[#070a12] font-mono text-xs">
-      <div className="h-5 w-5 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin mb-2"></div>
-      <p className="uppercase tracking-widest text-[10px]">Initializing Operational Ledger Matrices...</p>
+      <div className="h-5 w-5 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin mb-2" />
+
+      <p className="uppercase tracking-widest text-[10px]">
+        Initializing Operational Ledger Matrices...
+      </p>
     </div>
   );
 }
