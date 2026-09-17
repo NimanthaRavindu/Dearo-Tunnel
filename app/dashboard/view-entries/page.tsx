@@ -1,5 +1,5 @@
 "use client";
-import React, { Suspense,useCallback,useEffect,useMemo,useState} from "react";
+import React, {Suspense,useCallback,useEffect,useMemo,useState} from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { BarChart3,CalendarDays,CheckCircle2,CircleDollarSign,FileText,Filter,RefreshCw,RotateCcw,Search,TrendingDown,TrendingUp,Wallet} from "lucide-react";
@@ -40,9 +40,7 @@ function ViewEntriesContent() {
   const selectedDate = searchParams.get("date") || "";
 
   const [entries, setEntries] = useState<Entry[]>([]);
-  const [incomeEntries, setIncomeEntries] = useState<Entry[]>(
-    [],
-  );
+  const [incomeEntries, setIncomeEntries] = useState<Entry[]>([]);
   const [totalIncome, setTotalIncome] = useState(0);
   const [totalExpenses, setTotalExpenses] = useState(0);
 
@@ -52,6 +50,12 @@ function ViewEntriesContent() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  const dashboardHref = `/dashboard${
+    searchParams.toString()
+      ? `?${searchParams.toString()}`
+      : ""
+  }`;
 
   useEffect(() => {
     setFromDate(selectedDate);
@@ -73,8 +77,16 @@ function ViewEntriesContent() {
         dashboardParams.set("selected_capital_id", selectedCapitalId);
       }
 
+      if (selectedDate) {
+        dashboardParams.set("date", selectedDate);
+      }
+
+      const dashboardQuery = dashboardParams.toString();
+
       const dashboardResponse = await fetch(
-        `${SUMMARY_API}?${dashboardParams.toString()}`,
+        `${SUMMARY_API}${
+          dashboardQuery ? `?${dashboardQuery}` : ""
+        }`,
         {
           cache: "no-store",
         },
@@ -125,7 +137,9 @@ function ViewEntriesContent() {
         throw new Error("Income summary request failed.");
       }
 
-      setTotalIncome(Number(incomeResult.grandTotal ?? 0) || 0);
+      setTotalIncome(
+        Number(incomeResult.grandTotal ?? 0) || 0,
+      );
 
       const salesEntries: Entry[] = Array.isArray(
         dashboardResult.sales,
@@ -200,6 +214,7 @@ function ViewEntriesContent() {
           ? err.message
           : "Unable to load entries.",
       );
+
       setEntries([]);
       setIncomeEntries([]);
       setTotalIncome(0);
@@ -228,7 +243,9 @@ function ViewEntriesContent() {
   const filteredEntries = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
-    if (!query) return dateFilteredEntries;
+    if (!query) {
+      return dateFilteredEntries;
+    }
 
     return dateFilteredEntries.filter((entry) =>
       [
@@ -244,7 +261,7 @@ function ViewEntriesContent() {
     );
   }, [dateFilteredEntries, searchQuery]);
 
-  const isIncomeEntry = (entry: Entry) => {
+  const isIncomeEntry = useCallback((entry: Entry) => {
     const type = String(entry.type ?? "").toLowerCase();
     const category = String(entry.category ?? "").toLowerCase();
 
@@ -254,7 +271,7 @@ function ViewEntriesContent() {
       type === "credit" ||
       category.includes("income")
     );
-  };
+  }, []);
 
   const filteredSummary = useMemo(() => {
     if (selectedDate) {
@@ -268,7 +285,8 @@ function ViewEntriesContent() {
 
       return {
         income: totalIncome,
-        expenses,
+        expenses:
+          totalExpenses > 0 ? totalExpenses : expenses,
       };
     }
 
@@ -297,7 +315,10 @@ function ViewEntriesContent() {
       0,
     );
 
-    return { income, expenses };
+    return {
+      income,
+      expenses,
+    };
   }, [
     selectedDate,
     fromDate,
@@ -306,6 +327,7 @@ function ViewEntriesContent() {
     dateFilteredEntries,
     totalIncome,
     totalExpenses,
+    isIncomeEntry,
   ]);
 
   const balance =
@@ -320,7 +342,9 @@ function ViewEntriesContent() {
   const formatDate = (value?: string) => {
     if (!value) return "-";
 
-    const [year, month, day] = value.substring(0, 10).split("-");
+    const [year, month, day] = value
+      .substring(0, 10)
+      .split("-");
 
     return year && month && day
       ? `${day}/${month}/${year}`
@@ -339,7 +363,13 @@ function ViewEntriesContent() {
         <header className="mb-8 flex flex-col justify-between gap-5 lg:flex-row lg:items-center">
           <div>
             <div className="mb-2 flex gap-2 text-xs text-slate-500">
-              <Link href="/dashboard">Dashboard</Link>
+              <Link
+                href={dashboardHref}
+                className="hover:text-cyan-400"
+              >
+                Dashboard
+              </Link>
+
               <span>/</span>
               <span>View Entries</span>
             </div>
@@ -366,6 +396,7 @@ function ViewEntriesContent() {
             className="flex items-center justify-center gap-2 rounded-xl border border-slate-700 px-5 py-3 text-sm hover:text-cyan-400 disabled:opacity-50"
           >
             <RefreshCw size={17} className={loading ? "animate-spin" : ""} />
+
             {loading ? "Refreshing..." : "Refresh"}
           </button>
         </header>
@@ -403,8 +434,18 @@ function ViewEntriesContent() {
             icon={<Wallet className="text-blue-400" />}
             iconClass="border-blue-500/20 bg-blue-500/10"
             footer={balance < 0 ? "LOSS" : "PROFIT"}
-            footerIcon={balance < 0 ? <TrendingDown size={14} /> : <TrendingUp size={14} />}
-            footerClass={balance < 0 ? "text-red-400" : "text-emerald-400"}
+            footerIcon={
+              balance < 0 ? (
+                <TrendingDown size={14} />
+              ) : (
+                <TrendingUp size={14} />
+              )
+            }
+            footerClass={
+              balance < 0
+                ? "text-red-400"
+                : "text-emerald-400"
+            }
           />
         </section>
 
@@ -498,14 +539,17 @@ function ViewEntriesContent() {
                     <th className="px-5 py-4">Category</th>
                     <th className="px-5 py-4">Type</th>
                     <th className="px-5 py-4">Branch</th>
-                    <th className="px-5 py-4 text-right">Amount</th>
+                    <th className="px-5 py-4 text-right">
+                      Amount
+                    </th>
                   </tr>
                 </thead>
 
                 <tbody>
                   {filteredEntries.map((entry, index) => {
                     const income = isIncomeEntry(entry);
-                    const amount = Number(entry.amount ?? 0) || 0;
+                    const amount =
+                      Number(entry.amount ?? 0) || 0;
 
                     return (
                       <tr
@@ -600,14 +644,14 @@ function SummaryCard({
           </h2>
         </div>
 
-        <div
-          className={`rounded-xl border p-3 ${iconClass}`}
-        >
+        <div className={`rounded-xl border p-3 ${iconClass}`}>
           {icon}
         </div>
       </div>
 
-      <div className={`mt-4 flex items-center gap-2 text-xs ${footerClass}`}>
+      <div
+        className={`mt-4 flex items-center gap-2 text-xs ${footerClass}`}
+      >
         {footerIcon}
         {footer}
       </div>

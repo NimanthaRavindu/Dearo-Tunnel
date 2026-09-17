@@ -1,7 +1,7 @@
 "use client";
 import React, {Suspense,useCallback,useEffect,useState} from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import {ArrowLeft,TrendingUp,Building2,Loader2,Layers,Filter,X,Calendar} from "lucide-react";
+import { ArrowLeft,Building2,Calendar,Filter,Layers,Loader2,TrendingUp,X} from "lucide-react";
 
 interface BranchIncomeSummary {
   branchId: string;
@@ -19,7 +19,9 @@ function TotalIncomesContent() {
   const selectedCapitalId = searchParams.get("selected_capital_id");
   const filterDate = searchParams.get("date") || "";
 
-  const [summaries, setSummaries] = useState<BranchIncomeSummary[]>([]);
+  const [summaries, setSummaries] = useState<
+    BranchIncomeSummary[]
+  >([]);
   const [isLoading, setIsLoading] = useState(true);
   const [grandTotal, setGrandTotal] = useState(0);
   const [grandCredit, setGrandCredit] = useState(0);
@@ -59,11 +61,17 @@ function TotalIncomesContent() {
         );
       }
 
-      setSummaries(Array.isArray(result.data) ? result.data : []);
-      setGrandTotal(Number(result.grandTotal ?? 0));
-      setGrandCredit(Number(result.grandCredit ?? 0));
+      setSummaries(
+        Array.isArray(result.data) ? result.data : [],
+      );
+      setGrandTotal(Number(result.grandTotal ?? 0) || 0);
+      setGrandCredit(Number(result.grandCredit ?? 0) || 0);
     } catch (error) {
-      console.error("Failed to fetch total incomes summary:", error);
+      console.error(
+        "Failed to fetch total incomes summary:",
+        error,
+      );
+
       setSummaries([]);
       setGrandTotal(0);
       setGrandCredit(0);
@@ -90,7 +98,6 @@ function TotalIncomesContent() {
     router.replace(
       `/dashboard/total-incomes${query ? `?${query}` : ""}`,
     );
-
   };
 
   const clearDateFilter = () => {
@@ -132,7 +139,6 @@ function TotalIncomesContent() {
 
     const query = params.toString();
     router.push(`/dashboard${query ? `?${query}` : ""}`);
-    router.push(`/dashboard/view-entries${query ? `?${query}` : ""}`);
   };
 
   const handleBranchClick = (branchId: string) => {
@@ -153,54 +159,58 @@ function TotalIncomesContent() {
     const query = params.toString();
 
     router.push(
-      `/dashboard/branches/${encodeURIComponent(branchId)}/add-expenses${
-        query ? `?${query}` : ""
-      }`,
+      `/dashboard/branches/${encodeURIComponent(
+        branchId,
+      )}/add-expenses${query ? `?${query}` : ""}`,
     );
   };
 
   return (
-    <div className="min-h-screen bg-[#070a12] text-slate-100 p-6 sm:p-10 flex flex-col items-center relative overflow-hidden font-mono text-xs">
-      <div className="absolute top-0 left-1/4 w-[500px] h-[300px] bg-red-600/10 blur-[140px] pointer-events-none rounded-full" />
-      <div className="absolute bottom-10 right-1/4 w-[400px] h-[250px] bg-rose-600/5 blur-[120px] pointer-events-none rounded-full" />
+    <div className="relative flex min-h-screen flex-col items-center overflow-hidden bg-[#070a12] p-6 font-mono text-xs text-slate-100 sm:p-10">
+      <div className="pointer-events-none absolute left-1/4 top-0 h-[300px] w-[500px] rounded-full bg-red-600/10 blur-[140px]" />
+      <div className="pointer-events-none absolute bottom-10 right-1/4 h-[250px] w-[400px] rounded-full bg-rose-600/5 blur-[120px]" />
 
-      <div className="w-full max-w-5xl space-y-6 relative z-10">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-6">
+      <div className="relative z-10 w-full max-w-5xl space-y-6">
+        <div className="flex flex-col items-start justify-between gap-4 border-b border-slate-800/80 pb-6 sm:flex-row sm:items-center">
           <div className="flex items-center gap-4">
             <button
               type="button"
               onClick={handleBackToDashboard}
-              className="p-3 bg-slate-900/90 hover:bg-slate-800/90 rounded-xl transition-all duration-200 border border-slate-800 text-slate-400 hover:text-white shadow-lg hover:scale-105 active:scale-95 group"
               title="Return to Dashboard"
+              className="group rounded-xl border border-slate-800 bg-slate-900/90 p-3 text-slate-400 shadow-lg transition-all duration-200 hover:scale-105 hover:bg-slate-800/90 hover:text-white active:scale-95"
             >
-              <ArrowLeft size={16} className="group-hover:-translate-x-0.5 transition-transform"/>
+              <ArrowLeft size={16} className="transition-transform group-hover:-translate-x-0.5" />
             </button>
             <div>
               <div className="flex items-center gap-2.5">
-                <span className="flex h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse shadow-lg shadow-red-500/50" />
-                <h1 className="text-xl sm:text-2xl font-black tracking-wider uppercase text-slate-100">
+                <span className="flex h-2.5 w-2.5 animate-pulse rounded-full bg-red-500 shadow-lg shadow-red-500/50" />
+
+                <h1 className="text-xl font-black uppercase tracking-wider text-slate-100 sm:text-2xl">
                   Total Sales Incomes Ledger
                 </h1>
               </div>
-              <p className="text-xs text-slate-400 mt-1 font-medium">
-                Real-time aggregated financial revenue tracking across all
-                active corporate infrastructure branches
+
+              <p className="mt-1 text-xs font-medium text-slate-400">
+                Real-time aggregated financial revenue tracking
+                across all active corporate infrastructure branches
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex flex-wrap items-center gap-3">
             {selectedCapitalId && (
-              <div className="flex items-center gap-2 bg-amber-950/40 border border-amber-500/30 px-3 py-1.5 rounded-lg text-amber-400 text-[11px]">
+              <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-950/40 px-3 py-1.5 text-[11px] text-amber-400">
                 <Filter size={12} />
-                <span>Capital Record #{selectedCapitalId}</span>
+                <span>
+                  Capital Record #{selectedCapitalId}
+                </span>
 
                 <button
                   type="button"
                   onClick={() => clearFilter("capital")}
-                  className="hover:text-white p-0.5 rounded transition-colors"
-                  title="Clear Capital Filter"
                   aria-label="Clear Capital Filter"
+                  title="Clear Capital Filter"
+                  className="rounded p-0.5 transition-colors hover:text-white"
                 >
                   <X size={13} />
                 </button>
@@ -208,28 +218,30 @@ function TotalIncomesContent() {
             )}
 
             {selectedSalesId && (
-              <div className="flex items-center gap-2 bg-cyan-950/40 border border-cyan-500/30 px-3 py-1.5 rounded-lg text-cyan-400 text-[11px]">
+              <div className="flex items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-950/40 px-3 py-1.5 text-[11px] text-cyan-400">
                 <Filter size={12} />
-                <span>Sales Record #{selectedSalesId}</span>
+                <span>
+                  Sales Record #{selectedSalesId}
+                </span>
 
                 <button
                   type="button"
                   onClick={() => clearFilter("sales")}
-                  className="hover:text-white p-0.5 rounded transition-colors"
-                  title="Clear Sales Filter"
                   aria-label="Clear Sales Filter"
+                  title="Clear Sales Filter"
+                  className="rounded p-0.5 transition-colors hover:text-white"
                 >
                   <X size={13} />
                 </button>
               </div>
             )}
 
-            <div className="flex items-center gap-2 bg-slate-950/60 border border-slate-800 px-3 py-1.5 rounded-lg">
+            <div className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-1.5">
               <Calendar size={14} className="text-slate-300" strokeWidth={2.5} />
 
               <label
                 htmlFor="total-income-date-filter"
-                className="text-[10px] font-bold uppercase tracking-wider text-slate-300 whitespace-nowrap"
+                className="whitespace-nowrap text-[10px] font-bold uppercase tracking-wider text-slate-300"
               >
                 Date
               </label>
@@ -241,16 +253,16 @@ function TotalIncomesContent() {
                 onChange={(event) =>
                   updateDateFilter(event.target.value)
                 }
-                className="bg-transparent text-[11px] text-slate-200 outline-none cursor-pointer"
+                className="cursor-pointer bg-transparent text-[11px] text-slate-200 outline-none"
               />
 
               {filterDate && (
                 <button
                   type="button"
                   onClick={clearDateFilter}
-                  className="text-slate-300 hover:text-red-400 transition-colors"
-                  title="Clear Date Filter"
                   aria-label="Clear Date Filter"
+                  title="Clear Date Filter"
+                  className="text-slate-300 transition-colors hover:text-red-400"
                 >
                   <X size={13} />
                 </button>
@@ -259,12 +271,12 @@ function TotalIncomesContent() {
           </div>
         </div>
 
-        <div className="p-6 sm:p-8 rounded-2xl bg-[#0d1527]/60 border border-slate-800 shadow-2xl relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-80 h-80 bg-red-500/5 rounded-full blur-3xl pointer-events-none" />
+        <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-[#0d1527]/60 p-6 shadow-2xl sm:p-8">
+          <div className="pointer-events-none absolute right-0 top-0 h-80 w-80 rounded-full bg-red-500/5 blur-3xl" />
 
-          <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="relative z-10 grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="flex items-center gap-5">
-              <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 shadow-inner">
+              <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-red-400 shadow-inner">
                 <TrendingUp size={28} />
               </div>
 
@@ -275,7 +287,7 @@ function TotalIncomesContent() {
                     : "Grand Cumulative Revenue"}
                 </span>
 
-                <div className="text-2xl sm:text-3xl font-black text-slate-100 tracking-tight mt-1">
+                <div className="mt-1 text-2xl font-black tracking-tight text-slate-100 sm:text-3xl">
                   LKR{" "}
                   {grandTotal.toLocaleString(undefined, {
                     minimumFractionDigits: 2,
@@ -285,16 +297,18 @@ function TotalIncomesContent() {
             </div>
 
             <div className="flex items-center gap-5">
-              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 shadow-inner">
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-400 shadow-inner">
                 <TrendingUp size={28} />
               </div>
 
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  {filterDate ? `Credit for ${filterDate}` : "Grand Total Credit"}
+                  {filterDate
+                    ? `Credit for ${filterDate}`
+                    : "Grand Total Credit"}
                 </span>
 
-                <div className="text-2xl sm:text-3xl font-black text-amber-400 tracking-tight mt-1">
+                <div className="mt-1 text-2xl font-black tracking-tight text-amber-400 sm:text-3xl">
                   LKR{" "}
                   {grandCredit.toLocaleString(undefined, {
                     minimumFractionDigits: 2,
@@ -304,25 +318,25 @@ function TotalIncomesContent() {
             </div>
           </div>
 
-          <div className="relative z-10 mt-6 flex items-center gap-3 bg-slate-950/60 border border-slate-800/80 px-4 py-2.5 rounded-xl shadow-inner w-fit">
-            <div className="p-2 rounded-lg bg-slate-900 text-slate-400">
+          <div className="relative z-10 mt-6 flex w-fit items-center gap-3 rounded-xl border border-slate-800/80 bg-slate-950/60 px-4 py-2.5 shadow-inner">
+            <div className="rounded-lg bg-slate-900 p-2 text-slate-400">
               <Layers size={16} />
             </div>
             <div className="text-xs">
-              <p className="text-slate-400 font-medium">
+              <p className="font-medium text-slate-400">
                 Database Status
               </p>
 
-              <p className="text-emerald-400 font-bold flex items-center gap-1 mt-0.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
+              <p className="mt-0.5 flex items-center gap-1 font-bold text-emerald-400">
+                <span className="h-1.5 w-1.5 animate-ping rounded-full bg-emerald-400" />
                 Synchronized
               </p>
             </div>
           </div>
         </div>
 
-        <div className="p-6 sm:p-8 rounded-2xl bg-[#0d1527]/40 border border-slate-800 shadow-2xl space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-slate-800">
+        <div className="space-y-6 rounded-2xl border border-slate-800 bg-[#0d1527]/40 p-6 shadow-2xl sm:p-8">
+          <div className="flex flex-col justify-between gap-3 border-b border-slate-800 pb-4 sm:flex-row sm:items-center">
             <div className="flex items-center gap-2.5">
               <Building2 size={16} className="text-red-400" />
               <h2 className="text-xs font-extrabold uppercase tracking-widest text-slate-200">
@@ -335,16 +349,16 @@ function TotalIncomesContent() {
           </div>
 
           {isLoading ? (
-            <div className="py-24 text-center flex flex-col items-center justify-center space-y-3">
-              <Loader2 size={28} className="text-red-500 animate-spin" />
+            <div className="flex flex-col items-center justify-center space-y-3 py-24 text-center">
+              <Loader2 size={28} className="animate-spin text-red-500" />
 
               <p className="text-[11px] font-medium text-slate-400">
                 Aggregating branch database nodes...
               </p>
             </div>
           ) : summaries.length === 0 ? (
-            <div className="py-24 text-center flex flex-col items-center justify-center space-y-3">
-              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 text-slate-600">
+            <div className="flex flex-col items-center justify-center space-y-3 py-24 text-center">
+              <div className="rounded-xl border border-slate-800 bg-slate-900 p-4 text-slate-600">
                 <Building2 size={28} />
               </div>
 
@@ -358,7 +372,7 @@ function TotalIncomesContent() {
                 <button
                   type="button"
                   onClick={clearDateFilter}
-                  className="text-[10px] text-red-400 hover:text-red-300 transition-colors"
+                  className="text-[10px] text-red-400 transition-colors hover:text-red-300"
                 >
                   Clear date filter
                 </button>
@@ -366,17 +380,22 @@ function TotalIncomesContent() {
             </div>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-slate-800 bg-[#090e1a]/50">
-              <table className="w-full text-left border-collapse">
+              <table className="w-full border-collapse text-left">
                 <thead>
-                  <tr className="border-b border-slate-800 bg-slate-900/60 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                    <th className="py-3.5 px-4">Branch Name</th>
-                    <th className="py-3.5 px-4 text-center">
+                  <tr className="border-b border-slate-800 bg-slate-900/60 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    <th className="px-4 py-3.5">
+                      Branch Name
+                    </th>
+
+                    <th className="px-4 py-3.5 text-center">
                       Logged Entries
                     </th>
-                    <th className="py-3.5 px-4 text-right">
+
+                    <th className="px-4 py-3.5 text-right">
                       Total Revenue (LKR)
                     </th>
-                    <th className="py-3.5 px-4 text-right">
+
+                    <th className="px-4 py-3.5 text-right">
                       Total Credit (LKR)
                     </th>
                   </tr>
@@ -386,46 +405,46 @@ function TotalIncomesContent() {
                   {summaries.map((item) => (
                     <tr
                       key={item.branchId}
-                      onClick={() => handleBranchClick(item.branchId)}
-                      className="hover:bg-slate-900/70 transition-colors cursor-pointer group"
+                      onClick={() =>
+                        handleBranchClick(item.branchId)
+                      }
                       title="Click to view branch details"
+                      className="group cursor-pointer transition-colors hover:bg-slate-900/70"
                     >
-                      <td className="py-3.5 px-4 font-semibold text-slate-200">
+                      <td className="px-4 py-3.5 font-semibold text-slate-200">
                         <div className="flex items-center gap-3">
-                          <div className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-red-400 group-hover:scale-110 transition-transform">
+                          <div className="rounded-lg border border-slate-800 bg-slate-900 p-2 text-red-400 transition-transform group-hover:scale-110">
                             <Building2 size={14} />
                           </div>
 
-                          <span className="text-white font-bold block text-sm">
+                          <span className="block text-sm font-bold text-white">
                             {item.branchName || "Unnamed Branch"}
                           </span>
                         </div>
                       </td>
 
-                      <td className="py-3.5 px-4 text-center text-slate-300 font-semibold">
-                        <span className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[10px]">
+                      <td className="px-4 py-3.5 text-center font-semibold text-slate-300">
+                        <span className="rounded-lg border border-slate-800 bg-slate-900 px-2.5 py-1 text-[10px]">
                           {item.entriesCount} entries
                         </span>
                       </td>
 
-                      <td className="py-3.5 px-4 text-right font-black text-red-400 text-sm">
+                      <td className="px-4 py-3.5 text-right text-sm font-black text-red-400">
                         LKR{" "}
-                        {Number(item.totalAmount || 0).toLocaleString(
-                          undefined,
-                          {
-                            minimumFractionDigits: 2,
-                          },
-                        )}
+                        {Number(
+                          item.totalAmount || 0,
+                        ).toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                        })}
                       </td>
 
-                      <td className="py-3.5 px-4 text-right font-black text-amber-400 text-sm">
+                      <td className="px-4 py-3.5 text-right text-sm font-black text-amber-400">
                         LKR{" "}
-                        {Number(item.totalCredit || 0).toLocaleString(
-                          undefined,
-                          {
-                            minimumFractionDigits: 2,
-                          },
-                        )}
+                        {Number(
+                          item.totalCredit || 0,
+                        ).toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                        })}
                       </td>
                     </tr>
                   ))}
@@ -441,10 +460,10 @@ function TotalIncomesContent() {
 
 function TotalIncomesFallback() {
   return (
-    <div className="h-screen w-full flex flex-col items-center justify-center text-slate-500 bg-[#070a12] font-mono text-xs">
-      <div className="h-5 w-5 border-2 border-red-500 border-t-transparent rounded-full animate-spin mb-2" />
+    <div className="flex h-screen w-full flex-col items-center justify-center bg-[#070a12] font-mono text-xs text-slate-500">
+      <div className="mb-2 h-5 w-5 animate-spin rounded-full border-2 border-red-500 border-t-transparent" />
 
-      <p className="uppercase tracking-widest text-[10px]">
+      <p className="text-[10px] uppercase tracking-widest">
         Loading Revenue Ledger...
       </p>
     </div>
