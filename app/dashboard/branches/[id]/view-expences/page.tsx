@@ -121,7 +121,7 @@ export default function ViewExpensesMainPage({
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <ExpenseCard
-            title="Salary Expenditures"
+            title="Salary Expenses"
             description="Audit internal employee compensation matrices, disbursed transactions, and outstanding balance logs."
             icon={<Coins size={16} />}
             color="amber"
@@ -129,7 +129,7 @@ export default function ViewExpensesMainPage({
           />
 
           <ExpenseCard
-            title="Other Expenditures"
+            title="Other Expenses"
             description="Examine utilities indices, food logging statements, and contingent environmental branch node costs."
             icon={<Wallet size={16} />}
             color="purple"
