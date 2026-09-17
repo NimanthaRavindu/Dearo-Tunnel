@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, Suspense } from "react";
+import React, { useCallback, useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, TrendingUp, FileSpreadsheet, RefreshCw } from "lucide-react";
-import { ExpenseFilters } from "@/components/ExpenseFilters"; // adjust path as needed
+import { ArrowLeft,FileSpreadsheet,Fuel,RefreshCw,TrendingUp} from "lucide-react";
+import { ExpenseFilters } from "@/components/ExpenseFilters";
 
 interface BranchBalance {
   id: number | string;
@@ -15,6 +15,8 @@ interface BranchBalance {
   capital_expenses?: number;
   other_balance?: number;
   other_expenses?: number;
+  diesel_balance?: number;
+  diesel_expenses?: number;
 }
 
 interface FilterItem {
@@ -22,38 +24,57 @@ interface FilterItem {
   name?: string;
 }
 
+const formatCurrency = (value: unknown) =>
+  Number(value || 0).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
 function RemainingBalanceContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  
+
   const selectedSalesId = searchParams.get("selected_sales_id");
   const selectedCapitalId = searchParams.get("selected_capital_id");
 
   const [branches, setBranches] = useState<BranchBalance[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [refreshing, setRefreshing] = useState<boolean>(false);
-
   const [salesList, setSalesList] = useState<FilterItem[]>([]);
   const [capitalList, setCapitalList] = useState<FilterItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const fetchBalanceBreakdown = useCallback(async () => {
     try {
       const params = new URLSearchParams();
-      if (selectedSalesId) params.append("selected_sales_id", selectedSalesId);
-      if (selectedCapitalId) params.append("selected_capital_id", selectedCapitalId);
 
-      const queryString = params.toString();
-      const url = queryString ? `/api/dashboard/summary?${queryString}` : "/api/dashboard/summary";
-      
-      const response = await fetch(url);
-      if (response.ok) {
-        const json = await response.json();
-        setBranches(json.branches || []);
-        setSalesList(json.sales || []);
-        setCapitalList(json.capital || []);
+      if (selectedSalesId) {
+        params.set("selected_sales_id", selectedSalesId);
       }
-    } catch (err) {
-      console.error("Failed to load liability breakdown matrix:", err);
+
+      if (selectedCapitalId) {
+        params.set("selected_capital_id", selectedCapitalId);
+      }
+
+      const query = params.toString();
+      const response = await fetch(
+        query
+          ? `/api/dashboard/summary?${query}`
+          : "/api/dashboard/summary",
+        { cache: "no-store" },
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to load balance summary.");
+      }
+
+      const json = await response.json();
+
+      setBranches(json.branches || []);
+      setSalesList(json.sales || []);
+      setCapitalList(json.capital || []);
+    } catch (error) {
+      console.error("Failed to load balance breakdown:", error);
+      setBranches([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -64,190 +85,231 @@ function RemainingBalanceContent() {
     fetchBalanceBreakdown();
   }, [fetchBalanceBreakdown]);
 
-  const handleSelectSales = (id: string) => {
+  const updateFilter = (key: string, value?: string) => {
     const params = new URLSearchParams(searchParams.toString());
-    params.set("selected_sales_id", id);
-    router.push(`/dashboard/remaining-balance?${params.toString()}`);
-  };
 
-  const handleSelectCapital = (id: string) => {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("selected_capital_id", id);
-    router.push(`/dashboard/remaining-balance?${params.toString()}`);
-  };
+    if (value) {
+      params.set(key, value);
+    } else {
+      params.delete(key);
+    }
 
-  const clearSalesFilter = () => {
-    const params = new URLSearchParams(searchParams.toString());
-    params.delete("selected_sales_id");
-    const qs = params.toString();
-    router.push(qs ? `/dashboard/remaining-balance?${qs}` : "/dashboard/remaining-balance");
-  };
-
-  const clearCapitalFilter = () => {
-    const params = new URLSearchParams(searchParams.toString());
-    params.delete("selected_capital_id");
-    const qs = params.toString();
-    router.push(qs ? `/dashboard/remaining-balance?${qs}` : "/dashboard/remaining-balance");
-  };
-
-  const handleBackToDashboard = () => {
-    const params = new URLSearchParams();
-    if (selectedSalesId) params.append("selected_sales_id", selectedSalesId);
-    if (selectedCapitalId) params.append("selected_capital_id", selectedCapitalId);
     const query = params.toString();
+    router.push(
+      `/dashboard/remaining-balance${query ? `?${query}` : ""}`,
+    );
+  };
+
+  const handleBack = () => {
+    const query = searchParams.toString();
     router.push(`/dashboard${query ? `?${query}` : ""}`);
   };
 
-  const calculatedTotalLiability = branches.reduce((acc, branch: any) => {
-    const salaryBal = Number(branch.salary_balance ?? branch.salary_expenses ?? 0);
-    const salesAmt = Number(branch.sales_expenses ?? 0);
-    const capitalAmt = Number(branch.capital_expenses ?? 0);
-    const otherBal = Number(branch.other_balance ?? branch.other_expenses ?? 0);
-    return acc + (salaryBal + salesAmt + capitalAmt + otherBal);
+  const totalBalance = branches.reduce((total, branch) => {
+    return (
+      total +
+      Number(
+        branch.salary_balance ?? branch.salary_expenses ?? 0,
+      ) +
+      Number(branch.sales_expenses || 0) +
+      Number(branch.capital_expenses || 0) +
+      Number(
+        branch.other_balance ?? branch.other_expenses ?? 0,
+      ) +
+      Number(
+        branch.diesel_balance ?? branch.diesel_expenses ?? 0,
+      )
+    );
   }, 0);
 
   if (loading) {
-    return (
-      <div className="h-screen w-full flex flex-col items-center justify-center text-slate-500 bg-[#070a12] font-mono text-xs">
-        <div className="h-5 w-5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mb-2"></div>
-        <p className="uppercase tracking-widest text-[10px]">Compiling Balance Portfolio Sheets...</p>
-      </div>
-    );
+    return <Loading text="Compiling Balance Portfolio Sheets..." />;
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-6 bg-[#070a12] min-h-screen text-slate-300 font-mono text-xs selection:bg-amber-500/20 selection:text-amber-300">
-      
-      {/* Navigation & Dynamic Total Card Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-900 pb-4">
-        <div className="space-y-1.5">
-          <button 
-            onClick={handleBackToDashboard} 
-            className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-white uppercase font-bold transition-colors"
-          >
-            <ArrowLeft size={12} /> Back To Main Control Panel
-          </button>
-          
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-base font-bold text-white uppercase tracking-wider flex items-center gap-2">
-              <TrendingUp size={15} className="text-amber-500" /> Outstanding Balances Portfolio Sub-Ledger
-            </h2>
+    <main className="min-h-screen bg-[#070a12] p-4 font-mono text-xs text-slate-300 md:p-6">
+      <div className="space-y-6">
+        <header className="flex flex-col justify-between gap-4 border-b border-slate-900 pb-4 sm:flex-row sm:items-center">
+          <div className="space-y-1.5">
+            <button
+              type="button"
+              onClick={handleBack}
+              className="flex items-center gap-1 text-[10px] font-bold uppercase text-slate-500 transition-colors hover:text-white"
+            >
+              <ArrowLeft size={12} />
+              Back To Main Control Panel
+            </button>
 
-            <ExpenseFilters
-              selectedSalesId={selectedSalesId}
-              selectedCapitalId={selectedCapitalId}
-              salesList={salesList}
-              capitalList={capitalList}
-              onSelectSales={handleSelectSales}
-              onSelectCapital={handleSelectCapital}
-              onClearSales={clearSalesFilter}
-              onClearCapital={clearCapitalFilter}
-            />
-          </div>
-        </div>
-        
-        <div className="flex items-center gap-4">
-          <button 
-            onClick={() => { setRefreshing(true); fetchBalanceBreakdown(); }}
-            disabled={refreshing}
-            className="p-2 bg-slate-900 border border-slate-800 rounded-lg hover:border-slate-700 text-slate-400 hover:text-white transition-all disabled:opacity-50"
-            title="Refresh Ledger"
-          >
-            <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
-          </button>
-          <div className="text-right bg-amber-950/20 border border-amber-900/40 rounded-xl px-4 py-2 min-w-[180px]">
-            <span className="text-[9px] text-amber-400 font-bold uppercase block tracking-wider mb-0.5">Aggregate Remaining Balance</span>
-            <span className="text-sm font-bold font-sans text-white">
-              LKR {calculatedTotalLiability.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </span>
-          </div>
-        </div>
-      </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="flex items-center gap-2 text-base font-bold uppercase tracking-wider text-white">
+                <TrendingUp size={15} className="text-amber-500" />
+                Outstanding Balances Portfolio Sub-Ledger
+              </h1>
 
-      {/* Compact Spreadsheet Data Table */}
-      <div className="bg-[#0d1527]/30 border border-slate-900 rounded-xl overflow-hidden shadow-sm">
-        <div className="px-4 py-3 bg-[#0a0f1d] border-b border-slate-900 flex items-center justify-between text-slate-400 text-[10px] font-bold uppercase tracking-wider">
-          <div className="flex items-center gap-1.5">
-            <FileSpreadsheet size={13} className="text-slate-500" /> Infrastructure Outstanding Liability Ledger Matrix
+              <ExpenseFilters
+                selectedSalesId={selectedSalesId}
+                selectedCapitalId={selectedCapitalId}
+                salesList={salesList}
+                capitalList={capitalList}
+                onSelectSales={(id) =>
+                  updateFilter("selected_sales_id", id)
+                }
+                onSelectCapital={(id) =>
+                  updateFilter("selected_capital_id", id)
+                }
+                onClearSales={() =>
+                  updateFilter("selected_sales_id")
+                }
+                onClearCapital={() =>
+                  updateFilter("selected_capital_id")
+                }
+              />
+            </div>
           </div>
-          {(selectedSalesId || selectedCapitalId) && (
-            <span className="text-amber-400 bg-amber-950/40 px-2 py-0.5 rounded border border-amber-900/50">
-              Filtered View Active
-            </span>
-          )}
-        </div>
-        <div className="p-4 overflow-x-auto">
-          <table className="w-full text-left border-collapse text-[11px]">
-            <thead>
-              <tr className="border-b border-slate-900 text-slate-500 text-[10px] uppercase font-bold tracking-wider bg-[#090e1a]/30">
-                <th className="py-2.5 px-3">Node / Branch Identity</th>
-                <th className="py-2.5 px-3 text-right">Salary Expenses</th>
-                <th className="py-2.5 px-3 text-right">Sales Expenses</th>
-                <th className="py-2.5 px-3 text-right">Capital Expenses</th>
-                <th className="py-2.5 px-3 text-right">Other Expenses</th>
-                <th className="py-2.5 px-3 text-right text-amber-500 bg-amber-950/10">Cumulative Net Liability</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-900/40 text-slate-400 font-sans">
-              {branches.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-600 font-mono uppercase tracking-widest text-[10px]">
-                    No Outstanding Balance Records Found
-                  </td>
+
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={() => {
+                setRefreshing(true);
+                fetchBalanceBreakdown();
+              }}
+              disabled={refreshing}
+              className="rounded-lg border border-slate-800 bg-slate-900 p-2 text-slate-400 transition hover:text-white disabled:opacity-50"
+              title="Refresh Ledger"
+            >
+              <RefreshCw
+                size={14}
+                className={refreshing ? "animate-spin" : ""}
+              />
+            </button>
+
+            <div className="min-w-[190px] rounded-xl border border-amber-900/40 bg-amber-950/20 px-4 py-2 text-right">
+              <span className="mb-0.5 block text-[9px] font-bold uppercase tracking-wider text-amber-400">
+                Aggregate Remaining Balance
+              </span>
+              <span className="font-sans text-sm font-bold text-white">
+                LKR {formatCurrency(totalBalance)}
+              </span>
+            </div>
+          </div>
+        </header>
+
+        <section className="overflow-hidden rounded-xl border border-slate-900 bg-[#0d1527]/30 shadow-sm">
+          <div className="flex items-center justify-between border-b border-slate-900 bg-[#0a0f1d] px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+            <div className="flex items-center gap-1.5">
+              <FileSpreadsheet size={13} />
+              Infrastructure Outstanding Liability Ledger Matrix
+            </div>
+
+            {(selectedSalesId || selectedCapitalId) && (
+              <span className="rounded border border-amber-900/50 bg-amber-950/40 px-2 py-0.5 text-amber-400">
+                Filtered View Active
+              </span>
+            )}
+          </div>
+
+          <div className="overflow-x-auto p-4">
+            <table className="w-full min-w-[1050px] border-collapse text-[11px]">
+              <thead>
+                <tr className="border-b border-slate-900 bg-[#090e1a]/30 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 text-left">Node / Branch Identity</th>
+                  <th className="px-3 py-2.5 text-right">Salary Balance</th>
+                  <th className="px-3 py-2.5 text-right">Sales Expenses</th>
+                  <th className="px-3 py-2.5 text-right">Capital Expenses</th>
+                  <th className="px-3 py-2.5 text-right">Other Balance</th>
+                  <th className="px-3 py-2.5 text-right text-cyan-400">Diesel Balance</th>
+                  <th className="px-3 py-2.5 text-right text-amber-500">Cumulative Net Liability</th>
                 </tr>
-              ) : (
-                branches.map((branch: any) => {
-                  const salaryBal = Number(branch.salary_balance ?? branch.salary_expenses ?? 0);
-                  const salesAmt = Number(branch.sales_expenses ?? 0);
-                  const capitalAmt = Number(branch.capital_expenses ?? 0);
-                  const otherBal = Number(branch.other_balance ?? branch.other_expenses ?? 0);
-                  
-                  const netLiability = salaryBal + salesAmt + capitalAmt + otherBal;
-                  const hasBalances = netLiability > 0;
+              </thead>
 
-                  return (
-                    <tr 
-                      key={branch.id} 
-                      className={`hover:bg-slate-900/10 transition-all ${!hasBalances ? "opacity-30 bg-slate-950/5" : ""}`}
-                    >
-                      <td className="py-2.5 px-3 font-mono font-semibold text-slate-300">
-                        {branch.branch_name} <span className="text-slate-600 font-normal text-[10px]">({branch.branch_code})</span>
-                      </td>
-                      <td className="py-2.5 px-3 text-right font-mono">
-                        {salaryBal > 0 ? salaryBal.toLocaleString("en-US", { minimumFractionDigits: 2 }) : "0.00"}
-                      </td>
-                      <td className="py-2.5 px-3 text-right font-mono text-emerald-400">
-                        {salesAmt > 0 ? salesAmt.toLocaleString("en-US", { minimumFractionDigits: 2 }) : "0.00"}
-                      </td>
-                      <td className="py-2.5 px-3 text-right font-mono text-cyan-400">
-                        {capitalAmt > 0 ? capitalAmt.toLocaleString("en-US", { minimumFractionDigits: 2 }) : "0.00"}
-                      </td>
-                      <td className="py-2.5 px-3 text-right font-mono">
-                        {otherBal > 0 ? otherBal.toLocaleString("en-US", { minimumFractionDigits: 2 }) : "0.00"}
-                      </td>
-                      <td className="py-2.5 px-3 text-right font-mono font-bold bg-amber-950/5 text-slate-200">
-                        {netLiability.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+              <tbody className="divide-y divide-slate-900/40 font-sans text-slate-400">
+                {branches.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-8 text-center text-slate-600">
+                      No Outstanding Balance Records Found
+                    </td>
+                  </tr>
+                ) : (
+                  branches.map((branch) => {
+                    const salary = Number(
+                      branch.salary_balance ??
+                        branch.salary_expenses ??
+                        0,
+                    );
+                    const sales = Number(branch.sales_expenses || 0);
+                    const capital = Number(branch.capital_expenses || 0);
+                    const other = Number(
+                      branch.other_balance ??
+                        branch.other_expenses ??
+                        0,
+                    );
+                    const diesel = Number(
+                      branch.diesel_balance ??
+                        branch.diesel_expenses ??
+                        0,
+                    );
+                    const total =
+                      salary + sales + capital + other + diesel;
+
+                    return (
+                      <tr
+                        key={branch.id}
+                        className={`transition-all hover:bg-slate-900/10 ${
+                          total <= 0 ? "bg-slate-950/5 opacity-30" : ""
+                        }`}
+                      >
+                        <td className="px-3 py-2.5 font-mono font-semibold text-slate-300">
+                          {branch.branch_name}{" "}
+                          <span className="text-[10px] font-normal text-slate-600">
+                            ({branch.branch_code})
+                          </span>
+                        </td>
+                        <MoneyCell value={salary} />
+                        <MoneyCell value={sales} className="text-emerald-400" />
+                        <MoneyCell value={capital} className="text-cyan-400" />
+                        <MoneyCell value={other} />
+                        <MoneyCell value={diesel} className="text-cyan-400" />
+                        <MoneyCell value={total} className="bg-amber-950/5 font-bold text-slate-200" />
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
       </div>
+    </main>
+  );
+}
+
+function MoneyCell({
+  value,
+  className = "",
+}: {
+  value: number;
+  className?: string;
+}) {
+  return (
+    <td className={`px-3 py-2.5 text-right font-mono ${className}`}>
+      {formatCurrency(value)}
+    </td>
+  );
+}
+
+function Loading({ text }: { text: string }) {
+  return (
+    <div className="flex h-screen w-full flex-col items-center justify-center bg-[#070a12] font-mono text-xs text-slate-500">
+      <div className="mb-2 h-5 w-5 animate-spin rounded-full border-2 border-amber-500 border-t-transparent" />
+      <p className="uppercase tracking-widest">{text}</p>
     </div>
   );
 }
 
 export default function RemainingBalancePage() {
   return (
-    <Suspense fallback={
-      <div className="h-screen w-full flex flex-col items-center justify-center text-slate-500 bg-[#070a12] font-mono text-xs">
-        <div className="h-5 w-5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mb-2"></div>
-        <p className="uppercase tracking-widest text-[10px]">Loading Balance Portfolio...</p>
-      </div>
-    }>
+    <Suspense fallback={<Loading text="Loading Balance Portfolio..." />}>
       <RemainingBalanceContent />
     </Suspense>
   );
