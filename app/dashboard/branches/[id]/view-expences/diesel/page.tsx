@@ -1,7 +1,8 @@
 "use client";
+
 import React, {use,useCallback,useEffect,useMemo,useState} from "react";
 import { useRouter } from "next/navigation";
-import {ArrowLeft,CalendarDays,CheckCircle2,CircleDollarSign,Fuel,Loader2,RefreshCw,Search,TrendingDown,Wallet,X} from "lucide-react";
+import { ArrowLeft,CalendarDays,CheckCircle2,CircleDollarSign,Fuel,Loader2,RefreshCw,Search,TrendingDown,Wallet,X} from "lucide-react";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -72,6 +73,12 @@ function formatMoney(value: number): string {
   })}`;
 }
 
+function formatDiesel(value: unknown): string {
+  return numeric(value).toLocaleString("en-LK", {
+    maximumFractionDigits: 3,
+  });
+}
+
 function extractRecords(result: unknown): DieselExpense[] {
   if (Array.isArray(result)) {
     return result;
@@ -112,6 +119,8 @@ export default function DieselExpensesPage({
   const [selectedDate, setSelectedDate] = useState("");
   const [search, setSearch] = useState("");
   const [showSummary, setShowSummary] = useState(false);
+  const [selectedRecord, setSelectedRecord] =
+    useState<DieselExpense | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -374,7 +383,7 @@ export default function DieselExpensesPage({
 
           {loading ? (
             <div className="flex min-h-[280px] flex-col items-center justify-center gap-3 text-sm text-slate-500">
-              <Loader2 size={28} className="animate-spin text-cyan-400"/>
+              <Loader2 size={28} className="animate-spin text-cyan-400" />
               Loading diesel expense records...
             </div>
           ) : filteredRecords.length === 0 ? (
@@ -389,7 +398,7 @@ export default function DieselExpensesPage({
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1050px]">
+              <table className="w-full min-w-[1150px]">
                 <thead>
                   <tr className="border-b border-slate-800 bg-[#0a1020] text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">
                     <th className="px-5 py-4">Branch ID</th>
@@ -409,6 +418,9 @@ export default function DieselExpensesPage({
                     </th>
                     <th className="px-5 py-4 text-right">
                       Balance
+                    </th>
+                    <th className="px-5 py-4 text-center">
+                      Action
                     </th>
                   </tr>
                 </thead>
@@ -435,12 +447,7 @@ export default function DieselExpensesPage({
                       </td>
 
                       <td className="px-5 py-4 text-right text-sm font-semibold text-cyan-400">
-                        {numeric(record.diesel).toLocaleString(
-                          "en-LK",
-                          {
-                            maximumFractionDigits: 3,
-                          },
-                        )}
+                        {formatDiesel(record.diesel)}
                       </td>
 
                       <td className="px-5 py-4 text-right text-sm text-slate-200">
@@ -458,6 +465,16 @@ export default function DieselExpensesPage({
                       <td className="px-5 py-4 text-right text-sm font-bold text-rose-400">
                         {formatMoney(numeric(record.balance))}
                       </td>
+
+                      <td className="px-5 py-4 text-center">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedRecord(record)}
+                          className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-cyan-400 transition hover:bg-cyan-500 hover:text-slate-950"
+                        >
+                          View
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -472,9 +489,7 @@ export default function DieselExpensesPage({
                     </td>
 
                     <td className="px-5 py-4 text-right text-cyan-400">
-                      {summary.diesel.toLocaleString("en-LK", {
-                        maximumFractionDigits: 3,
-                      })}
+                      {formatDiesel(summary.diesel)}
                     </td>
 
                     <td className="px-5 py-4 text-right text-white">
@@ -492,6 +507,8 @@ export default function DieselExpensesPage({
                     <td className="px-5 py-4 text-right text-rose-400">
                       {formatMoney(summary.balance)}
                     </td>
+
+                    <td />
                   </tr>
                 </tfoot>
               </table>
@@ -538,9 +555,7 @@ export default function DieselExpensesPage({
 
               <SummaryItem
                 label="Total Diesel"
-                value={`${summary.diesel.toLocaleString("en-LK", {
-                  maximumFractionDigits: 3,
-                })} L`}
+                value={`${formatDiesel(summary.diesel)} L`}
               />
 
               <SummaryItem
@@ -561,6 +576,88 @@ export default function DieselExpensesPage({
               <SummaryItem
                 label="Outstanding Balance"
                 value={formatMoney(summary.balance)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedRecord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-[#0d1527] p-6 shadow-2xl">
+            <div className="mb-5 flex items-start justify-between border-b border-slate-800 pb-5">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-cyan-400">
+                  Diesel Record
+                </p>
+
+                <h2 className="mt-1 font-mono text-lg font-black uppercase text-white">
+                  Expense Details
+                </h2>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedRecord(null)}
+                className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-800 hover:text-white"
+                aria-label="Close record details"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <SummaryItem
+                label="Record ID"
+                value={String(selectedRecord.id ?? "-")}
+              />
+
+              <SummaryItem
+                label="Branch ID"
+                value={String(
+                  selectedRecord.branch_id ?? branchId,
+                )}
+              />
+
+              <SummaryItem
+                label="Date"
+                value={formatDate(selectedRecord.date)}
+              />
+
+              <SummaryItem
+                label="Machine"
+                value={selectedRecord.machine || "-"}
+              />
+
+              <SummaryItem
+                label="Diesel Quantity"
+                value={`${formatDiesel(selectedRecord.diesel)} L`}
+              />
+
+              <SummaryItem
+                label="Amount"
+                value={formatMoney(
+                  numeric(selectedRecord.amount),
+                )}
+              />
+
+              <SummaryItem
+                label="Payable"
+                value={formatMoney(
+                  numeric(selectedRecord.payable),
+                )}
+              />
+
+              <SummaryItem
+                label="Paid"
+                value={formatMoney(numeric(selectedRecord.paid))}
+              />
+
+              <SummaryItem
+                label="Balance"
+                value={formatMoney(
+                  numeric(selectedRecord.balance),
+                )}
               />
             </div>
           </div>
