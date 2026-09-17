@@ -1,7 +1,7 @@
 "use client";
 import React, {use,useCallback,useEffect,useMemo,useState} from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft,CalendarDays,CheckCircle2,CircleDollarSign,Fuel,Loader2,RefreshCw,Search,TrendingDown,Wallet,X} from "lucide-react";
+import {ArrowLeft,CalendarDays,CheckCircle2,CircleDollarSign,Fuel,Loader2,RefreshCw,Search,TrendingDown,Wallet,X} from "lucide-react";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -374,10 +374,7 @@ export default function DieselExpensesPage({
 
           {loading ? (
             <div className="flex min-h-[280px] flex-col items-center justify-center gap-3 text-sm text-slate-500">
-              <Loader2
-                size={28}
-                className="animate-spin text-cyan-400"
-              />
+              <Loader2 size={28} className="animate-spin text-cyan-400"/>
               Loading diesel expense records...
             </div>
           ) : filteredRecords.length === 0 ? (
