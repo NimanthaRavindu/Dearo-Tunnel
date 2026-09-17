@@ -132,6 +132,7 @@ function TotalIncomesContent() {
 
     const query = params.toString();
     router.push(`/dashboard${query ? `?${query}` : ""}`);
+    router.push(`/dashboard/view-entries${query ? `?${query}` : ""}`);
   };
 
   const handleBranchClick = (branchId: string) => {
