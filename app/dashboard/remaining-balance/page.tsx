@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useCallback, useEffect, useState, Suspense } from "react";
+import React, { Suspense,useCallback,useEffect,useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft,FileSpreadsheet,Fuel,RefreshCw,TrendingUp} from "lucide-react";
+import { ArrowLeft,FileSpreadsheet,Fuel,RefreshCw,TrendingUp,X } from "lucide-react";
 import { ExpenseFilters } from "@/components/ExpenseFilters";
 
 interface BranchBalance {
@@ -36,6 +36,7 @@ function RemainingBalanceContent() {
 
   const selectedSalesId = searchParams.get("selected_sales_id");
   const selectedCapitalId = searchParams.get("selected_capital_id");
+  const selectedDieselId = searchParams.get("selected_diesel_id");
 
   const [branches, setBranches] = useState<BranchBalance[]>([]);
   const [salesList, setSalesList] = useState<FilterItem[]>([]);
@@ -55,12 +56,19 @@ function RemainingBalanceContent() {
         params.set("selected_capital_id", selectedCapitalId);
       }
 
+      if (selectedDieselId) {
+        params.set("selected_diesel_id", selectedDieselId);
+      }
+
       const query = params.toString();
+
       const response = await fetch(
         query
           ? `/api/dashboard/summary?${query}`
           : "/api/dashboard/summary",
-        { cache: "no-store" },
+        {
+          cache: "no-store",
+        },
       );
 
       if (!response.ok) {
@@ -79,7 +87,11 @@ function RemainingBalanceContent() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [selectedSalesId, selectedCapitalId]);
+  }, [
+    selectedSalesId,
+    selectedCapitalId,
+    selectedDieselId,
+  ]);
 
   useEffect(() => {
     fetchBalanceBreakdown();
@@ -109,21 +121,29 @@ function RemainingBalanceContent() {
     return (
       total +
       Number(
-        branch.salary_balance ?? branch.salary_expenses ?? 0,
+        branch.salary_balance ??
+          branch.salary_expenses ??
+          0,
       ) +
       Number(branch.sales_expenses || 0) +
       Number(branch.capital_expenses || 0) +
       Number(
-        branch.other_balance ?? branch.other_expenses ?? 0,
+        branch.other_balance ??
+          branch.other_expenses ??
+          0,
       ) +
       Number(
-        branch.diesel_balance ?? branch.diesel_expenses ?? 0,
+        branch.diesel_balance ??
+          branch.diesel_expenses ??
+          0,
       )
     );
   }, 0);
 
   if (loading) {
-    return <Loading text="Compiling Balance Portfolio Sheets..." />;
+    return (
+      <Loading text="Compiling Balance Portfolio Sheets..." />
+    );
   }
 
   return (
@@ -164,6 +184,20 @@ function RemainingBalanceContent() {
                   updateFilter("selected_capital_id")
                 }
               />
+
+              {selectedDieselId && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateFilter("selected_diesel_id")
+                  }
+                  className="flex items-center gap-1 rounded border border-cyan-500/40 bg-cyan-500/10 px-2 py-1 text-[10px] font-bold uppercase text-cyan-400"
+                >
+                  <Fuel size={11} />
+                  Diesel #{selectedDieselId}
+                  <X size={12} />
+                </button>
+              )}
             </div>
           </div>
 
@@ -178,10 +212,7 @@ function RemainingBalanceContent() {
               className="rounded-lg border border-slate-800 bg-slate-900 p-2 text-slate-400 transition hover:text-white disabled:opacity-50"
               title="Refresh Ledger"
             >
-              <RefreshCw
-                size={14}
-                className={refreshing ? "animate-spin" : ""}
-              />
+              <RefreshCw size={14} className={ refreshing ? "animate-spin" : "" } />
             </button>
 
             <div className="min-w-[190px] rounded-xl border border-amber-900/40 bg-amber-950/20 px-4 py-2 text-right">
@@ -202,7 +233,9 @@ function RemainingBalanceContent() {
               Infrastructure Outstanding Liability Ledger Matrix
             </div>
 
-            {(selectedSalesId || selectedCapitalId) && (
+            {(selectedSalesId ||
+              selectedCapitalId ||
+              selectedDieselId) && (
               <span className="rounded border border-amber-900/50 bg-amber-950/40 px-2 py-0.5 text-amber-400">
                 Filtered View Active
               </span>
@@ -213,20 +246,37 @@ function RemainingBalanceContent() {
             <table className="w-full min-w-[1050px] border-collapse text-[11px]">
               <thead>
                 <tr className="border-b border-slate-900 bg-[#090e1a]/30 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                  <th className="px-3 py-2.5 text-left">Node / Branch Identity</th>
-                  <th className="px-3 py-2.5 text-right">Salary Balance</th>
-                  <th className="px-3 py-2.5 text-right">Sales Expenses</th>
-                  <th className="px-3 py-2.5 text-right">Capital Expenses</th>
-                  <th className="px-3 py-2.5 text-right">Other Balance</th>
-                  <th className="px-3 py-2.5 text-right text-cyan-400">Diesel Balance</th>
-                  <th className="px-3 py-2.5 text-right text-amber-500">Cumulative Net Liability</th>
+                  <th className="px-3 py-2.5 text-left">
+                    Node / Branch Identity
+                  </th>
+                  <th className="px-3 py-2.5 text-right">
+                    Salary Balance
+                  </th>
+                  <th className="px-3 py-2.5 text-right">
+                    Sales Expenses
+                  </th>
+                  <th className="px-3 py-2.5 text-right">
+                    Capital Expenses
+                  </th>
+                  <th className="px-3 py-2.5 text-right">
+                    Other Balance
+                  </th>
+                  <th className="px-3 py-2.5 text-right text-cyan-400">
+                    Diesel Balance
+                  </th>
+                  <th className="px-3 py-2.5 text-right text-amber-500">
+                    Cumulative Net Liability
+                  </th>
                 </tr>
               </thead>
 
               <tbody className="divide-y divide-slate-900/40 font-sans text-slate-400">
                 {branches.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-slate-600">
+                    <td
+                      colSpan={7}
+                      className="py-8 text-center text-slate-600"
+                    >
                       No Outstanding Balance Records Found
                     </td>
                   </tr>
@@ -237,8 +287,15 @@ function RemainingBalanceContent() {
                         branch.salary_expenses ??
                         0,
                     );
-                    const sales = Number(branch.sales_expenses || 0);
-                    const capital = Number(branch.capital_expenses || 0);
+
+                    const sales = Number(
+                      branch.sales_expenses || 0,
+                    );
+
+                    const capital = Number(
+                      branch.capital_expenses || 0,
+                    );
+
                     const other = Number(
                       branch.other_balance ??
                         branch.other_expenses ??
@@ -250,13 +307,19 @@ function RemainingBalanceContent() {
                         0,
                     );
                     const total =
-                      salary + sales + capital + other + diesel;
+                      salary +
+                      sales +
+                      capital +
+                      other +
+                      diesel;
 
                     return (
                       <tr
                         key={branch.id}
                         className={`transition-all hover:bg-slate-900/10 ${
-                          total <= 0 ? "bg-slate-950/5 opacity-30" : ""
+                          total <= 0
+                            ? "bg-slate-950/5 opacity-30"
+                            : ""
                         }`}
                       >
                         <td className="px-3 py-2.5 font-mono font-semibold text-slate-300">
@@ -266,11 +329,28 @@ function RemainingBalanceContent() {
                           </span>
                         </td>
                         <MoneyCell value={salary} />
-                        <MoneyCell value={sales} className="text-emerald-400" />
-                        <MoneyCell value={capital} className="text-cyan-400" />
+
+                        <MoneyCell
+                          value={sales}
+                          className="text-emerald-400"
+                        />
+
+                        <MoneyCell
+                          value={capital}
+                          className="text-cyan-400"
+                        />
+
                         <MoneyCell value={other} />
-                        <MoneyCell value={diesel} className="text-cyan-400" />
-                        <MoneyCell value={total} className="bg-amber-950/5 font-bold text-slate-200" />
+
+                        <MoneyCell
+                          value={diesel}
+                          className="text-cyan-400"
+                        />
+
+                        <MoneyCell
+                          value={total}
+                          className="bg-amber-950/5 font-bold text-slate-200"
+                        />
                       </tr>
                     );
                   })
@@ -292,7 +372,9 @@ function MoneyCell({
   className?: string;
 }) {
   return (
-    <td className={`px-3 py-2.5 text-right font-mono ${className}`}>
+    <td
+      className={`px-3 py-2.5 text-right font-mono ${className}`}
+    >
       {formatCurrency(value)}
     </td>
   );
@@ -309,7 +391,11 @@ function Loading({ text }: { text: string }) {
 
 export default function RemainingBalancePage() {
   return (
-    <Suspense fallback={<Loading text="Loading Balance Portfolio..." />}>
+    <Suspense
+      fallback={
+        <Loading text="Loading Balance Portfolio..." />
+      }
+    >
       <RemainingBalanceContent />
     </Suspense>
   );

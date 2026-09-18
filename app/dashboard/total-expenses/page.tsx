@@ -1,8 +1,7 @@
 "use client";
-
-import React, { useState, useEffect, useCallback, Suspense } from "react";
+import React, { Suspense,useCallback,useEffect,useState} from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft,Coins,FileSpreadsheet,Fuel,RefreshCw} from "lucide-react";
+import { ArrowLeft,Coins,FileSpreadsheet,Fuel,RefreshCw,X} from "lucide-react";
 import { ExpenseFilters } from "@/components/ExpenseFilters";
 
 interface BranchExpense {
@@ -36,6 +35,7 @@ function TotalExpensesContent() {
 
   const selectedSalesId = searchParams.get("selected_sales_id");
   const selectedCapitalId = searchParams.get("selected_capital_id");
+  const selectedDieselId = searchParams.get("selected_diesel_id");
 
   const [branches, setBranches] = useState<BranchExpense[]>([]);
   const [salesList, setSalesList] = useState<FilterItem[]>([]);
@@ -53,6 +53,10 @@ function TotalExpensesContent() {
 
       if (selectedCapitalId) {
         params.set("selected_capital_id", selectedCapitalId);
+      }
+
+      if (selectedDieselId) {
+        params.set("selected_diesel_id", selectedDieselId);
       }
 
       const query = params.toString();
@@ -82,7 +86,11 @@ function TotalExpensesContent() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [selectedSalesId, selectedCapitalId]);
+  }, [
+    selectedSalesId,
+    selectedCapitalId,
+    selectedDieselId,
+  ]);
 
   useEffect(() => {
     fetchExpenseBreakdown();
@@ -110,16 +118,16 @@ function TotalExpensesContent() {
     router.push(`/dashboard${query ? `?${query}` : ""}`);
   };
 
-  const calculatedTotalSum = branches.reduce((total, branch) => {
-    return (
+  const calculatedTotalSum = branches.reduce(
+    (total, branch) =>
       total +
       Number(branch.salary_expenses || 0) +
       Number(branch.sales_expenses || 0) +
       Number(branch.capital_expenses || 0) +
       Number(branch.other_expenses || 0) +
-      Number(branch.diesel_expenses || 0)
-    );
-  }, 0);
+      Number(branch.diesel_expenses || 0),
+    0,
+  );
 
   if (loading) {
     return (
@@ -168,6 +176,19 @@ function TotalExpensesContent() {
                   updateFilter("selected_capital_id")
                 }
               />
+
+              {selectedDieselId && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateFilter("selected_diesel_id")
+                  }
+                  className="flex items-center gap-1 rounded border border-cyan-500/40 bg-cyan-500/10 px-2 py-1 text-[10px] font-bold uppercase text-cyan-400"
+                >
+                  Diesel #{selectedDieselId}
+                  <X size={12} />
+                </button>
+              )}
             </div>
           </div>
 
@@ -182,10 +203,7 @@ function TotalExpensesContent() {
               className="rounded-lg border border-slate-800 bg-slate-900/90 p-2 text-slate-400 transition-all hover:border-slate-700 hover:text-white disabled:opacity-50"
               title="Refresh Ledger"
             >
-              <RefreshCw
-                size={14}
-                className={refreshing ? "animate-spin" : ""}
-              />
+              <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
             </button>
 
             <div className="min-w-[190px] rounded-xl border border-slate-800 bg-slate-900/90 px-3.5 py-1.5 shadow-sm">
@@ -202,10 +220,7 @@ function TotalExpensesContent() {
 
         <section className="overflow-hidden rounded-xl border border-slate-800/90 bg-slate-900/70 shadow-lg backdrop-blur-sm">
           <div className="flex items-center gap-1.5 border-b border-slate-800/80 bg-slate-950/40 px-4 py-2.5 text-xs font-semibold text-slate-300">
-            <FileSpreadsheet
-              size={14}
-              className="text-emerald-400"
-            />
+            <FileSpreadsheet size={14} className="text-emerald-400" />
             Infrastructure Financial Auditing Matrix
           </div>
 

@@ -1,6 +1,6 @@
 "use client";
 
-import React, {use,useCallback,useEffect,useMemo,useState} from "react";
+import React, { use,useCallback,useEffect,useMemo,useState} from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft,CalendarDays,CheckCircle2,CircleDollarSign,Fuel,Loader2,RefreshCw,Search,TrendingDown,Wallet,X} from "lucide-react";
 
@@ -57,7 +57,9 @@ function dateOnly(value: unknown): string {
 function formatDate(value: unknown): string {
   const date = dateOnly(value);
 
-  if (!date) return "-";
+  if (!date) {
+    return "-";
+  }
 
   const [year, month, day] = date.split("-");
 
@@ -90,12 +92,12 @@ function extractRecords(result: unknown): DieselExpense[] {
 
   const response = result as ApiResponse;
 
-  if (Array.isArray(response.data)) {
-    return response.data;
-  }
-
   if (Array.isArray(response.expenses)) {
     return response.expenses;
+  }
+
+  if (Array.isArray(response.data)) {
+    return response.data;
   }
 
   if (Array.isArray(response.rows)) {
@@ -103,6 +105,16 @@ function extractRecords(result: unknown): DieselExpense[] {
   }
 
   return [];
+}
+
+function normalizeRecord(record: DieselExpense): DieselExpense {
+  const payable = numeric(record.payable ?? record.amount);
+  const paid = numeric(record.paid);
+
+  return {
+    ...record,
+    balance: numeric(record.balance ?? payable - paid),
+  };
 }
 
 export default function DieselExpensesPage({
@@ -152,7 +164,9 @@ export default function DieselExpensesPage({
         );
       }
 
-      setRecords(extractRecords(result));
+      setRecords(
+        extractRecords(result).map(normalizeRecord),
+      );
     } catch (requestError) {
       console.error("Diesel expenses error:", requestError);
 
@@ -182,6 +196,7 @@ export default function DieselExpensesPage({
       const matchesSearch =
         !query ||
         [
+          record.id,
           record.branch_id,
           record.date,
           record.machine,
@@ -191,7 +206,9 @@ export default function DieselExpensesPage({
           record.paid,
           record.balance,
         ].some((value) =>
-          String(value ?? "").toLowerCase().includes(query),
+          String(value ?? "")
+            .toLowerCase()
+            .includes(query),
         );
 
       return matchesDate && matchesSearch;
@@ -203,7 +220,9 @@ export default function DieselExpensesPage({
       (total, record) => ({
         diesel: total.diesel + numeric(record.diesel),
         amount: total.amount + numeric(record.amount),
-        payable: total.payable + numeric(record.payable),
+        payable:
+          total.payable +
+          numeric(record.payable ?? record.amount),
         paid: total.paid + numeric(record.paid),
         balance: total.balance + numeric(record.balance),
       }),
@@ -214,6 +233,26 @@ export default function DieselExpensesPage({
   const clearFilters = () => {
     setSelectedDate("");
     setSearch("");
+  };
+
+  const openRecordInTotalExpenses = (
+    record: DieselExpense,
+  ) => {
+    if (!record.id) {
+      return;
+    }
+
+    const query = new URLSearchParams();
+    query.set("selected_diesel_id", String(record.id));
+
+    router.push(
+      `/dashboard/total-expenses?${query.toString()}`,
+    );
+  };
+
+  const handleRecordClick = (record: DieselExpense) => {
+    setSelectedRecord(record);
+    openRecordInTotalExpenses(record);
   };
 
   return (
@@ -264,7 +303,10 @@ export default function DieselExpensesPage({
 
           <div className="flex flex-col gap-3 sm:flex-row">
             <div className="relative">
-              <CalendarDays size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <CalendarDays
+                size={15}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"
+              />
 
               <input
                 type="date"
@@ -282,7 +324,10 @@ export default function DieselExpensesPage({
               disabled={loading}
               className="flex items-center justify-center gap-2 rounded-xl border border-slate-800 bg-[#0d1527] px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-300 transition hover:border-cyan-500/40 hover:text-cyan-400 disabled:opacity-50"
             >
-              <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
+              <RefreshCw
+                size={15}
+                className={loading ? "animate-spin" : ""}
+              />
               Refresh
             </button>
 
@@ -357,7 +402,10 @@ export default function DieselExpensesPage({
 
             <div className="flex gap-3">
               <div className="relative">
-                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                <Search
+                  size={15}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"
+                />
 
                 <input
                   value={search}
@@ -383,7 +431,10 @@ export default function DieselExpensesPage({
 
           {loading ? (
             <div className="flex min-h-[280px] flex-col items-center justify-center gap-3 text-sm text-slate-500">
-              <Loader2 size={28} className="animate-spin text-cyan-400" />
+              <Loader2
+                size={28}
+                className="animate-spin text-cyan-400"
+              />
               Loading diesel expense records...
             </div>
           ) : filteredRecords.length === 0 ? (
@@ -432,7 +483,10 @@ export default function DieselExpensesPage({
                         record.id ??
                         `${record.date}-${record.machine}-${index}`
                       }
-                      className="transition hover:bg-cyan-500/[0.03]"
+                      onClick={() =>
+                        handleRecordClick(record)
+                      }
+                      className="cursor-pointer transition hover:bg-cyan-500/[0.08]"
                     >
                       <td className="px-5 py-4 text-xs text-slate-400">
                         {record.branch_id ?? branchId}
@@ -447,7 +501,7 @@ export default function DieselExpensesPage({
                       </td>
 
                       <td className="px-5 py-4 text-right text-sm font-semibold text-cyan-400">
-                        {formatDiesel(record.diesel)}
+                        {formatDiesel(record.diesel)} L
                       </td>
 
                       <td className="px-5 py-4 text-right text-sm text-slate-200">
@@ -455,7 +509,11 @@ export default function DieselExpensesPage({
                       </td>
 
                       <td className="px-5 py-4 text-right text-sm text-amber-400">
-                        {formatMoney(numeric(record.payable))}
+                        {formatMoney(
+                          numeric(
+                            record.payable ?? record.amount,
+                          ),
+                        )}
                       </td>
 
                       <td className="px-5 py-4 text-right text-sm text-emerald-400">
@@ -469,7 +527,10 @@ export default function DieselExpensesPage({
                       <td className="px-5 py-4 text-center">
                         <button
                           type="button"
-                          onClick={() => setSelectedRecord(record)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleRecordClick(record);
+                          }}
                           className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-cyan-400 transition hover:bg-cyan-500 hover:text-slate-950"
                         >
                           View
@@ -489,7 +550,7 @@ export default function DieselExpensesPage({
                     </td>
 
                     <td className="px-5 py-4 text-right text-cyan-400">
-                      {formatDiesel(summary.diesel)}
+                      {formatDiesel(summary.diesel)} L
                     </td>
 
                     <td className="px-5 py-4 text-right text-white">
@@ -644,13 +705,18 @@ export default function DieselExpensesPage({
               <SummaryItem
                 label="Payable"
                 value={formatMoney(
-                  numeric(selectedRecord.payable),
+                  numeric(
+                    selectedRecord.payable ??
+                      selectedRecord.amount,
+                  ),
                 )}
               />
 
               <SummaryItem
                 label="Paid"
-                value={formatMoney(numeric(selectedRecord.paid))}
+                value={formatMoney(
+                  numeric(selectedRecord.paid),
+                )}
               />
 
               <SummaryItem
