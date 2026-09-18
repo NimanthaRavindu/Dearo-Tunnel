@@ -68,10 +68,7 @@ export default function DieselExpensesPage() {
 
       const response = await fetch(
         `/api/expences/diesel?branch_id=${encodeURIComponent(branchId)}`,
-        {
-          method: "GET",
-          cache: "no-store",
-        },
+        { method: "GET", cache: "no-store" },
       );
 
       const data = await response.json();
@@ -87,7 +84,6 @@ export default function DieselExpensesPage() {
       );
     } catch (error) {
       console.error("LOAD DIESEL EXPENSE ERROR:", error);
-
       alert(
         error instanceof Error
           ? error.message
@@ -99,9 +95,7 @@ export default function DieselExpensesPage() {
   };
 
   useEffect(() => {
-    if (branchId) {
-      loadExpenses();
-    }
+    if (branchId) loadExpenses();
   }, [branchId]);
 
   const resetForm = () => {
@@ -115,26 +109,21 @@ export default function DieselExpensesPage() {
 
   const formPayable = numberValue(payable);
   const formPaid = numberValue(paid);
-  const formAmount = formPayable + formPaid;
-  const formBalance = Math.max(
-    0,
-    formPayable - formPaid,
+  const formAmount = formPayable;
+  const formBalance = Math.max(0, formPayable - formPaid);
+
+  const filteredExpenses = useMemo(
+    () =>
+      expenses.filter((item) => {
+        const itemDate = item.date?.slice(0, 10);
+
+        return (
+          (!filterDate || itemDate === filterDate) &&
+          (!filterMachine || item.machine === filterMachine)
+        );
+      }),
+    [expenses, filterDate, filterMachine],
   );
-
-  const filteredExpenses = useMemo(() => {
-    return expenses.filter((item) => {
-      const itemDate = item.date?.slice(0, 10);
-
-      const dateMatches =
-        !filterDate || itemDate === filterDate;
-
-      const machineMatches =
-        !filterMachine ||
-        item.machine === filterMachine;
-
-      return dateMatches && machineMatches;
-    });
-  }, [expenses, filterDate, filterMachine]);
 
   const previousExpenses = useMemo(() => {
     if (!filterDate) return [];
@@ -142,36 +131,29 @@ export default function DieselExpensesPage() {
     return expenses.filter((item) => {
       const itemDate = item.date?.slice(0, 10);
 
-      const dateMatches = itemDate < filterDate;
-
-      const machineMatches =
-        !filterMachine ||
-        item.machine === filterMachine;
-
-      return dateMatches && machineMatches;
+      return (
+        itemDate < filterDate &&
+        (!filterMachine || item.machine === filterMachine)
+      );
     });
   }, [expenses, filterDate, filterMachine]);
 
-  const totals = useMemo(() => {
-    return filteredExpenses.reduce(
-      (total, item) => {
-        total.diesel += numberValue(item.diesel);
-        total.amount += numberValue(item.amount);
-        total.paid += numberValue(item.paid);
-
-        return total;
-      },
-      {
-        diesel: 0,
-        amount: 0,
-        paid: 0,
-      },
-    );
-  }, [filteredExpenses]);
+  const totals = useMemo(
+    () =>
+      filteredExpenses.reduce(
+        (total, item) => {
+          total.diesel += numberValue(item.diesel);
+          total.amount += numberValue(item.payable);
+          total.paid += numberValue(item.paid);
+          return total;
+        },
+        { diesel: 0, amount: 0, paid: 0 },
+      ),
+    [filteredExpenses],
+  );
 
   const previousDiesel = previousExpenses.reduce(
-    (total, item) =>
-      total + numberValue(item.diesel),
+    (total, item) => total + numberValue(item.diesel),
     0,
   );
 
@@ -185,8 +167,7 @@ export default function DieselExpensesPage() {
     totals.amount - totals.paid,
   );
 
-  const totalDiesel =
-    previousDiesel + totals.diesel;
+  const totalDiesel = previousDiesel + totals.diesel;
 
   const handleSubmit = async (
     event: FormEvent<HTMLFormElement>,
@@ -220,34 +201,23 @@ export default function DieselExpensesPage() {
     const payableValue = Number(payable);
     const paidValue = Number(paid);
 
-    if (
-      !Number.isFinite(dieselValue) ||
-      dieselValue <= 0
-    ) {
+    if (!Number.isFinite(dieselValue) || dieselValue <= 0) {
       alert("Please enter a valid diesel quantity.");
       return;
     }
 
-    if (
-      !Number.isFinite(payableValue) ||
-      payableValue < 0
-    ) {
+    if (!Number.isFinite(payableValue) || payableValue < 0) {
       alert("Please enter a valid payable amount.");
       return;
     }
 
-    if (
-      !Number.isFinite(paidValue) ||
-      paidValue < 0
-    ) {
+    if (!Number.isFinite(paidValue) || paidValue < 0) {
       alert("Please enter a valid paid amount.");
       return;
     }
 
     if (paidValue > payableValue) {
-      alert(
-        "Paid amount cannot be greater than payable amount.",
-      );
+      alert("Paid amount cannot be greater than payable amount.");
       return;
     }
 
@@ -259,41 +229,31 @@ export default function DieselExpensesPage() {
     try {
       setSaving(true);
 
-      const response = await fetch(
-        "/api/expences/diesel",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            branch_id: branchId,
-            date,
-            machine: machineName,
-            diesel: dieselValue,
-            payable: payableValue,
-            paid: paidValue,
-          }),
-        },
-      );
+      const response = await fetch("/api/expences/diesel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          branch_id: branchId,
+          date,
+          machine: machineName,
+          diesel: dieselValue,
+          payable: payableValue,
+          paid: paidValue,
+        }),
+      });
 
       const data = await response.json();
 
       if (!response.ok) {
         throw new Error(
-          data?.error ||
-            "Failed to save diesel expense",
+          data?.error || "Failed to save diesel expense",
         );
       }
 
       resetForm();
       await loadExpenses();
     } catch (error) {
-      console.error(
-        "SAVE DIESEL EXPENSE ERROR:",
-        error,
-      );
-
+      console.error("SAVE DIESEL EXPENSE ERROR:", error);
       alert(
         error instanceof Error
           ? error.message
@@ -305,20 +265,18 @@ export default function DieselExpensesPage() {
   };
 
   const handleDelete = async (id: number) => {
-    const confirmed = window.confirm(
-      "Are you sure you want to delete this diesel expense?",
-    );
-
-    if (!confirmed) return;
+    if (
+      !window.confirm(
+        "Are you sure you want to delete this diesel expense?",
+      )
+    ) {
+      return;
+    }
 
     try {
       const response = await fetch(
-        `/api/expences/diesel?id=${encodeURIComponent(
-          String(id),
-        )}`,
-        {
-          method: "DELETE",
-        },
+        `/api/expences/diesel?id=${encodeURIComponent(String(id))}`,
+        { method: "DELETE" },
       );
 
       const data = await response.json();
@@ -333,11 +291,7 @@ export default function DieselExpensesPage() {
         items.filter((item) => item.id !== id),
       );
     } catch (error) {
-      console.error(
-        "DELETE DIESEL EXPENSE ERROR:",
-        error,
-      );
-
+      console.error("DELETE DIESEL EXPENSE ERROR:", error);
       alert(
         error instanceof Error
           ? error.message
@@ -353,8 +307,7 @@ export default function DieselExpensesPage() {
   return (
     <main className="min-h-screen bg-slate-950 p-4 text-white md:p-6">
       <div className="mx-auto max-w-7xl space-y-6">
-        {/* PAGE HEADER */}
-        <header className="flex flex-col justify-between gap-5 rounded-3xl border border-slate-700/80 bg-slate-900 p-5 shadow-2xl shadow-black/20 md:flex-row md:items-center md:p-6">
+        <header className="flex flex-col justify-between gap-5 rounded-3xl border border-slate-700/80 bg-slate-900 p-5 shadow-2xl md:flex-row md:items-center md:p-6">
           <div className="flex items-center gap-4">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400 ring-1 ring-cyan-400/20">
               <Fuel size={29} />
@@ -365,7 +318,7 @@ export default function DieselExpensesPage() {
                 Expense Management
               </p>
 
-              <h1 className="text-2xl font-bold tracking-tight text-white md:text-3xl">
+              <h1 className="text-2xl font-bold md:text-3xl">
                 Diesel Expenses
               </h1>
 
@@ -379,25 +332,20 @@ export default function DieselExpensesPage() {
             type="button"
             onClick={loadExpenses}
             disabled={loading}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-600 bg-slate-800 px-5 text-sm font-bold text-white transition hover:border-cyan-500/50 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-600 bg-slate-800 px-5 text-sm font-bold transition hover:bg-slate-700 disabled:opacity-60"
           >
-            <RefreshCw
-              size={17}
-              className={
-                loading ? "animate-spin" : ""
-              }
-            />
+            <RefreshCw size={17} className={loading ? "animate-spin" : ""} />
             {loading ? "Refreshing..." : "Refresh"}
           </button>
         </header>
 
-        {/* FILTERS */}
         <section className="rounded-3xl border border-slate-700/80 bg-slate-900 p-5 shadow-xl">
           <div className="mb-4 flex items-center justify-between">
             <div>
-              <h2 className="text-sm font-bold uppercase tracking-wide text-white">
+              <h2 className="text-sm font-bold uppercase tracking-wide">
                 Filter Records
               </h2>
+
               <p className="mt-1 text-xs text-slate-500">
                 View records by date and machine
               </p>
@@ -411,11 +359,7 @@ export default function DieselExpensesPage() {
           </div>
 
           <div className="grid gap-4 md:grid-cols-[1fr_1fr_auto]">
-            <div>
-              <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-400">
-                Filter Date
-              </label>
-
+            <Field label="Filter Date">
               <div className="relative">
                 <CalendarDays size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-cyan-400" />
 
@@ -428,18 +372,11 @@ export default function DieselExpensesPage() {
                   className={`${inputClass} pl-11`}
                 />
               </div>
-            </div>
+            </Field>
 
-            <div>
-              <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-400">
-                Filter Machine
-              </label>
-
+            <Field label="Filter Machine">
               <div className="relative">
-                <Truck
-                  size={17}
-                  className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-cyan-400"
-                />
+                <Truck size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-cyan-400" />
 
                 <select
                   value={filterMachine}
@@ -457,7 +394,7 @@ export default function DieselExpensesPage() {
                   ))}
                 </select>
               </div>
-            </div>
+            </Field>
 
             <button
               type="button"
@@ -465,14 +402,13 @@ export default function DieselExpensesPage() {
                 setFilterDate("");
                 setFilterMachine("");
               }}
-              className="h-12 self-end rounded-xl border border-slate-600 bg-slate-800 px-5 text-sm font-bold text-slate-200 transition hover:border-slate-500 hover:bg-slate-700"
+              className="h-12 self-end rounded-xl border border-slate-600 bg-slate-800 px-5 text-sm font-bold transition hover:bg-slate-700"
             >
               Clear Filters
             </button>
           </div>
         </section>
 
-        {/* SUMMARY CARDS */}
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <SummaryCard
             title="Diesel Used"
@@ -484,7 +420,7 @@ export default function DieselExpensesPage() {
 
           <SummaryCard
             title="Total Amount"
-            subtitle="Payable + paid"
+            subtitle="Total payable amount"
             value={`Rs. ${formatNumber(totals.amount)}`}
             icon={<Wallet size={22} />}
             color="blue"
@@ -515,8 +451,7 @@ export default function DieselExpensesPage() {
           />
         </section>
 
-        {/* ADD FORM */}
-        <section className="overflow-hidden rounded-3xl border border-slate-700/80 bg-slate-900 shadow-2xl shadow-black/20">
+        <section className="overflow-hidden rounded-3xl border border-slate-700/80 bg-slate-900 shadow-2xl">
           <div className="border-b border-slate-700/80 bg-slate-800/30 px-6 py-5">
             <div className="flex items-center gap-4">
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-400 ring-1 ring-cyan-500/20">
@@ -524,7 +459,7 @@ export default function DieselExpensesPage() {
               </div>
 
               <div>
-                <h2 className="text-xl font-bold text-white">
+                <h2 className="text-xl font-bold">
                   Add Diesel Expense
                 </h2>
 
@@ -542,36 +477,25 @@ export default function DieselExpensesPage() {
             <div className="grid gap-6 md:grid-cols-2">
               <Field label="Machine">
                 <div className="relative">
-                  <Truck
-                    size={17}
-                    className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-cyan-400"
-                  />
+                  <Truck size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-cyan-400" />
 
                   <select
                     value={selectedMachine}
                     onChange={(event) => {
-                      setSelectedMachine(
-                        event.target.value,
-                      );
+                      setSelectedMachine(event.target.value);
 
                       if (
-                        event.target.value !==
-                        "Other Machine"
+                        event.target.value !== "Other Machine"
                       ) {
                         setOtherMachine("");
                       }
                     }}
                     className={`${inputClass} cursor-pointer appearance-none pl-11`}
                   >
-                    <option value="">
-                      Select Machine
-                    </option>
+                    <option value="">Select Machine</option>
 
                     {machines.map((machine) => (
-                      <option
-                        key={machine}
-                        value={machine}
-                      >
+                      <option key={machine} value={machine}>
                         {machine}
                       </option>
                     ))}
@@ -658,48 +582,28 @@ export default function DieselExpensesPage() {
             </div>
 
             <div className="grid gap-5 border-t border-slate-700/80 pt-6 md:grid-cols-2">
-              <div className="rounded-2xl border border-blue-500/20 bg-blue-500/10 p-5">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-slate-300">
-                    Total Amount
-                  </span>
+              <CalculationCard
+                title="Amount"
+                value={`Rs. ${formatNumber(formAmount)}`}
+                description="Total payable amount"
+                icon={<Wallet size={19} />}
+                color="blue"
+              />
 
-                  <Wallet size={19} className="text-blue-400" />
-                </div>
-
-                <p className="mt-3 text-2xl font-bold text-blue-400">
-                  Rs. {formatNumber(formAmount)}
-                </p>
-
-                <p className="mt-1 text-xs text-slate-500">
-                  Payable + Paid
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-5">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-slate-300">
-                    Remaining Balance
-                  </span>
-
-                  <CreditCard size={19} className="text-red-400" />
-                </div>
-
-                <p className="mt-3 text-2xl font-bold text-red-400">
-                  Rs. {formatNumber(formBalance)}
-                </p>
-
-                <p className="mt-1 text-xs text-slate-500">
-                  Payable − Paid
-                </p>
-              </div>
+              <CalculationCard
+                title="Remaining Balance"
+                value={`Rs. ${formatNumber(formBalance)}`}
+                description="Payable − Paid"
+                icon={<CreditCard size={19} />}
+                color="red"
+              />
             </div>
 
             <div className="flex justify-end border-t border-slate-700/80 pt-6">
               <button
                 type="submit"
                 disabled={saving}
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-cyan-600 px-7 text-sm font-bold text-white shadow-lg shadow-cyan-950/30 transition hover:bg-cyan-500 focus:outline-none focus:ring-4 focus:ring-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-cyan-600 px-7 text-sm font-bold transition hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {saving ? (
                   <RefreshCw
@@ -710,19 +614,16 @@ export default function DieselExpensesPage() {
                   <Plus size={18} />
                 )}
 
-                {saving
-                  ? "Saving..."
-                  : "Save Diesel Expense"}
+                {saving ? "Saving..." : "Save Diesel Expense"}
               </button>
             </div>
           </form>
         </section>
 
-        {/* RECORDS TABLE */}
-        <section className="overflow-hidden rounded-3xl border border-slate-700/80 bg-slate-900 shadow-2xl shadow-black/20">
+        <section className="overflow-hidden rounded-3xl border border-slate-700/80 bg-slate-900 shadow-2xl">
           <div className="flex flex-col justify-between gap-4 border-b border-slate-700/80 p-5 md:flex-row md:items-center md:p-6">
             <div>
-              <h2 className="text-xl font-bold text-white">
+              <h2 className="text-xl font-bold">
                 Diesel Expense Records
               </h2>
 
@@ -770,10 +671,7 @@ export default function DieselExpensesPage() {
                       colSpan={8}
                       className="px-5 py-14 text-center text-sm text-slate-400"
                     >
-                      <div className="flex items-center justify-center gap-3">
-                        <RefreshCw size={18} className="animate-spin text-cyan-400" />
-                        Loading diesel expenses...
-                      </div>
+                      <RefreshCw size={18} className="mx-auto animate-spin text-cyan-400" />
                     </td>
                   </tr>
                 ) : filteredExpenses.length === 0 ? (
@@ -782,17 +680,18 @@ export default function DieselExpensesPage() {
                       colSpan={8}
                       className="px-5 py-14 text-center"
                     >
-                      <div className="mx-auto max-w-sm">
-                        <Fuel size={30} className="mx-auto mb-3 text-slate-600" />
+                      <Fuel
+                        size={30}
+                        className="mx-auto mb-3 text-slate-600"
+                      />
 
-                        <p className="font-semibold text-slate-300">
-                          No diesel expenses found
-                        </p>
+                      <p className="font-semibold text-slate-300">
+                        No diesel expenses found
+                      </p>
 
-                        <p className="mt-1 text-sm text-slate-500">
-                          Add a new expense or change the filters.
-                        </p>
-                      </div>
+                      <p className="mt-1 text-sm text-slate-500">
+                        Add a new expense or change the filters.
+                      </p>
                     </td>
                   </tr>
                 ) : (
@@ -801,13 +700,8 @@ export default function DieselExpensesPage() {
                       item.payable,
                     );
 
-                    const itemPaid = numberValue(
-                      item.paid,
-                    );
-
-                    const itemAmount =
-                      itemPayable + itemPaid;
-
+                    const itemPaid = numberValue(item.paid);
+                    const itemAmount = itemPayable;
                     const itemBalance = Math.max(
                       0,
                       itemPayable - itemPaid,
@@ -821,13 +715,8 @@ export default function DieselExpensesPage() {
                         <td className="px-5 py-4 text-sm text-slate-300">
                           {item.date
                             ? new Date(
-                                `${item.date.slice(
-                                  0,
-                                  10,
-                                )}T00:00:00`,
-                              ).toLocaleDateString(
-                                "en-GB",
-                              )
+                                `${item.date.slice(0, 10)}T00:00:00`,
+                              ).toLocaleDateString("en-GB")
                             : "-"}
                         </td>
 
@@ -866,11 +755,9 @@ export default function DieselExpensesPage() {
                         <td className="px-5 py-4 text-center">
                           <button
                             type="button"
-                            onClick={() =>
-                              handleDelete(item.id)
-                            }
+                            onClick={() => handleDelete(item.id)}
                             title="Delete expense"
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-500/20 bg-red-500/10 text-red-400 transition hover:bg-red-500/20 hover:text-red-300"
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-500/20 bg-red-500/10 text-red-400 transition hover:bg-red-500/20"
                           >
                             <Trash2 size={16} />
                           </button>
@@ -884,13 +771,9 @@ export default function DieselExpensesPage() {
           </div>
         </section>
 
-        {/* INFORMATION */}
         <div className="rounded-2xl border border-blue-500/20 bg-blue-500/10 p-5">
           <div className="flex gap-3">
-            <AlertCircle
-              size={19}
-              className="mt-0.5 shrink-0 text-blue-400"
-            />
+            <AlertCircle size={19} className="mt-0.5 shrink-0 text-blue-400" />
 
             <div>
               <h3 className="font-bold text-blue-300">
@@ -898,9 +781,10 @@ export default function DieselExpensesPage() {
               </h3>
 
               <p className="mt-1 text-sm leading-6 text-blue-300/80">
-                Total Amount = Payable + Paid. Remaining
-                Balance = Payable − Paid. Remaining Diesel
-                is calculated using previous diesel quantity.
+                Amount = Payable amount. Paid is the amount
+                already paid. Remaining Balance = Payable − Paid.
+                Remaining Diesel is calculated using previous diesel
+                quantity.
               </p>
             </div>
           </div>
@@ -925,11 +809,7 @@ function SummaryCard({
 }) {
   const styles: Record<
     CardColor,
-    {
-      border: string;
-      icon: string;
-      value: string;
-    }
+    { border: string; icon: string; value: string }
   > = {
     cyan: {
       border: "border-cyan-500/25 hover:border-cyan-400/50",
@@ -987,6 +867,59 @@ function SummaryCard({
           {icon}
         </span>
       </div>
+    </div>
+  );
+}
+
+function CalculationCard({
+  title,
+  value,
+  description,
+  icon,
+  color,
+}: {
+  title: string;
+  value: string;
+  description: string;
+  icon: React.ReactNode;
+  color: "blue" | "red";
+}) {
+  const styles = {
+    blue: {
+      border: "border-blue-500/20",
+      background: "bg-blue-500/10",
+      icon: "text-blue-400",
+      value: "text-blue-400",
+    },
+    red: {
+      border: "border-red-500/20",
+      background: "bg-red-500/10",
+      icon: "text-red-400",
+      value: "text-red-400",
+    },
+  };
+
+  const selected = styles[color];
+
+  return (
+    <div
+      className={`rounded-2xl border ${selected.border} ${selected.background} p-5`}
+    >
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-semibold text-slate-300">
+          {title}
+        </span>
+
+        <span className={selected.icon}>{icon}</span>
+      </div>
+
+      <p className={`mt-3 text-2xl font-bold ${selected.value}`}>
+        {value}
+      </p>
+
+      <p className="mt-1 text-xs text-slate-500">
+        {description}
+      </p>
     </div>
   );
 }
