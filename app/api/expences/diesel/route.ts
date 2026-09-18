@@ -13,8 +13,7 @@ export async function GET(request: NextRequest) {
   let connection: mysql.Connection | undefined;
 
   try {
-    const { searchParams } = new URL(request.url);
-    const branchId = searchParams.get("branch_id");
+    const branchId = new URL(request.url).searchParams.get("branch_id");
 
     if (!branchId) {
       return NextResponse.json(
@@ -25,7 +24,7 @@ export async function GET(request: NextRequest) {
 
     connection = await mysql.createConnection(dbConfig);
 
-    const [rows] = await connection.execute(
+    const [expenses] = await connection.execute(
       `
         SELECT
           id,
@@ -43,7 +42,55 @@ export async function GET(request: NextRequest) {
       [branchId],
     );
 
-    return NextResponse.json({ expenses: rows });
+    const [expenseRows] = await connection.execute(
+      `
+        SELECT
+          COALESCE(SUM(diesel), 0) AS dieselUsed,
+          COALESCE(SUM(amount), 0) AS amountUsed
+        FROM diesel_expenses
+        WHERE branch_id = ?
+      `,
+      [branchId],
+    );
+
+    const [stockRows] = await connection.execute(
+      `
+        SELECT
+          COALESCE(total_diesel, 0) AS totalDiesel,
+          COALESCE(total_amount, 0) AS totalAmount
+        FROM diesel_stock
+        WHERE branch_id = ?
+        LIMIT 1
+      `,
+      [branchId],
+    );
+
+    const expense =
+      Array.isArray(expenseRows) && expenseRows.length > 0
+        ? (expenseRows[0] as Record<string, number | string>)
+        : {};
+
+    const stock =
+      Array.isArray(stockRows) && stockRows.length > 0
+        ? (stockRows[0] as Record<string, number | string>)
+        : {};
+
+    const dieselUsed = Number(expense.dieselUsed || 0);
+    const amountUsed = Number(expense.amountUsed || 0);
+    const totalDiesel = Number(stock.totalDiesel || 0);
+    const totalAmount = Number(stock.totalAmount || 0);
+
+    return NextResponse.json({
+      expenses,
+      summary: {
+        dieselUsed,
+        amountUsed,
+        totalDiesel,
+        totalAmount,
+        remainingDiesel: Math.max(0, totalDiesel - dieselUsed),
+        remainingBalance: Math.max(0, totalAmount - amountUsed),
+      },
+    });
   } catch (error) {
     console.error("GET DIESEL EXPENSE ERROR:", error);
 
@@ -121,15 +168,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Amount = Payable + Paid
-    const amountValue = payableValue + paidValue;
-
-    // Balance = Payable - Paid
-    const balanceValue = Math.max(
-      0,
-      payableValue - paidValue,
-    );
-
     connection = await mysql.createConnection(dbConfig);
 
     const [result] = await connection.execute(
@@ -143,39 +181,16 @@ export async function POST(request: NextRequest) {
         date,
         machine,
         dieselValue,
-        amountValue,
+        payableValue,
         payableValue,
         paidValue,
       ],
     );
 
-    const insertId = (result as mysql.ResultSetHeader).insertId;
-
-    const [rows] = await connection.execute(
-      `
-        SELECT
-          id,
-          branch_id,
-          DATE_FORMAT(date, '%Y-%m-%d') AS date,
-          machine,
-          diesel,
-          amount,
-          payable,
-          paid
-        FROM diesel_expenses
-        WHERE id = ?
-      `,
-      [insertId],
-    );
-
-    const expense =
-      Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
-
     return NextResponse.json(
       {
         message: "Diesel expense saved successfully",
-        expense,
-        balance: balanceValue,
+        id: (result as mysql.ResultSetHeader).insertId,
       },
       { status: 201 },
     );
@@ -195,8 +210,7 @@ export async function DELETE(request: NextRequest) {
   let connection: mysql.Connection | undefined;
 
   try {
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get("id");
+    const id = new URL(request.url).searchParams.get("id");
 
     if (!id) {
       return NextResponse.json(
@@ -208,16 +222,11 @@ export async function DELETE(request: NextRequest) {
     connection = await mysql.createConnection(dbConfig);
 
     const [result] = await connection.execute(
-      `
-        DELETE FROM diesel_expenses
-        WHERE id = ?
-      `,
+      "DELETE FROM diesel_expenses WHERE id = ?",
       [id],
     );
 
-    const deleteResult = result as mysql.ResultSetHeader;
-
-    if (deleteResult.affectedRows === 0) {
+    if ((result as mysql.ResultSetHeader).affectedRows === 0) {
       return NextResponse.json(
         { error: "Expense record not found" },
         { status: 404 },
