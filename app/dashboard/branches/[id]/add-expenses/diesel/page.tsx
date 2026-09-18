@@ -1,7 +1,7 @@
 "use client";
-import {FormEvent,ReactNode,useEffect,useMemo,useState} from "react";
-import { useParams } from "next/navigation";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { AlertCircle,CalendarDays,CreditCard,Droplets,Fuel,Plus,RefreshCw,Trash2,Truck,Wallet} from "lucide-react";
+import { useParams } from "next/navigation";
 
 type DieselExpense = {
   id: number;
@@ -12,15 +12,6 @@ type DieselExpense = {
   amount: number | string;
   payable: number | string;
   paid: number | string;
-};
-
-type DieselSummary = {
-  dieselUsed: number | string;
-  amountUsed: number | string;
-  totalDiesel: number | string;
-  totalAmount: number | string;
-  remainingDiesel: number | string;
-  remainingBalance: number | string;
 };
 
 type CardColor = "cyan" | "blue" | "orange" | "green" | "red";
@@ -42,8 +33,8 @@ const inputClass =
 const numberValue = (value: number | string | undefined) =>
   Number(value || 0);
 
-const formatNumber = (value: number | string | undefined) =>
-  numberValue(value).toLocaleString("en-LK", {
+const formatNumber = (value: number | string) =>
+  Number(value || 0).toLocaleString("en-LK", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
@@ -56,15 +47,6 @@ export default function DieselExpensesPage() {
     : String(params?.id || "");
 
   const [expenses, setExpenses] = useState<DieselExpense[]>([]);
-  const [summary, setSummary] = useState<DieselSummary>({
-    dieselUsed: 0,
-    amountUsed: 0,
-    totalDiesel: 0,
-    totalAmount: 0,
-    remainingDiesel: 0,
-    remainingBalance: 0,
-  });
-
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -86,10 +68,7 @@ export default function DieselExpensesPage() {
 
       const response = await fetch(
         `/api/expences/diesel?branch_id=${encodeURIComponent(branchId)}`,
-        {
-          method: "GET",
-          cache: "no-store",
-        },
+        { method: "GET", cache: "no-store" },
       );
 
       const data = await response.json();
@@ -103,15 +82,6 @@ export default function DieselExpensesPage() {
       setExpenses(
         Array.isArray(data.expenses) ? data.expenses : [],
       );
-
-      setSummary({
-        dieselUsed: data.summary?.dieselUsed || 0,
-        amountUsed: data.summary?.amountUsed || 0,
-        totalDiesel: data.summary?.totalDiesel || 0,
-        totalAmount: data.summary?.totalAmount || 0,
-        remainingDiesel: data.summary?.remainingDiesel || 0,
-        remainingBalance: data.summary?.remainingBalance || 0,
-      });
     } catch (error) {
       console.error("LOAD DIESEL EXPENSE ERROR:", error);
       alert(
@@ -125,9 +95,7 @@ export default function DieselExpensesPage() {
   };
 
   useEffect(() => {
-    if (branchId) {
-      loadExpenses();
-    }
+    if (branchId) loadExpenses();
   }, [branchId]);
 
   const resetForm = () => {
@@ -141,31 +109,65 @@ export default function DieselExpensesPage() {
 
   const formPayable = numberValue(payable);
   const formPaid = numberValue(paid);
+  const formAmount = formPayable;
   const formBalance = Math.max(0, formPayable - formPaid);
 
-  const filteredExpenses = useMemo(() => {
+  const filteredExpenses = useMemo(
+    () =>
+      expenses.filter((item) => {
+        const itemDate = item.date?.slice(0, 10);
+
+        return (
+          (!filterDate || itemDate === filterDate) &&
+          (!filterMachine || item.machine === filterMachine)
+        );
+      }),
+    [expenses, filterDate, filterMachine],
+  );
+
+  const previousExpenses = useMemo(() => {
+    if (!filterDate) return [];
+
     return expenses.filter((item) => {
       const itemDate = item.date?.slice(0, 10);
 
       return (
-        (!filterDate || itemDate === filterDate) &&
+        itemDate < filterDate &&
         (!filterMachine || item.machine === filterMachine)
       );
     });
   }, [expenses, filterDate, filterMachine]);
 
-  const filteredTotals = useMemo(() => {
-    return filteredExpenses.reduce(
-      (total, item) => {
-        total.diesel += numberValue(item.diesel);
-        total.amount += numberValue(item.payable);
-        total.paid += numberValue(item.paid);
+  const totals = useMemo(
+    () =>
+      filteredExpenses.reduce(
+        (total, item) => {
+          total.diesel += numberValue(item.diesel);
+          total.amount += numberValue(item.payable);
+          total.paid += numberValue(item.paid);
+          return total;
+        },
+        { diesel: 0, amount: 0, paid: 0 },
+      ),
+    [filteredExpenses],
+  );
 
-        return total;
-      },
-      { diesel: 0, amount: 0, paid: 0 },
-    );
-  }, [filteredExpenses]);
+  const previousDiesel = previousExpenses.reduce(
+    (total, item) => total + numberValue(item.diesel),
+    0,
+  );
+
+  const remainingDiesel = Math.max(
+    0,
+    previousDiesel - totals.diesel,
+  );
+
+  const remainingBalance = Math.max(
+    0,
+    totals.amount - totals.paid,
+  );
+
+  const totalDiesel = previousDiesel + totals.diesel;
 
   const handleSubmit = async (
     event: FormEvent<HTMLFormElement>,
@@ -229,9 +231,7 @@ export default function DieselExpensesPage() {
 
       const response = await fetch("/api/expences/diesel", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           branch_id: branchId,
           date,
@@ -254,7 +254,6 @@ export default function DieselExpensesPage() {
       await loadExpenses();
     } catch (error) {
       console.error("SAVE DIESEL EXPENSE ERROR:", error);
-
       alert(
         error instanceof Error
           ? error.message
@@ -277,9 +276,7 @@ export default function DieselExpensesPage() {
     try {
       const response = await fetch(
         `/api/expences/diesel?id=${encodeURIComponent(String(id))}`,
-        {
-          method: "DELETE",
-        },
+        { method: "DELETE" },
       );
 
       const data = await response.json();
@@ -290,10 +287,11 @@ export default function DieselExpensesPage() {
         );
       }
 
-      await loadExpenses();
+      setExpenses((items) =>
+        items.filter((item) => item.id !== id),
+      );
     } catch (error) {
       console.error("DELETE DIESEL EXPENSE ERROR:", error);
-
       alert(
         error instanceof Error
           ? error.message
@@ -414,48 +412,40 @@ export default function DieselExpensesPage() {
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <SummaryCard
             title="Diesel Used"
-            subtitle={
-              filterDate || filterMachine
-                ? "Filtered usage"
-                : "Total used diesel"
-            }
-            value={
-              filterDate || filterMachine
-                ? `${formatNumber(filteredTotals.diesel)} L`
-                : `${formatNumber(summary.dieselUsed)} L`
-            }
+            subtitle="Current filtered usage"
+            value={`${formatNumber(totals.diesel)} L`}
             icon={<Droplets size={22} />}
             color="cyan"
           />
 
           <SummaryCard
             title="Total Amount"
-            subtitle="Initial total amount"
-            value={`Rs. ${formatNumber(summary.totalAmount)}`}
+            subtitle="Total payable amount"
+            value={`Rs. ${formatNumber(totals.amount)}`}
             icon={<Wallet size={22} />}
             color="blue"
           />
 
           <SummaryCard
             title="Remaining Diesel"
-            subtitle="Total diesel − used"
-            value={`${formatNumber(summary.remainingDiesel)} L`}
+            subtitle="Previous balance"
+            value={`${formatNumber(remainingDiesel)} L`}
             icon={<Droplets size={22} />}
             color="orange"
           />
 
           <SummaryCard
             title="Remaining Balance"
-            subtitle="Total amount − used amount"
-            value={`Rs. ${formatNumber(summary.remainingBalance)}`}
+            subtitle="Payable − paid"
+            value={`Rs. ${formatNumber(remainingBalance)}`}
             icon={<CreditCard size={22} />}
             color="green"
           />
 
           <SummaryCard
             title="Total Diesel"
-            subtitle="Initial diesel quantity"
-            value={`${formatNumber(summary.totalDiesel)} L`}
+            subtitle="Previous + current"
+            value={`${formatNumber(totalDiesel)} L`}
             icon={<AlertCircle size={22} />}
             color="red"
           />
@@ -546,10 +536,7 @@ export default function DieselExpensesPage() {
             <div className="grid gap-6 md:grid-cols-3">
               <Field label="Diesel Quantity (L)">
                 <div className="relative">
-                  <Droplets
-                    size={17}
-                    className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-cyan-400"
-                  />
+                  <Droplets size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-cyan-400" />
 
                   <input
                     type="number"
@@ -597,7 +584,7 @@ export default function DieselExpensesPage() {
             <div className="grid gap-5 border-t border-slate-700/80 pt-6 md:grid-cols-2">
               <CalculationCard
                 title="Amount"
-                value={`Rs. ${formatNumber(formPayable)}`}
+                value={`Rs. ${formatNumber(formAmount)}`}
                 description="Total payable amount"
                 icon={<Wallet size={19} />}
                 color="blue"
@@ -693,7 +680,10 @@ export default function DieselExpensesPage() {
                       colSpan={8}
                       className="px-5 py-14 text-center"
                     >
-                      <Fuel size={30} className="mx-auto mb-3 text-slate-600" />
+                      <Fuel
+                        size={30}
+                        className="mx-auto mb-3 text-slate-600"
+                      />
 
                       <p className="font-semibold text-slate-300">
                         No diesel expenses found
@@ -706,9 +696,12 @@ export default function DieselExpensesPage() {
                   </tr>
                 ) : (
                   filteredExpenses.map((item) => {
-                    const itemAmount = numberValue(item.amount);
-                    const itemPayable = numberValue(item.payable);
+                    const itemPayable = numberValue(
+                      item.payable,
+                    );
+
                     const itemPaid = numberValue(item.paid);
+                    const itemAmount = itemPayable;
                     const itemBalance = Math.max(
                       0,
                       itemPayable - itemPaid,
@@ -780,10 +773,7 @@ export default function DieselExpensesPage() {
 
         <div className="rounded-2xl border border-blue-500/20 bg-blue-500/10 p-5">
           <div className="flex gap-3">
-            <AlertCircle
-              size={19}
-              className="mt-0.5 shrink-0 text-blue-400"
-            />
+            <AlertCircle size={19} className="mt-0.5 shrink-0 text-blue-400" />
 
             <div>
               <h3 className="font-bold text-blue-300">
@@ -791,9 +781,10 @@ export default function DieselExpensesPage() {
               </h3>
 
               <p className="mt-1 text-sm leading-6 text-blue-300/80">
-                Amount = Payable amount. Remaining Balance =
-                Total Amount − Amount Used. Remaining Diesel =
-                Total Diesel − Diesel Used.
+                Amount = Payable amount. Paid is the amount
+                already paid. Remaining Balance = Payable − Paid.
+                Remaining Diesel is calculated using previous diesel
+                quantity.
               </p>
             </div>
           </div>
@@ -813,7 +804,7 @@ function SummaryCard({
   title: string;
   subtitle: string;
   value: string;
-  icon: ReactNode;
+  icon: React.ReactNode;
   color: CardColor;
 }) {
   const styles: Record<
@@ -890,7 +881,7 @@ function CalculationCard({
   title: string;
   value: string;
   description: string;
-  icon: ReactNode;
+  icon: React.ReactNode;
   color: "blue" | "red";
 }) {
   const styles = {
@@ -938,7 +929,7 @@ function Field({
   children,
 }: {
   label: string;
-  children: ReactNode;
+  children: React.ReactNode;
 }) {
   return (
     <label className="block">
@@ -955,7 +946,7 @@ function TableHeader({
   children,
   align = "left",
 }: {
-  children: ReactNode;
+  children: React.ReactNode;
   align?: "left" | "right" | "center";
 }) {
   const alignment = {
