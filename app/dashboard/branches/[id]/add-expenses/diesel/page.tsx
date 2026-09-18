@@ -14,6 +14,8 @@ type DieselExpense = {
   paid: number | string;
 };
 
+type CardColor = "cyan" | "blue" | "orange" | "green" | "red";
+
 const machines = [
   "Komatsu",
   "CAT",
@@ -21,9 +23,12 @@ const machines = [
   "Excavator",
   "Backhoe Loader",
   "Wheel Loader",
-  "Other Machine",
   "Landy",
+  "Other Machine",
 ];
+
+const inputClass =
+  "h-12 w-full rounded-xl border border-slate-600/80 bg-slate-800/80 px-4 text-sm text-white outline-none transition placeholder:text-slate-500 hover:border-slate-500 focus:border-cyan-400 focus:ring-4 focus:ring-cyan-500/10";
 
 const numberValue = (value: number | string | undefined) =>
   Number(value || 0);
@@ -63,18 +68,26 @@ export default function DieselExpensesPage() {
 
       const response = await fetch(
         `/api/expences/diesel?branch_id=${encodeURIComponent(branchId)}`,
-        { cache: "no-store" },
+        {
+          method: "GET",
+          cache: "no-store",
+        },
       );
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data?.error || "Failed to load diesel expenses");
+        throw new Error(
+          data?.error || "Failed to load diesel expenses",
+        );
       }
 
-      setExpenses(Array.isArray(data.expenses) ? data.expenses : []);
+      setExpenses(
+        Array.isArray(data.expenses) ? data.expenses : [],
+      );
     } catch (error) {
       console.error("LOAD DIESEL EXPENSE ERROR:", error);
+
       alert(
         error instanceof Error
           ? error.message
@@ -86,7 +99,9 @@ export default function DieselExpensesPage() {
   };
 
   useEffect(() => {
-    loadExpenses();
+    if (branchId) {
+      loadExpenses();
+    }
   }, [branchId]);
 
   const resetForm = () => {
@@ -101,15 +116,21 @@ export default function DieselExpensesPage() {
   const formPayable = numberValue(payable);
   const formPaid = numberValue(paid);
   const formAmount = formPayable + formPaid;
-  const formBalance = Math.max(0, formPayable - formPaid);
+  const formBalance = Math.max(
+    0,
+    formPayable - formPaid,
+  );
 
   const filteredExpenses = useMemo(() => {
     return expenses.filter((item) => {
+      const itemDate = item.date?.slice(0, 10);
+
       const dateMatches =
-        !filterDate || item.date.slice(0, 10) === filterDate;
+        !filterDate || itemDate === filterDate;
 
       const machineMatches =
-        !filterMachine || item.machine === filterMachine;
+        !filterMachine ||
+        item.machine === filterMachine;
 
       return dateMatches && machineMatches;
     });
@@ -119,9 +140,13 @@ export default function DieselExpensesPage() {
     if (!filterDate) return [];
 
     return expenses.filter((item) => {
-      const dateMatches = item.date.slice(0, 10) < filterDate;
+      const itemDate = item.date?.slice(0, 10);
+
+      const dateMatches = itemDate < filterDate;
+
       const machineMatches =
-        !filterMachine || item.machine === filterMachine;
+        !filterMachine ||
+        item.machine === filterMachine;
 
       return dateMatches && machineMatches;
     });
@@ -133,14 +158,20 @@ export default function DieselExpensesPage() {
         total.diesel += numberValue(item.diesel);
         total.amount += numberValue(item.amount);
         total.paid += numberValue(item.paid);
+
         return total;
       },
-      { diesel: 0, amount: 0, paid: 0 },
+      {
+        diesel: 0,
+        amount: 0,
+        paid: 0,
+      },
     );
   }, [filteredExpenses]);
 
   const previousDiesel = previousExpenses.reduce(
-    (total, item) => total + numberValue(item.diesel),
+    (total, item) =>
+      total + numberValue(item.diesel),
     0,
   );
 
@@ -154,13 +185,21 @@ export default function DieselExpensesPage() {
     totals.amount - totals.paid,
   );
 
-  const totalDiesel = previousDiesel + totals.diesel;
+  const totalDiesel =
+    previousDiesel + totals.diesel;
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (
+    event: FormEvent<HTMLFormElement>,
+  ) => {
     event.preventDefault();
 
-    if (!branchId || !selectedMachine || !date) {
-      alert("Branch, machine and date are required.");
+    if (!branchId) {
+      alert("Branch ID is missing.");
+      return;
+    }
+
+    if (!selectedMachine) {
+      alert("Please select a machine.");
       return;
     }
 
@@ -172,27 +211,43 @@ export default function DieselExpensesPage() {
       return;
     }
 
+    if (!date) {
+      alert("Please select a date.");
+      return;
+    }
+
     const dieselValue = Number(diesel);
     const payableValue = Number(payable);
     const paidValue = Number(paid);
 
-    if (!Number.isFinite(dieselValue) || dieselValue <= 0) {
+    if (
+      !Number.isFinite(dieselValue) ||
+      dieselValue <= 0
+    ) {
       alert("Please enter a valid diesel quantity.");
       return;
     }
 
-    if (!Number.isFinite(payableValue) || payableValue < 0) {
+    if (
+      !Number.isFinite(payableValue) ||
+      payableValue < 0
+    ) {
       alert("Please enter a valid payable amount.");
       return;
     }
 
-    if (!Number.isFinite(paidValue) || paidValue < 0) {
+    if (
+      !Number.isFinite(paidValue) ||
+      paidValue < 0
+    ) {
       alert("Please enter a valid paid amount.");
       return;
     }
 
     if (paidValue > payableValue) {
-      alert("Paid amount cannot be greater than payable amount.");
+      alert(
+        "Paid amount cannot be greater than payable amount.",
+      );
       return;
     }
 
@@ -204,29 +259,41 @@ export default function DieselExpensesPage() {
     try {
       setSaving(true);
 
-      const response = await fetch("/api/expences/diesel", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          branch_id: branchId,
-          date,
-          machine: machineName,
-          diesel: dieselValue,
-          payable: payableValue,
-          paid: paidValue,
-        }),
-      });
+      const response = await fetch(
+        "/api/expences/diesel",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            branch_id: branchId,
+            date,
+            machine: machineName,
+            diesel: dieselValue,
+            payable: payableValue,
+            paid: paidValue,
+          }),
+        },
+      );
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data?.error || "Failed to save diesel expense");
+        throw new Error(
+          data?.error ||
+            "Failed to save diesel expense",
+        );
       }
 
       resetForm();
       await loadExpenses();
     } catch (error) {
-      console.error("SAVE DIESEL EXPENSE ERROR:", error);
+      console.error(
+        "SAVE DIESEL EXPENSE ERROR:",
+        error,
+      );
+
       alert(
         error instanceof Error
           ? error.message
@@ -238,23 +305,39 @@ export default function DieselExpensesPage() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!window.confirm("Delete this diesel expense?")) return;
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this diesel expense?",
+    );
+
+    if (!confirmed) return;
 
     try {
       const response = await fetch(
-        `/api/expences/diesel?id=${encodeURIComponent(String(id))}`,
-        { method: "DELETE" },
+        `/api/expences/diesel?id=${encodeURIComponent(
+          String(id),
+        )}`,
+        {
+          method: "DELETE",
+        },
       );
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data?.error || "Failed to delete expense");
+        throw new Error(
+          data?.error || "Failed to delete expense",
+        );
       }
 
-      setExpenses((items) => items.filter((item) => item.id !== id));
+      setExpenses((items) =>
+        items.filter((item) => item.id !== id),
+      );
     } catch (error) {
-      console.error("DELETE DIESEL EXPENSE ERROR:", error);
+      console.error(
+        "DELETE DIESEL EXPENSE ERROR:",
+        error,
+      );
+
       alert(
         error instanceof Error
           ? error.message
@@ -263,18 +346,31 @@ export default function DieselExpensesPage() {
     }
   };
 
+  const machineOptions = Array.from(
+    new Set(expenses.map((item) => item.machine)),
+  );
+
   return (
     <main className="min-h-screen bg-slate-950 p-4 text-white md:p-6">
-      <div className="mx-auto max-w-7xl space-y-5">
-        <header className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-700 bg-slate-900 p-5 md:flex-row md:items-center">
+      <div className="mx-auto max-w-7xl space-y-6">
+        {/* PAGE HEADER */}
+        <header className="flex flex-col justify-between gap-5 rounded-3xl border border-slate-700/80 bg-slate-900 p-5 shadow-2xl shadow-black/20 md:flex-row md:items-center md:p-6">
           <div className="flex items-center gap-4">
-            <div className="rounded-2xl bg-cyan-500/15 p-4 text-cyan-400">
-              <Fuel size={30} />
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400 ring-1 ring-cyan-400/20">
+              <Fuel size={29} />
             </div>
+
             <div>
-              <h1 className="text-2xl font-bold">Diesel Expenses</h1>
-              <p className="text-sm text-slate-400">
-                Manage machine-wise diesel expenses and payments
+              <p className="mb-1 text-xs font-bold uppercase tracking-widest text-cyan-400">
+                Expense Management
+              </p>
+
+              <h1 className="text-2xl font-bold tracking-tight text-white md:text-3xl">
+                Diesel Expenses
+              </h1>
+
+              <p className="mt-1 text-sm text-slate-400">
+                Manage machine-wise diesel usage and payments
               </p>
             </div>
           </div>
@@ -283,322 +379,531 @@ export default function DieselExpensesPage() {
             type="button"
             onClick={loadExpenses}
             disabled={loading}
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-600 bg-slate-800 px-5 py-3 font-semibold hover:bg-slate-700 disabled:opacity-60"
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-600 bg-slate-800 px-5 text-sm font-bold text-white transition hover:border-cyan-500/50 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
+            <RefreshCw
+              size={17}
+              className={
+                loading ? "animate-spin" : ""
+              }
+            />
             {loading ? "Refreshing..." : "Refresh"}
           </button>
         </header>
 
-        <section className="flex flex-wrap items-end gap-3 rounded-2xl border border-slate-700 bg-slate-900 p-4">
-          <div>
-            <label className="mb-1 block text-xs text-slate-400">
-              Filter Date
-            </label>
-            <input
-              type="date"
-              value={filterDate}
-              onChange={(event) => setFilterDate(event.target.value)}
-              className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-white"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs text-slate-400">
-              Filter Machine
-            </label>
-            <select
-              value={filterMachine}
-              onChange={(event) => setFilterMachine(event.target.value)}
-              className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-white"
-            >
-              <option value="">All Machines</option>
-              {Array.from(new Set(expenses.map((item) => item.machine))).map(
-                (machine) => (
-                  <option key={machine} value={machine}>
-                    {machine}
-                  </option>
-                ),
-              )}
-            </select>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => {
-              setFilterDate("");
-              setFilterMachine("");
-            }}
-            className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 hover:bg-slate-700"
-          >
-            Clear Filters
-          </button>
-        </section>
-
-        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <SummaryCard
-            title="Diesel Used"
-            value={`${formatNumber(totals.diesel)} L`}
-            icon={<Droplets size={24} />}
-            color="cyan"
-          />
-          <SummaryCard
-            title="Total Amount"
-            value={`Rs. ${formatNumber(totals.amount)}`}
-            icon={<Wallet size={24} />}
-            color="blue"
-          />
-          <SummaryCard
-            title="Remaining Diesel"
-            value={`${formatNumber(remainingDiesel)} L`}
-            icon={<Droplets size={24} />}
-            color="orange"
-          />
-          <SummaryCard
-            title="Remaining Balance"
-            value={`Rs. ${formatNumber(remainingBalance)}`}
-            icon={<CreditCard size={24} />}
-            color="green"
-          />
-          <SummaryCard
-            title="Total Diesel"
-            value={`${formatNumber(totalDiesel)} L`}
-            icon={<AlertCircle size={24} />}
-            color="red"
-          />
-        </section>
-
-        <section className="rounded-2xl border border-slate-700 bg-slate-900 p-5">
-          <div className="mb-5 flex items-center gap-3">
-            <div className="rounded-xl bg-cyan-500/10 p-3 text-cyan-400">
-              <Plus size={22} />
-            </div>
+        {/* FILTERS */}
+        <section className="rounded-3xl border border-slate-700/80 bg-slate-900 p-5 shadow-xl">
+          <div className="mb-4 flex items-center justify-between">
             <div>
-              <h2 className="text-xl font-bold">Add Diesel Expense</h2>
-              <p className="text-sm text-slate-400">
-                Enter machine, date, quantity and payment details
+              <h2 className="text-sm font-bold uppercase tracking-wide text-white">
+                Filter Records
+              </h2>
+              <p className="mt-1 text-xs text-slate-500">
+                View records by date and machine
               </p>
             </div>
+
+            {(filterDate || filterMachine) && (
+              <span className="rounded-full bg-cyan-500/10 px-3 py-1 text-xs font-semibold text-cyan-400">
+                Filter active
+              </span>
+            )}
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="grid gap-5 md:grid-cols-2">
-              <Field label="Machine">
+          <div className="grid gap-4 md:grid-cols-[1fr_1fr_auto]">
+            <div>
+              <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-400">
+                Filter Date
+              </label>
+
+              <div className="relative">
+                <CalendarDays size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-cyan-400" />
+
+                <input
+                  type="date"
+                  value={filterDate}
+                  onChange={(event) =>
+                    setFilterDate(event.target.value)
+                  }
+                  className={`${inputClass} pl-11`}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-400">
+                Filter Machine
+              </label>
+
+              <div className="relative">
+                <Truck
+                  size={17}
+                  className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-cyan-400"
+                />
+
                 <select
-                  value={selectedMachine}
-                  onChange={(event) => {
-                    setSelectedMachine(event.target.value);
-                    if (event.target.value !== "Other Machine") {
-                      setOtherMachine("");
-                    }
-                  }}
-                  className="input"
+                  value={filterMachine}
+                  onChange={(event) =>
+                    setFilterMachine(event.target.value)
+                  }
+                  className={`${inputClass} cursor-pointer appearance-none pl-11`}
                 >
-                  <option value="">Select Machine</option>
-                  {machines.map((machine) => (
+                  <option value="">All Machines</option>
+
+                  {machineOptions.map((machine) => (
                     <option key={machine} value={machine}>
                       {machine}
                     </option>
                   ))}
                 </select>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setFilterDate("");
+                setFilterMachine("");
+              }}
+              className="h-12 self-end rounded-xl border border-slate-600 bg-slate-800 px-5 text-sm font-bold text-slate-200 transition hover:border-slate-500 hover:bg-slate-700"
+            >
+              Clear Filters
+            </button>
+          </div>
+        </section>
+
+        {/* SUMMARY CARDS */}
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <SummaryCard
+            title="Diesel Used"
+            subtitle="Current filtered usage"
+            value={`${formatNumber(totals.diesel)} L`}
+            icon={<Droplets size={22} />}
+            color="cyan"
+          />
+
+          <SummaryCard
+            title="Total Amount"
+            subtitle="Payable + paid"
+            value={`Rs. ${formatNumber(totals.amount)}`}
+            icon={<Wallet size={22} />}
+            color="blue"
+          />
+
+          <SummaryCard
+            title="Remaining Diesel"
+            subtitle="Previous balance"
+            value={`${formatNumber(remainingDiesel)} L`}
+            icon={<Droplets size={22} />}
+            color="orange"
+          />
+
+          <SummaryCard
+            title="Remaining Balance"
+            subtitle="Payable − paid"
+            value={`Rs. ${formatNumber(remainingBalance)}`}
+            icon={<CreditCard size={22} />}
+            color="green"
+          />
+
+          <SummaryCard
+            title="Total Diesel"
+            subtitle="Previous + current"
+            value={`${formatNumber(totalDiesel)} L`}
+            icon={<AlertCircle size={22} />}
+            color="red"
+          />
+        </section>
+
+        {/* ADD FORM */}
+        <section className="overflow-hidden rounded-3xl border border-slate-700/80 bg-slate-900 shadow-2xl shadow-black/20">
+          <div className="border-b border-slate-700/80 bg-slate-800/30 px-6 py-5">
+            <div className="flex items-center gap-4">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-400 ring-1 ring-cyan-500/20">
+                <Plus size={22} />
+              </div>
+
+              <div>
+                <h2 className="text-xl font-bold text-white">
+                  Add Diesel Expense
+                </h2>
+
+                <p className="mt-1 text-sm text-slate-400">
+                  Enter machine usage and payment information
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <form
+            onSubmit={handleSubmit}
+            className="space-y-7 p-6"
+          >
+            <div className="grid gap-6 md:grid-cols-2">
+              <Field label="Machine">
+                <div className="relative">
+                  <Truck
+                    size={17}
+                    className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-cyan-400"
+                  />
+
+                  <select
+                    value={selectedMachine}
+                    onChange={(event) => {
+                      setSelectedMachine(
+                        event.target.value,
+                      );
+
+                      if (
+                        event.target.value !==
+                        "Other Machine"
+                      ) {
+                        setOtherMachine("");
+                      }
+                    }}
+                    className={`${inputClass} cursor-pointer appearance-none pl-11`}
+                  >
+                    <option value="">
+                      Select Machine
+                    </option>
+
+                    {machines.map((machine) => (
+                      <option
+                        key={machine}
+                        value={machine}
+                      >
+                        {machine}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </Field>
 
               <Field label="Date">
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(event) => setDate(event.target.value)}
-                  className="input"
-                />
+                <div className="relative">
+                  <CalendarDays size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-cyan-400" />
+
+                  <input
+                    type="date"
+                    value={date}
+                    onChange={(event) =>
+                      setDate(event.target.value)
+                    }
+                    className={`${inputClass} pl-11`}
+                  />
+                </div>
               </Field>
             </div>
 
             {selectedMachine === "Other Machine" && (
               <Field label="Machine Name">
                 <input
+                  type="text"
                   value={otherMachine}
-                  onChange={(event) => setOtherMachine(event.target.value)}
+                  onChange={(event) =>
+                    setOtherMachine(event.target.value)
+                  }
                   placeholder="Enter machine name"
-                  className="input"
+                  className={inputClass}
                 />
               </Field>
             )}
 
-            <div className="grid gap-5 md:grid-cols-3">
+            <div className="grid gap-6 md:grid-cols-3">
               <Field label="Diesel Quantity (L)">
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={diesel}
-                  onChange={(event) => setDiesel(event.target.value)}
-                  className="input"
-                  placeholder="0.00"
-                />
+                <div className="relative">
+                  <Droplets size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-cyan-400" />
+
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={diesel}
+                    onChange={(event) =>
+                      setDiesel(event.target.value)
+                    }
+                    placeholder="0.00"
+                    className={`${inputClass} pl-11`}
+                  />
+                </div>
               </Field>
 
-              <Field label="Payable (Rs.)">
+              <Field label="Payable Amount (Rs.)">
                 <input
                   type="number"
                   min="0"
                   step="0.01"
                   value={payable}
-                  onChange={(event) => setPayable(event.target.value)}
-                  className="input"
+                  onChange={(event) =>
+                    setPayable(event.target.value)
+                  }
                   placeholder="0.00"
+                  className={inputClass}
                 />
               </Field>
 
-              <Field label="Paid (Rs.)">
+              <Field label="Paid Amount (Rs.)">
                 <input
                   type="number"
                   min="0"
                   step="0.01"
                   value={paid}
-                  onChange={(event) => setPaid(event.target.value)}
-                  className="input"
+                  onChange={(event) =>
+                    setPaid(event.target.value)
+                  }
                   placeholder="0.00"
+                  className={inputClass}
                 />
               </Field>
             </div>
 
-            <div className="grid gap-5 md:grid-cols-2">
-              <Field label="Amount (Payable + Paid)">
-                <input
-                  readOnly
-                  value={`Rs. ${formatNumber(formAmount)}`}
-                  className="input cursor-not-allowed text-blue-400"
-                />
-              </Field>
+            <div className="grid gap-5 border-t border-slate-700/80 pt-6 md:grid-cols-2">
+              <div className="rounded-2xl border border-blue-500/20 bg-blue-500/10 p-5">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold text-slate-300">
+                    Total Amount
+                  </span>
 
-              <Field label="Balance (Payable - Paid)">
-                <input
-                  readOnly
-                  value={`Rs. ${formatNumber(formBalance)}`}
-                  className="input cursor-not-allowed text-red-400"
-                />
-              </Field>
+                  <Wallet size={19} className="text-blue-400" />
+                </div>
+
+                <p className="mt-3 text-2xl font-bold text-blue-400">
+                  Rs. {formatNumber(formAmount)}
+                </p>
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Payable + Paid
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-5">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold text-slate-300">
+                    Remaining Balance
+                  </span>
+
+                  <CreditCard size={19} className="text-red-400" />
+                </div>
+
+                <p className="mt-3 text-2xl font-bold text-red-400">
+                  Rs. {formatNumber(formBalance)}
+                </p>
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Payable − Paid
+                </p>
+              </div>
             </div>
 
-            <div className="flex justify-end">
+            <div className="flex justify-end border-t border-slate-700/80 pt-6">
               <button
                 type="submit"
                 disabled={saving}
-                className="inline-flex items-center gap-2 rounded-xl bg-cyan-600 px-7 py-3 font-semibold hover:bg-cyan-500 disabled:opacity-60"
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-cyan-600 px-7 text-sm font-bold text-white shadow-lg shadow-cyan-950/30 transition hover:bg-cyan-500 focus:outline-none focus:ring-4 focus:ring-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {saving ? (
-                  <RefreshCw size={18} className="animate-spin" />
+                  <RefreshCw
+                    size={18}
+                    className="animate-spin"
+                  />
                 ) : (
                   <Plus size={18} />
                 )}
-                {saving ? "Saving..." : "Save Diesel Expense"}
+
+                {saving
+                  ? "Saving..."
+                  : "Save Diesel Expense"}
               </button>
             </div>
           </form>
         </section>
 
-        <section className="overflow-hidden rounded-2xl border border-slate-700 bg-slate-900">
-          <div className="flex items-center justify-between border-b border-slate-700 p-5">
+        {/* RECORDS TABLE */}
+        <section className="overflow-hidden rounded-3xl border border-slate-700/80 bg-slate-900 shadow-2xl shadow-black/20">
+          <div className="flex flex-col justify-between gap-4 border-b border-slate-700/80 p-5 md:flex-row md:items-center md:p-6">
             <div>
-              <h2 className="text-xl font-bold">Diesel Expense Records</h2>
-              <p className="text-sm text-slate-400">
-                Filtered diesel expense records
+              <h2 className="text-xl font-bold text-white">
+                Diesel Expense Records
+              </h2>
+
+              <p className="mt-1 text-sm text-slate-400">
+                Filtered machine-wise expense records
               </p>
             </div>
-            <span className="rounded-lg bg-slate-800 px-4 py-2 text-sm">
+
+            <div className="rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-bold text-slate-300">
               {filteredExpenses.length} Records
-            </span>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1050px]">
-              <thead className="bg-slate-800 text-left text-xs uppercase text-slate-400">
-                <tr>
-                  <th className="px-5 py-4">Date</th>
-                  <th className="px-5 py-4">Machine</th>
-                  <th className="px-5 py-4 text-right">Diesel (L)</th>
-                  <th className="px-5 py-4 text-right">Amount</th>
-                  <th className="px-5 py-4 text-right">Payable</th>
-                  <th className="px-5 py-4 text-right">Paid</th>
-                  <th className="px-5 py-4 text-right">Balance</th>
-                  <th className="px-5 py-4 text-center">Action</th>
+              <thead className="bg-slate-800/80">
+                <tr className="border-b border-slate-700 text-left">
+                  <TableHeader>Date</TableHeader>
+                  <TableHeader>Machine</TableHeader>
+                  <TableHeader align="right">
+                    Diesel (L)
+                  </TableHeader>
+                  <TableHeader align="right">
+                    Amount
+                  </TableHeader>
+                  <TableHeader align="right">
+                    Payable
+                  </TableHeader>
+                  <TableHeader align="right">
+                    Paid
+                  </TableHeader>
+                  <TableHeader align="right">
+                    Balance
+                  </TableHeader>
+                  <TableHeader align="center">
+                    Action
+                  </TableHeader>
                 </tr>
               </thead>
 
               <tbody>
-                {filteredExpenses.map((item) => {
-                  const itemPayable = numberValue(item.payable);
-                  const itemPaid = numberValue(item.paid);
-                  const itemAmount = itemPayable + itemPaid;
-                  const itemBalance = Math.max(
-                    0,
-                    itemPayable - itemPaid,
-                  );
-
-                  return (
-                    <tr
-                      key={item.id}
-                      className="border-b border-slate-800 hover:bg-slate-800/60"
-                    >
-                      <td className="px-5 py-4 text-sm">
-                        {item.date
-                          ? new Date(
-                              `${item.date.slice(0, 10)}T00:00:00`,
-                            ).toLocaleDateString("en-GB")
-                          : "-"}
-                      </td>
-                      <td className="px-5 py-4">
-                        <span className="flex items-center gap-2 font-semibold">
-                          <Truck size={16} className="text-cyan-400" />
-                          {item.machine}
-                        </span>
-                      </td>
-                      <td className="px-5 py-4 text-right">
-                        {formatNumber(item.diesel)}
-                      </td>
-                      <td className="px-5 py-4 text-right text-blue-400">
-                        Rs. {formatNumber(itemAmount)}
-                      </td>
-                      <td className="px-5 py-4 text-right text-orange-400">
-                        Rs. {formatNumber(itemPayable)}
-                      </td>
-                      <td className="px-5 py-4 text-right text-green-400">
-                        Rs. {formatNumber(itemPaid)}
-                      </td>
-                      <td className="px-5 py-4 text-right text-red-400">
-                        Rs. {formatNumber(itemBalance)}
-                      </td>
-                      <td className="px-5 py-4 text-center">
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(item.id)}
-                          className="rounded-lg bg-red-500/10 p-2 text-red-400 hover:bg-red-500/20"
-                        >
-                          <Trash2 size={17} />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-
-                {!loading && filteredExpenses.length === 0 && (
+                {loading ? (
                   <tr>
                     <td
                       colSpan={8}
-                      className="px-5 py-12 text-center text-slate-500"
+                      className="px-5 py-14 text-center text-sm text-slate-400"
                     >
-                      No diesel expenses found.
+                      <div className="flex items-center justify-center gap-3">
+                        <RefreshCw size={18} className="animate-spin text-cyan-400" />
+                        Loading diesel expenses...
+                      </div>
                     </td>
                   </tr>
+                ) : filteredExpenses.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={8}
+                      className="px-5 py-14 text-center"
+                    >
+                      <div className="mx-auto max-w-sm">
+                        <Fuel size={30} className="mx-auto mb-3 text-slate-600" />
+
+                        <p className="font-semibold text-slate-300">
+                          No diesel expenses found
+                        </p>
+
+                        <p className="mt-1 text-sm text-slate-500">
+                          Add a new expense or change the filters.
+                        </p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredExpenses.map((item) => {
+                    const itemPayable = numberValue(
+                      item.payable,
+                    );
+
+                    const itemPaid = numberValue(
+                      item.paid,
+                    );
+
+                    const itemAmount =
+                      itemPayable + itemPaid;
+
+                    const itemBalance = Math.max(
+                      0,
+                      itemPayable - itemPaid,
+                    );
+
+                    return (
+                      <tr
+                        key={item.id}
+                        className="border-b border-slate-800 transition hover:bg-slate-800/50"
+                      >
+                        <td className="px-5 py-4 text-sm text-slate-300">
+                          {item.date
+                            ? new Date(
+                                `${item.date.slice(
+                                  0,
+                                  10,
+                                )}T00:00:00`,
+                              ).toLocaleDateString(
+                                "en-GB",
+                              )
+                            : "-"}
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-3">
+                            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-400">
+                              <Truck size={15} />
+                            </span>
+
+                            <span className="font-semibold text-slate-200">
+                              {item.machine}
+                            </span>
+                          </div>
+                        </td>
+
+                        <td className="px-5 py-4 text-right text-sm font-semibold text-slate-300">
+                          {formatNumber(item.diesel)}
+                        </td>
+
+                        <td className="px-5 py-4 text-right text-sm font-bold text-blue-400">
+                          Rs. {formatNumber(itemAmount)}
+                        </td>
+
+                        <td className="px-5 py-4 text-right text-sm font-bold text-orange-400">
+                          Rs. {formatNumber(itemPayable)}
+                        </td>
+
+                        <td className="px-5 py-4 text-right text-sm font-bold text-green-400">
+                          Rs. {formatNumber(itemPaid)}
+                        </td>
+
+                        <td className="px-5 py-4 text-right text-sm font-bold text-red-400">
+                          Rs. {formatNumber(itemBalance)}
+                        </td>
+
+                        <td className="px-5 py-4 text-center">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleDelete(item.id)
+                            }
+                            title="Delete expense"
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-500/20 bg-red-500/10 text-red-400 transition hover:bg-red-500/20 hover:text-red-300"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
           </div>
         </section>
 
-        <div className="rounded-2xl border border-blue-500/20 bg-blue-500/10 p-5 text-sm text-blue-300">
-          Amount = Payable + Paid. Remaining Balance = Payable − Paid.
-          Remaining Diesel is calculated using previous diesel quantity.
+        {/* INFORMATION */}
+        <div className="rounded-2xl border border-blue-500/20 bg-blue-500/10 p-5">
+          <div className="flex gap-3">
+            <AlertCircle
+              size={19}
+              className="mt-0.5 shrink-0 text-blue-400"
+            />
+
+            <div>
+              <h3 className="font-bold text-blue-300">
+                Calculation Information
+              </h3>
+
+              <p className="mt-1 text-sm leading-6 text-blue-300/80">
+                Total Amount = Payable + Paid. Remaining
+                Balance = Payable − Paid. Remaining Diesel
+                is calculated using previous diesel quantity.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </main>
@@ -607,33 +912,80 @@ export default function DieselExpensesPage() {
 
 function SummaryCard({
   title,
+  subtitle,
   value,
   icon,
   color,
 }: {
   title: string;
+  subtitle: string;
   value: string;
   icon: React.ReactNode;
-  color: "cyan" | "blue" | "orange" | "green" | "red";
+  color: CardColor;
 }) {
-  const styles = {
-    cyan: "border-cyan-500/20 text-cyan-400",
-    blue: "border-blue-500/20 text-blue-400",
-    orange: "border-orange-500/20 text-orange-400",
-    green: "border-green-500/20 text-green-400",
-    red: "border-red-500/20 text-red-400",
+  const styles: Record<
+    CardColor,
+    {
+      border: string;
+      icon: string;
+      value: string;
+    }
+  > = {
+    cyan: {
+      border: "border-cyan-500/25 hover:border-cyan-400/50",
+      icon: "bg-cyan-500/10 text-cyan-400",
+      value: "text-cyan-300",
+    },
+    blue: {
+      border: "border-blue-500/25 hover:border-blue-400/50",
+      icon: "bg-blue-500/10 text-blue-400",
+      value: "text-blue-300",
+    },
+    orange: {
+      border: "border-orange-500/25 hover:border-orange-400/50",
+      icon: "bg-orange-500/10 text-orange-400",
+      value: "text-orange-300",
+    },
+    green: {
+      border: "border-green-500/25 hover:border-green-400/50",
+      icon: "bg-green-500/10 text-green-400",
+      value: "text-green-300",
+    },
+    red: {
+      border: "border-red-500/25 hover:border-red-400/50",
+      icon: "bg-red-500/10 text-red-400",
+      value: "text-red-300",
+    },
   };
+
+  const selected = styles[color];
 
   return (
     <div
-      className={`rounded-2xl border bg-slate-900 p-5 shadow-lg ${styles[color]}`}
+      className={`rounded-2xl border bg-slate-900 p-5 shadow-xl transition ${selected.border}`}
     >
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-slate-400">{title}</p>
-          <h2 className="mt-2 text-xl font-bold text-white">{value}</h2>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-bold text-slate-300">
+            {title}
+          </p>
+
+          <p className="mt-1 truncate text-xs text-slate-500">
+            {subtitle}
+          </p>
+
+          <h2
+            className={`mt-4 break-words text-xl font-bold ${selected.value}`}
+          >
+            {value}
+          </h2>
         </div>
-        {icon}
+
+        <span
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${selected.icon}`}
+        >
+          {icon}
+        </span>
       </div>
     </div>
   );
@@ -648,10 +1000,33 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-2 block text-sm font-semibold text-slate-300">
+      <span className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-400">
         {label}
       </span>
+
       {children}
     </label>
+  );
+}
+
+function TableHeader({
+  children,
+  align = "left",
+}: {
+  children: React.ReactNode;
+  align?: "left" | "right" | "center";
+}) {
+  const alignment = {
+    left: "text-left",
+    right: "text-right",
+    center: "text-center",
+  };
+
+  return (
+    <th
+      className={`px-5 py-4 text-xs font-bold uppercase tracking-wider text-slate-400 ${alignment[align]}`}
+    >
+      {children}
+    </th>
   );
 }
