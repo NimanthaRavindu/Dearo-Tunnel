@@ -128,7 +128,6 @@ export default function DieselExpensesPage() {
     [expenses, filterDate, filterMachine],
   );
 
-  // ලැයිස්තුවේ දැනට ඇතුළත් කර ඇති සියලුම වියදම් වල එකතුව
   const totalUsedDieselFromList = useMemo(
     () => expenses.reduce((sum, item) => sum + numberValue(item.diesel), 0),
     [expenses]
@@ -139,28 +138,26 @@ export default function DieselExpensesPage() {
     [expenses]
   );
 
-  // 1. Diesel Used කාඩ් එකේ අගය: මුල් අගයෙන් ලැයිස්තුවේ එකතුව අඩු වී, Form එකේ දෙන අගයද තවදුරටත් අඩු වේ.
-  const dieselUsedDisplay = Math.max(0, initialDieselStock - totalUsedDieselFromList);
+  const filteredDieselTotal = useMemo(
+    () => filteredExpenses.reduce((sum, item) => sum + numberValue(item.diesel), 0),
+    [filteredExpenses]
+  );
+
+  const filteredAmountTotal = useMemo(
+    () => filteredExpenses.reduce((sum, item) => sum + numberValue(item.payable), 0),
+    [filteredExpenses]
+  );
+
+  const isFiltered = Boolean(filterDate || filterMachine);
+
+  const activeDieselUsed = isFiltered ? filteredDieselTotal : totalUsedDieselFromList;
+  const activeAmountUsed = isFiltered ? filteredAmountTotal : totalUsedAmountFromList;
+
+  const dieselUsedDisplay = Math.max(0, initialDieselStock - activeDieselUsed);
   const remainingDiesel = Math.max(0, dieselUsedDisplay - numberValue(diesel));
 
-  // 2. Total Amount කාඩ් එකේ අගය: මුල් මුදලින් ලැයිස්තුවේ එකතුව අඩු වී, Form එකේ දෙන Payable අගයද තවදුරටත් අඩු වේ.
-  const totalAmountDisplay = Math.max(0, initialTotalAmount - totalUsedAmountFromList);
+  const totalAmountDisplay = Math.max(0, initialTotalAmount - activeAmountUsed);
   const remainingBalance = Math.max(0, totalAmountDisplay - numberValue(payable));
-
-  // Filter කළ අවස්ථාවල පෙන්වන totals (පහත Table එක සඳහා)
-  const totals = useMemo(
-    () =>
-      filteredExpenses.reduce(
-        (total, item) => {
-          total.diesel += numberValue(item.diesel);
-          total.amount += numberValue(item.payable);
-          total.paid += numberValue(item.paid);
-          return total;
-        },
-        { diesel: 0, amount: 0, paid: 0 },
-      ),
-    [filteredExpenses],
-  );
 
   const handleSubmit = async (
     event: FormEvent<HTMLFormElement>,
@@ -332,11 +329,82 @@ export default function DieselExpensesPage() {
           </button>
         </header>
 
+        {/* Filter Section */}
+        <section className="rounded-3xl border border-slate-700/80 bg-slate-900 p-5 shadow-xl">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-bold uppercase tracking-wide">
+                Filter Records
+              </h2>
+
+              <p className="mt-1 text-xs text-slate-500">
+                View records by date and machine
+              </p>
+            </div>
+
+            {isFiltered && (
+              <span className="rounded-full bg-cyan-500/10 px-3 py-1 text-xs font-semibold text-cyan-400">
+                Filter active
+              </span>
+            )}
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-[1fr_1fr_auto]">
+            <Field label="Filter Date">
+              <div className="relative">
+                <CalendarDays size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-cyan-400" />
+
+                <input
+                  type="date"
+                  value={filterDate}
+                  onChange={(event) =>
+                    setFilterDate(event.target.value)
+                  }
+                  className={`${inputClass} pl-11`}
+                />
+              </div>
+            </Field>
+
+            <Field label="Filter Machine">
+              <div className="relative">
+                <Truck size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-cyan-400" />
+
+                <select
+                  value={filterMachine}
+                  onChange={(event) =>
+                    setFilterMachine(event.target.value)
+                  }
+                  className={`${inputClass} cursor-pointer appearance-none pl-11`}
+                >
+                  <option value="">All Machines</option>
+
+                  {machineOptions.map((machine) => (
+                    <option key={machine} value={machine}>
+                      {machine}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </Field>
+
+            <button
+              type="button"
+              onClick={() => {
+                setFilterDate("");
+                setFilterMachine("");
+              }}
+              className="h-12 self-end rounded-xl border border-slate-600 bg-slate-800 px-5 text-sm font-bold transition hover:bg-slate-700"
+            >
+              Clear Filters
+            </button>
+          </div>
+        </section>
+
         {/* Summary Cards */}
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <SummaryCard
             title="Diesel Used"
-            subtitle="Current available stock"
+            subtitle={isFiltered ? "Filtered usage" : "Current available stock"}
             value={`${formatNumber(dieselUsedDisplay)} L`}
             icon={<Droplets size={22} />}
             color="cyan"
@@ -344,7 +412,7 @@ export default function DieselExpensesPage() {
 
           <SummaryCard
             title="Total Amount"
-            subtitle="Current available balance"
+            subtitle={isFiltered ? "Filtered amount" : "Current available balance"}
             value={`Rs. ${formatNumber(totalAmountDisplay)}`}
             icon={<Wallet size={22} />}
             color="blue"
