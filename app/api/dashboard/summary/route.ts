@@ -146,6 +146,16 @@ export async function GET(req: NextRequest) {
       ORDER BY ce.id ASC
     `);
 
+    // 1. Diesel Expenses දත්ත ලබා ගැනීම සඳහා Query එක එකතු කරන ලදී
+    const [dieselRows] = await db.query<RowDataPacket[]>(`
+      SELECT
+        de.*,
+        b.branch_name
+      FROM diesel_expenses de
+      LEFT JOIN branch b ON de.branch_id = b.id
+      ORDER BY de.id ASC
+    `);
+
     const totalExpenses = branches.reduce(
       (total, branch: any) => total + Number(branch.total_expenses || 0),
       0,
@@ -187,6 +197,16 @@ export async function GET(req: NextRequest) {
         branch_name: row.branch_name || "N/A",
         date: row.date ? String(row.date).split("T")[0] : "",
         amount: Number(row.amount || 0),
+      })),
+
+      // 2. Diesel ඩ්‍රොප්ඩවුන් ලැයිස්තුව සඳහා අවශ්‍ය දත්ත Response එකට එකතු කරන ලදී
+      diesel: dieselRows.map((row: any) => ({
+        id: row.id,
+        machine: row.machine || `Diesel #${row.id}`,
+        branch_name: row.branch_name || "N/A",
+        date: row.date ? String(row.date).split("T")[0] : "",
+        payable: Number(row.payable || row.amount || 0),
+        balance: Math.max(0, Number(row.payable || 0) - Number(row.paid || 0)),
       })),
     });
   } catch (error: any) {
