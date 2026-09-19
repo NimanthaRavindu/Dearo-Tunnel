@@ -1,6 +1,6 @@
 "use client";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { AlertCircle,CalendarDays,CreditCard,Droplets,Fuel,Plus,RefreshCw,Trash2,Truck,Wallet} from "lucide-react";
+import { AlertCircle, CalendarDays, CreditCard, Droplets, Fuel, Plus, RefreshCw, Trash2, Truck, Wallet } from "lucide-react";
 import { useParams } from "next/navigation";
 
 type DieselExpense = {
@@ -49,6 +49,9 @@ export default function DieselExpensesPage() {
   const [expenses, setExpenses] = useState<DieselExpense[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  const [initialDieselStock, setInitialDieselStock] = useState<number>(331.00); // Diesel Used කාඩ් එකේ මුල් අගය
+  const [initialTotalAmount, setInitialTotalAmount] = useState<number>(317000.00); // Total Amount කාඩ් එකේ මුල් අගය
 
   const [selectedMachine, setSelectedMachine] = useState("");
   const [otherMachine, setOtherMachine] = useState("");
@@ -125,19 +128,26 @@ export default function DieselExpensesPage() {
     [expenses, filterDate, filterMachine],
   );
 
-  const previousExpenses = useMemo(() => {
-    if (!filterDate) return [];
+  // ලැයිස්තුවේ දැනට ඇතුළත් කර ඇති සියලුම වියදම් වල එකතුව
+  const totalUsedDieselFromList = useMemo(
+    () => expenses.reduce((sum, item) => sum + numberValue(item.diesel), 0),
+    [expenses]
+  );
 
-    return expenses.filter((item) => {
-      const itemDate = item.date?.slice(0, 10);
+  const totalUsedAmountFromList = useMemo(
+    () => expenses.reduce((sum, item) => sum + numberValue(item.payable), 0),
+    [expenses]
+  );
 
-      return (
-        itemDate < filterDate &&
-        (!filterMachine || item.machine === filterMachine)
-      );
-    });
-  }, [expenses, filterDate, filterMachine]);
+  // 1. Diesel Used කාඩ් එකේ අගය: මුල් අගයෙන් ලැයිස්තුවේ එකතුව අඩු වී, Form එකේ දෙන අගයද තවදුරටත් අඩු වේ.
+  const dieselUsedDisplay = Math.max(0, initialDieselStock - totalUsedDieselFromList);
+  const remainingDiesel = Math.max(0, dieselUsedDisplay - numberValue(diesel));
 
+  // 2. Total Amount කාඩ් එකේ අගය: මුල් මුදලින් ලැයිස්තුවේ එකතුව අඩු වී, Form එකේ දෙන Payable අගයද තවදුරටත් අඩු වේ.
+  const totalAmountDisplay = Math.max(0, initialTotalAmount - totalUsedAmountFromList);
+  const remainingBalance = Math.max(0, totalAmountDisplay - numberValue(payable));
+
+  // Filter කළ අවස්ථාවල පෙන්වන totals (පහත Table එක සඳහා)
   const totals = useMemo(
     () =>
       filteredExpenses.reduce(
@@ -151,23 +161,6 @@ export default function DieselExpensesPage() {
       ),
     [filteredExpenses],
   );
-
-  const previousDiesel = previousExpenses.reduce(
-    (total, item) => total + numberValue(item.diesel),
-    0,
-  );
-
-  const remainingDiesel = Math.max(
-    0,
-    previousDiesel - totals.diesel,
-  );
-
-  const remainingBalance = Math.max(
-    0,
-    totals.amount - totals.paid,
-  );
-
-  const totalDiesel = previousDiesel + totals.diesel;
 
   const handleSubmit = async (
     event: FormEvent<HTMLFormElement>,
@@ -295,7 +288,7 @@ export default function DieselExpensesPage() {
       alert(
         error instanceof Error
           ? error.message
-          : "Failed to delete diesel expense",
+          : "Failed to delete expense",
       );
     }
   };
@@ -339,96 +332,27 @@ export default function DieselExpensesPage() {
           </button>
         </header>
 
-        <section className="rounded-3xl border border-slate-700/80 bg-slate-900 p-5 shadow-xl">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-bold uppercase tracking-wide">
-                Filter Records
-              </h2>
-
-              <p className="mt-1 text-xs text-slate-500">
-                View records by date and machine
-              </p>
-            </div>
-
-            {(filterDate || filterMachine) && (
-              <span className="rounded-full bg-cyan-500/10 px-3 py-1 text-xs font-semibold text-cyan-400">
-                Filter active
-              </span>
-            )}
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-[1fr_1fr_auto]">
-            <Field label="Filter Date">
-              <div className="relative">
-                <CalendarDays size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-cyan-400" />
-
-                <input
-                  type="date"
-                  value={filterDate}
-                  onChange={(event) =>
-                    setFilterDate(event.target.value)
-                  }
-                  className={`${inputClass} pl-11`}
-                />
-              </div>
-            </Field>
-
-            <Field label="Filter Machine">
-              <div className="relative">
-                <Truck size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-cyan-400" />
-
-                <select
-                  value={filterMachine}
-                  onChange={(event) =>
-                    setFilterMachine(event.target.value)
-                  }
-                  className={`${inputClass} cursor-pointer appearance-none pl-11`}
-                >
-                  <option value="">All Machines</option>
-
-                  {machineOptions.map((machine) => (
-                    <option key={machine} value={machine}>
-                      {machine}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </Field>
-
-            <button
-              type="button"
-              onClick={() => {
-                setFilterDate("");
-                setFilterMachine("");
-              }}
-              className="h-12 self-end rounded-xl border border-slate-600 bg-slate-800 px-5 text-sm font-bold transition hover:bg-slate-700"
-            >
-              Clear Filters
-            </button>
-          </div>
-        </section>
-
+        {/* Summary Cards */}
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <SummaryCard
             title="Diesel Used"
-            subtitle="Current filtered usage"
-            value={`${formatNumber(totals.diesel)} L`}
+            subtitle="Current available stock"
+            value={`${formatNumber(dieselUsedDisplay)} L`}
             icon={<Droplets size={22} />}
             color="cyan"
           />
 
           <SummaryCard
             title="Total Amount"
-            subtitle="Total payable amount"
-            value={`Rs. ${formatNumber(totals.amount)}`}
+            subtitle="Current available balance"
+            value={`Rs. ${formatNumber(totalAmountDisplay)}`}
             icon={<Wallet size={22} />}
             color="blue"
           />
 
           <SummaryCard
             title="Remaining Diesel"
-            subtitle="Previous balance"
+            subtitle="After form input"
             value={`${formatNumber(remainingDiesel)} L`}
             icon={<Droplets size={22} />}
             color="orange"
@@ -436,7 +360,7 @@ export default function DieselExpensesPage() {
 
           <SummaryCard
             title="Remaining Balance"
-            subtitle="Payable − paid"
+            subtitle="After amount input"
             value={`Rs. ${formatNumber(remainingBalance)}`}
             icon={<CreditCard size={22} />}
             color="green"
@@ -444,13 +368,14 @@ export default function DieselExpensesPage() {
 
           <SummaryCard
             title="Total Diesel"
-            subtitle="Previous + current"
-            value={`${formatNumber(totalDiesel)} L`}
+            subtitle="Initial stock"
+            value={`${formatNumber(initialDieselStock)} L`}
             icon={<AlertCircle size={22} />}
             color="red"
           />
         </section>
 
+        {/* Add Expense Form */}
         <section className="overflow-hidden rounded-3xl border border-slate-700/80 bg-slate-900 shadow-2xl">
           <div className="border-b border-slate-700/80 bg-slate-800/30 px-6 py-5">
             <div className="flex items-center gap-4">
@@ -620,6 +545,7 @@ export default function DieselExpensesPage() {
           </form>
         </section>
 
+        {/* Table Records */}
         <section className="overflow-hidden rounded-3xl border border-slate-700/80 bg-slate-900 shadow-2xl">
           <div className="flex flex-col justify-between gap-4 border-b border-slate-700/80 p-5 md:flex-row md:items-center md:p-6">
             <div>
@@ -643,24 +569,12 @@ export default function DieselExpensesPage() {
                 <tr className="border-b border-slate-700 text-left">
                   <TableHeader>Date</TableHeader>
                   <TableHeader>Machine</TableHeader>
-                  <TableHeader align="right">
-                    Diesel (L)
-                  </TableHeader>
-                  <TableHeader align="right">
-                    Amount
-                  </TableHeader>
-                  <TableHeader align="right">
-                    Payable
-                  </TableHeader>
-                  <TableHeader align="right">
-                    Paid
-                  </TableHeader>
-                  <TableHeader align="right">
-                    Balance
-                  </TableHeader>
-                  <TableHeader align="center">
-                    Action
-                  </TableHeader>
+                  <TableHeader align="right">Diesel (L)</TableHeader>
+                  <TableHeader align="right">Amount</TableHeader>
+                  <TableHeader align="right">Payable</TableHeader>
+                  <TableHeader align="right">Paid</TableHeader>
+                  <TableHeader align="right">Balance</TableHeader>
+                  <TableHeader align="center">Action</TableHeader>
                 </tr>
               </thead>
 
@@ -696,10 +610,7 @@ export default function DieselExpensesPage() {
                   </tr>
                 ) : (
                   filteredExpenses.map((item) => {
-                    const itemPayable = numberValue(
-                      item.payable,
-                    );
-
+                    const itemPayable = numberValue(item.payable);
                     const itemPaid = numberValue(item.paid);
                     const itemAmount = itemPayable;
                     const itemBalance = Math.max(
@@ -770,25 +681,6 @@ export default function DieselExpensesPage() {
             </table>
           </div>
         </section>
-
-        <div className="rounded-2xl border border-blue-500/20 bg-blue-500/10 p-5">
-          <div className="flex gap-3">
-            <AlertCircle size={19} className="mt-0.5 shrink-0 text-blue-400" />
-
-            <div>
-              <h3 className="font-bold text-blue-300">
-                Calculation Information
-              </h3>
-
-              <p className="mt-1 text-sm leading-6 text-blue-300/80">
-                Amount = Payable amount. Paid is the amount
-                already paid. Remaining Balance = Payable − Paid.
-                Remaining Diesel is calculated using previous diesel
-                quantity.
-              </p>
-            </div>
-          </div>
-        </div>
       </div>
     </main>
   );

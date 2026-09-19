@@ -170,6 +170,8 @@ export async function POST(request: NextRequest) {
 
     connection = await mysql.createConnection(dbConfig);
 
+    await connection.beginTransaction();
+
     const [result] = await connection.execute(
       `
         INSERT INTO diesel_expenses
@@ -187,6 +189,19 @@ export async function POST(request: NextRequest) {
       ],
     );
 
+    await connection.execute(
+      `
+        UPDATE diesel_stock
+        SET 
+          total_diesel = total_diesel - ?, 
+          total_amount = total_amount + ?
+        WHERE branch_id = ?
+      `,
+      [dieselValue, payableValue, branchId],
+    );
+
+    await connection.commit();
+
     return NextResponse.json(
       {
         message: "Diesel expense saved successfully",
@@ -195,6 +210,7 @@ export async function POST(request: NextRequest) {
       { status: 201 },
     );
   } catch (error) {
+    if (connection) await connection.rollback();
     console.error("POST DIESEL EXPENSE ERROR:", error);
 
     return NextResponse.json(
@@ -221,22 +237,55 @@ export async function DELETE(request: NextRequest) {
 
     connection = await mysql.createConnection(dbConfig);
 
-    const [result] = await connection.execute(
-      "DELETE FROM diesel_expenses WHERE id = ?",
-      [id],
+    const [rows] = await connection.execute(
+      `SELECT branch_id, diesel, payable FROM diesel_expenses WHERE id = ?`,
+      [id]
     );
 
-    if ((result as mysql.ResultSetHeader).affectedRows === 0) {
+    const expenseList = rows as Array<{ branch_id: string; diesel: number; payable: number }>;
+
+    if (expenseList.length === 0) {
       return NextResponse.json(
         { error: "Expense record not found" },
         { status: 404 },
       );
     }
 
+    const { branch_id, diesel, payable } = expenseList[0];
+
+    await connection.beginTransaction();
+
+    const [result] = await connection.execute(
+      "DELETE FROM diesel_expenses WHERE id = ?",
+      [id],
+    );
+
+    if ((result as mysql.ResultSetHeader).affectedRows === 0) {
+      await connection.rollback();
+      return NextResponse.json(
+        { error: "Expense record not found" },
+        { status: 404 },
+      );
+    }
+
+    await connection.execute(
+      `
+        UPDATE diesel_stock
+        SET 
+          total_diesel = total_diesel + ?, 
+          total_amount = total_amount - ?
+        WHERE branch_id = ?
+      `,
+      [diesel, payable, branch_id]
+    );
+
+    await connection.commit();
+
     return NextResponse.json({
       message: "Diesel expense deleted successfully",
     });
   } catch (error) {
+    if (connection) await connection.rollback();
     console.error("DELETE DIESEL EXPENSE ERROR:", error);
 
     return NextResponse.json(
