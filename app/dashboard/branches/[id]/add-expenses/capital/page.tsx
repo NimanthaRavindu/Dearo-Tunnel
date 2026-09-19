@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Building2, Plus, User, Calendar, Coins, Trash2, FileText, Search, Receipt, Loader2, Filter } from "lucide-react";
+import { ArrowLeft, Building2, Plus, User, Calendar, Coins, Trash2, FileText, Search, Receipt, Loader2, Filter, X } from "lucide-react";
 
 interface CapitalExpense {
   id: number | string;
@@ -26,6 +26,7 @@ export default function CapitalExpensesPage() {
 
   // App Logic States
   const [searchQuery, setSearchQuery] = useState("");
+  const [filterDate, setFilterDate] = useState(""); // 🔹 දින අනුව ෆිල්ටර් කිරීමට State එක
   const [expenses, setExpenses] = useState<CapitalExpense[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -121,11 +122,17 @@ export default function CapitalExpensesPage() {
 
   const totalCapitalExpenses = expenses.reduce((sum, item) => sum + Number(item.amount), 0);
 
-  const filteredExpenses = expenses.filter(
-    (item) =>
+ 
+  const filteredExpenses = expenses.filter((item) => {
+    const matchesSearch =
       item.personName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+      (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase()));
+
+    const itemDate = String(item.date).split("T")[0];
+    const matchesDate = filterDate ? itemDate === filterDate : true;
+
+    return matchesSearch && matchesDate;
+  });
 
   return (
     <div className="min-h-screen bg-[#080d1a] text-slate-100 p-6 md:p-8 relative overflow-hidden font-sans">
@@ -256,19 +263,45 @@ export default function CapitalExpensesPage() {
 
           {/* Table Side */}
           <div className="lg:col-span-7 bg-slate-950/70 border border-slate-800/80 rounded-2xl p-6 shadow-2xl backdrop-blur-md">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-800/80 mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-800/80 mb-4">
               <h2 className="text-xs font-bold uppercase tracking-wider text-slate-200 font-mono">
                 Recorded Transactions ({filteredExpenses.length})
               </h2>
-              <div className="relative w-48">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                <input
-                  type="text"
-                  placeholder="Search..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-slate-900/90 border border-slate-800 rounded-lg py-1.5 pl-8 pr-2.5 text-[11px] text-slate-200 focus:outline-none"
-                />
+
+              {/* 🔹 Search & Date Filter Controls */}
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Date Filter Input */}
+                <div className="relative">
+                  <input
+                    type="date"
+                    value={filterDate}
+                    onChange={(e) => setFilterDate(e.target.value)}
+                    className="bg-slate-900/90 border border-slate-800 rounded-lg py-1.5 px-2.5 text-[11px] text-slate-200 focus:outline-none font-mono"
+                    title="Filter by Date"
+                  />
+                  {filterDate && (
+                    <button
+                      type="button"
+                      onClick={() => setFilterDate("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                      title="Clear Date Filter"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Search Input */}
+                <div className="relative w-40">
+                  <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                  <input
+                    type="text"
+                    placeholder="Search..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full bg-slate-900/90 border border-slate-800 rounded-lg py-1.5 pl-8 pr-2.5 text-[11px] text-slate-200 focus:outline-none"
+                  />
+                </div>
               </div>
             </div>
 
