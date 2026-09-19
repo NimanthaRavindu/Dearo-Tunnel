@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
       LEFT JOIN (
         SELECT
           branch_id,
-          SUM(COALESCE(amount, 0)) AS diesel_total,
+          SUM(COALESCE(payable, 0)) AS diesel_total,
           SUM(COALESCE(payable, 0) - COALESCE(paid, 0)) AS diesel_balance
         FROM diesel_expenses
         WHERE (? IS NULL OR id = ?)
@@ -146,7 +146,6 @@ export async function GET(req: NextRequest) {
       ORDER BY ce.id ASC
     `);
 
-    // 1. Diesel Expenses දත්ත ලබා ගැනීම සඳහා Query එක එකතු කරන ලදී
     const [dieselRows] = await db.query<RowDataPacket[]>(`
       SELECT
         de.*,
@@ -199,7 +198,6 @@ export async function GET(req: NextRequest) {
         amount: Number(row.amount || 0),
       })),
 
-      // 2. Diesel ඩ්‍රොප්ඩවුන් ලැයිස්තුව සඳහා අවශ්‍ය දත්ත Response එකට එකතු කරන ලදී
       diesel: dieselRows.map((row: any) => ({
         id: row.id,
         machine: row.machine || `Diesel #${row.id}`,
