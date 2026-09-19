@@ -29,6 +29,7 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
 
   const selectedSalesId = searchParams.get("selected_sales_id");
   const selectedCapitalId = searchParams.get("selected_capital_id");
+  const selectedDieselId = searchParams.get("selected_diesel_id");
   const selectedDate = searchParams.get("date");
 
   const [data, setData] = useState<any>(null);
@@ -54,6 +55,10 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
 
       if (selectedCapitalId) {
         dashboardParams.set("selected_capital_id", selectedCapitalId);
+      }
+
+      if (selectedDieselId) {
+        dashboardParams.set("selected_diesel_id", selectedDieselId);
       }
 
       const dashboardQuery = dashboardParams.toString();
@@ -84,6 +89,10 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
 
       if (selectedCapitalId) {
         incomeParams.set("selected_capital_id", selectedCapitalId);
+      }
+
+      if (selectedDieselId) {
+        incomeParams.set("selected_diesel_id", selectedDieselId);
       }
 
       if (selectedDate) {
@@ -121,13 +130,13 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [selectedSalesId, selectedCapitalId, selectedDate]);
+  }, [selectedSalesId, selectedCapitalId, selectedDieselId, selectedDate]);
 
   useEffect(() => {
     fetchDashboardData();
   }, [fetchDashboardData]);
 
-  const clearFilter = (type: "sales" | "capital") => {
+  const clearFilter = (type: "sales" | "capital" | "diesel") => {
     const params = new URLSearchParams(searchParams.toString());
 
     if (type === "sales") {
@@ -136,6 +145,10 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
 
     if (type === "capital") {
       params.delete("selected_capital_id");
+    }
+
+    if (type === "diesel") {
+      params.delete("selected_diesel_id");
     }
 
     const query = params.toString();
@@ -151,6 +164,10 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
 
     if (selectedCapitalId) {
       params.set("selected_capital_id", selectedCapitalId);
+    }
+
+    if (selectedDieselId) {
+      params.set("selected_diesel_id", selectedDieselId);
     }
 
     const query = params.toString();
@@ -171,6 +188,10 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
       params.set("selected_capital_id", selectedCapitalId);
     }
 
+    if (selectedDieselId) {
+      params.set("selected_diesel_id", selectedDieselId);
+    }
+
     const query = params.toString();
 
     router.push(
@@ -187,6 +208,10 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
 
     if (selectedCapitalId) {
       params.set("selected_capital_id", selectedCapitalId);
+    }
+
+    if (selectedDieselId) {
+      params.set("selected_diesel_id", selectedDieselId);
     }
 
     if (selectedDate) {
@@ -338,6 +363,22 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
                 className="hover:text-white p-0.5 rounded transition-colors"
                 title="Clear Sales Filter"
                 aria-label="Clear Sales Filter"
+              >
+                <X size={13} />
+              </button>
+            </div>
+          )}
+          {selectedDieselId && (
+            <div className="flex items-center gap-2 bg-teal-950/40 border border-teal-500/30 px-3 py-1.5 rounded-lg text-teal-400 text-[11px]">
+              <Filter size={12} />
+              <span>Diesel Record #{selectedDieselId}</span>
+
+              <button
+                type="button"
+                onClick={() => clearFilter("diesel")}
+                className="hover:text-white p-0.5 rounded transition-colors"
+                title="Clear Diesel Filter"
+                aria-label="Clear Diesel Filter"
               >
                 <X size={13} />
               </button>
