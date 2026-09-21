@@ -2,7 +2,12 @@
 
 import { useRouter, useParams } from "next/navigation";
 import React, { useEffect, useState } from "react";
-import { ArrowLeft, Landmark, Users, Calendar, DollarSign, Wallet, CheckCircle2, AlertCircle } from "lucide-react";
+import { ArrowLeft, Landmark, Users, Calendar, DollarSign, Wallet, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+
+interface Employee {
+  id: string | number;
+  name: string;
+}
 
 export default function AddSalaryExpensePage() {
   const router = useRouter();
@@ -13,7 +18,7 @@ export default function AddSalaryExpensePage() {
   // UI & Loading States
   const [branchName, setBranchName] = useState("");
   const [isBranchLoading, setIsBranchLoading] = useState(true);
-  const [employees, setEmployees] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [isEmployeesLoading, setIsEmployeesLoading] = useState(true);
   
   // Form Control States
@@ -64,7 +69,6 @@ export default function AddSalaryExpensePage() {
     fetchBranchEmployees();
   }, [rawBranchId]);
 
-
   const payableAmt = parseFloat(totalPayable) || 0;
   const paidAmt = parseFloat(totalPaid) || 0;
   const calculatedBalance = Math.max(0, payableAmt - paidAmt);
@@ -112,11 +116,11 @@ export default function AddSalaryExpensePage() {
 
       if (res.ok && result.success) {
         setSuccessMessage("TRANSACTION INGESTED: Salary ledger matrix updated successfully.");
-
-        setTimeout(() => {
-          router.push(`/dashboard/branches/${rawBranchId}/view-expences/salary`);
-          router.refresh();
-        }, 1500);
+   
+        setSelectedEmployeeId("");
+        setTotalPayable("");
+        setTotalPaid("");
+        setAllocationDate(new Date().toISOString().split('T')[0]);
       } else {
         setErrorMessage(result.error || "Transaction ingestion pipeline rejected.");
       }
