@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { DollarSign, Calendar, User, PlusCircle, TrendingUp, CreditCard, ArrowLeft, Trash2, Loader2, Receipt, Search, XCircle, ExternalLink, Building2, Package, Hash } from "lucide-react";
+import { DollarSign, Calendar, User, PlusCircle, TrendingUp, CreditCard, ArrowLeft, Trash2, Loader2, Receipt, Search, XCircle, ExternalLink, Building2, Package, Hash, X } from "lucide-react";
 import Link from "next/link";
 
 interface SalesExpense {
@@ -27,6 +27,7 @@ export default function SalesExpensesPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [searchTerm, setSearchTerm] = useState<string>("");
+  const [filterDate, setFilterDate] = useState<string>(""); // 🔹 Date filter state
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
   const [formData, setFormData] = useState({
@@ -106,6 +107,7 @@ export default function SalesExpensesPage() {
     ])
   ) as string[];
 
+  // 🔹 Updated filtering logic for Search and Date
   const filteredExpenses = expenses.filter((item) => {
     const isCurrentBranch = String(item.branch_id) === String(branchId);
     const matchesSearch =
@@ -114,7 +116,10 @@ export default function SalesExpensesPage() {
       (item.branch_name &&
         item.branch_name.toLowerCase().includes(searchTerm.toLowerCase()));
 
-    return isCurrentBranch && matchesSearch;
+    const itemDate = item.date ? String(item.date).split("T")[0] : "";
+    const matchesDate = filterDate ? itemDate === filterDate : true;
+
+    return isCurrentBranch && matchesSearch && matchesDate;
   });
 
   const selectedRecord = expenses.find((item) => item.id === selectedId);
@@ -479,15 +484,40 @@ export default function SalesExpensesPage() {
                   </span>
                 </div>
 
-                <div className="relative min-w-[180px]">
-                  <Search className="w-3 h-3 absolute left-2.5 top-2 text-slate-500" />
-                  <input
-                    type="text"
-                    placeholder="Search payee, item or branch..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full bg-slate-950/80 border border-slate-800 rounded-lg pl-7 pr-2.5 py-1 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50"
-                  />
+                {/* 🔹 Date Filter & Search Controls */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Date Filter Input */}
+                  <div className="relative">
+                    <input
+                      type="date"
+                      value={filterDate}
+                      onChange={(e) => setFilterDate(e.target.value)}
+                      className="bg-slate-950/80 border border-slate-800 rounded-lg py-1 px-2.5 text-[11px] text-slate-200 focus:outline-none font-mono"
+                      title="Filter by Date"
+                    />
+                    {filterDate && (
+                      <button
+                        type="button"
+                        onClick={() => setFilterDate("")}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                        title="Clear Date Filter"
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Search Input */}
+                  <div className="relative min-w-[160px]">
+                    <Search className="w-3 h-3 absolute left-2.5 top-2 text-slate-500" />
+                    <input
+                      type="text"
+                      placeholder="Search payee, item..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full bg-slate-950/80 border border-slate-800 rounded-lg pl-7 pr-2.5 py-1 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500/50"
+                    />
+                  </div>
                 </div>
               </div>
 
