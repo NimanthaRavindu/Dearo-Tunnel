@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import {db} from "@/lib/db";
+import { db } from "@/lib/db";
 
 export async function POST(req: NextRequest) {
   try {
@@ -33,14 +33,16 @@ export async function POST(req: NextRequest) {
       ) VALUES (?, ?, ?, ?, ?, ?)
     `;
 
-    await db.query(insertQuery, [
+    const values = [
       Number(branchId),
-      expenseType,
-      expenseDate,
-      typeof totalPayable === "string" ? parseFloat(totalPayable) : totalPayable,
-      typeof totalPaid === "string" ? parseFloat(totalPaid) : totalPaid,
-      typeof balance === "string" ? parseFloat(balance) : balance,
-    ]);
+      String(expenseType),
+      String(expenseDate),
+      Number(totalPayable) || 0,
+      Number(totalPaid) || 0,
+      Number(balance) || 0,
+    ];
+
+    await db.query(insertQuery, values);
 
     return NextResponse.json(
       { message: "LEDGER_INTEGRATION_SUCCESS: Operational ledger entry committed." },
@@ -50,7 +52,7 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     console.error("Critical error in Operational Expenses API Engine:", error);
     return NextResponse.json(
-      { message: "INTERNAL_SERVER_MATRIX_FAULT", error: error.message },
+      { message: "INTERNAL_SERVER_MATRIX_FAULT", error: error.message || String(error) },
       { status: 500 }
     );
   }
@@ -65,8 +67,8 @@ export async function GET(request: Request) {
       return NextResponse.json([]);
     }
 
-    const [rows] = await db.query(
-      `SELECT id,reason, total_payable, total_paid, balance, DATE_FORMAT(expense_date, '%Y-%m-%d') AS expense_date 
+    const [rows]: any = await db.query(
+      `SELECT id, reason, total_payable, total_paid, balance, DATE_FORMAT(expense_date, '%Y-%m-%d') AS expense_date 
        FROM other_expenses 
        WHERE branch_id = ? 
        ORDER BY id DESC`,
@@ -74,8 +76,8 @@ export async function GET(request: Request) {
     );
 
     return NextResponse.json(Array.isArray(rows) ? rows : []);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Database operational read fault:", error);
-    return NextResponse.json({ error: "Internal Server Ledger Error" }, { status: 500 });
+    return NextResponse.json({ error: "Internal Server Ledger Error", details: error.message }, { status: 500 });
   }
 }

@@ -1,8 +1,8 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import React, { useEffect, useState, use } from "react";
-import { ArrowLeft, Calendar, Building, Wallet, CreditCard, FileText,Layers,CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Calendar, Building, Wallet, CreditCard, FileText, Layers, CheckCircle2 } from "lucide-react";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -105,9 +105,10 @@ export default function AddOperationalExpensePage({ params }: PageProps) {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Ledger ingestion fault.");
+      if (!res.ok) throw new Error(data.message || data.error || "Ledger ingestion fault.");
 
       setStatusMessage({ type: "success", text: "LEDGER INTEGRATION SUCCESS: Operational expense successfully committed." });
+
 
       setForm((prev) => ({
         ...prev,
@@ -145,7 +146,7 @@ export default function AddOperationalExpensePage({ params }: PageProps) {
               </h1>
             </div>
             <p className="text-[11px] text-slate-400 mt-0.5 font-medium tracking-wide">
-              Log utility matrix statements, food, and environmental payments
+              Log utility matrix statements, food, petty cash, and environmental payments
             </p>
           </div>
         </div>
@@ -165,7 +166,7 @@ export default function AddOperationalExpensePage({ params }: PageProps) {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             
-            {/* Designated Branch Field (Read-only/Disabled for consistency) */}
+            {/* Designated Branch Field */}
             <div className="flex flex-col gap-1.5">
               <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest font-mono flex items-center gap-1.5">
                 <Building size={11} className="text-slate-500" /> Designated Branch Node
@@ -178,7 +179,7 @@ export default function AddOperationalExpensePage({ params }: PageProps) {
             {/* Expense Allocation Date Input */}
             <div className="flex flex-col gap-1.5">
               <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest font-mono flex items-center gap-1.5">
-                <Calendar size={11} className="text-slate-400 " /> Expense Allocation Date
+                <Calendar size={11} className="text-slate-400" /> Expense Allocation Date
               </label>
               <input
                 required
@@ -191,7 +192,7 @@ export default function AddOperationalExpensePage({ params }: PageProps) {
 
           </div>
 
-          {/* Expense Classification Reason Selection */}
+          {/* Expense Classification Reason Selection (Петty Cash ඇතුළුව) */}
           <div className="flex flex-col gap-1.5">
             <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest font-mono flex items-center gap-1.5">
               <FileText size={11} className="text-slate-500" /> Expense Classification Reason
