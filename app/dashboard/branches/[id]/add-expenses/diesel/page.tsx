@@ -153,11 +153,24 @@ export default function DieselExpensesPage() {
   const activeDieselUsed = isFiltered ? filteredDieselTotal : totalUsedDieselFromList;
   const activeAmountUsed = isFiltered ? filteredAmountTotal : totalUsedAmountFromList;
 
-  const dieselUsedDisplay = Math.max(0, initialDieselStock - activeDieselUsed);
-  const remainingDiesel = Math.max(0, dieselUsedDisplay - numberValue(diesel));
+  // Cards are based only on saved database records.
+  // Current form inputs are NOT deducted until the expense is submitted.
+  const dieselUsedDisplay = Math.max(
+    0,
+    initialDieselStock - activeDieselUsed
+  );
 
-  const totalAmountDisplay = Math.max(0, initialTotalAmount - activeAmountUsed);
-  const remainingBalance = Math.max(0, totalAmountDisplay - numberValue(payable));
+  // Remaining Diesel shows the current remaining stock.
+  const remainingDiesel = dieselUsedDisplay;
+
+  const totalAmountDisplay = Math.max(
+    0,
+    initialTotalAmount - activeAmountUsed
+  );
+
+  // Remaining Balance shows the current remaining amount.
+  // The form payable value is deducted only after saving.
+  const remainingBalance = totalAmountDisplay;
 
   const handleSubmit = async (
     event: FormEvent<HTMLFormElement>,
