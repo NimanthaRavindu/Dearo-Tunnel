@@ -36,8 +36,8 @@ export default function DieselExpensesPage() {
       if (!response.ok) throw new Error(data?.error || "Failed to load diesel expenses");
       setExpenses(Array.isArray(data.expenses)? data.expenses : []);
       if (data.summary) {
-        setInitialDieselStock(Number(data.summary.totalDiesel) || 331);
-        setInitialTotalAmount(Number(data.summary.totalAmount) || 317000);
+        setInitialDieselStock(Number(data.summary.totalDiesel || data.summary.initialDieselStock) || 331);
+        setInitialTotalAmount(Number(data.summary.totalAmount || data.summary.initialTotalAmount) || 317000);
       }
     } catch (error) {
       console.error("LOAD DIESEL EXPENSE ERROR:", error);
@@ -66,13 +66,16 @@ export default function DieselExpensesPage() {
   const activeDieselUsed = isFiltered? filteredDieselTotal : totalUsedDieselFromList;
   const activeAmountUsed = isFiltered? filteredAmountTotal : totalUsedAmountFromList;
 
-  // === FINAL FIX - OYA ILLAPU WIDIYATA 0 UNAMA INITIAL PENNANWA ===
+  // === FINAL FIXED LOGIC - OKKOMA CARD WALA INITIAL PENNANWA ===
   const dieselUsedDisplay = activeDieselUsed <= 0? initialDieselStock : activeDieselUsed;
-  const totalAmountDisplay = activeAmountUsed <= 0? initialTotalAmount : Math.max(0, initialTotalAmount - activeAmountUsed);
+  const totalAmountDisplay = initialTotalAmount; // Total Amount eke hamawelama initial 317000 pennanwa
+
   const rawRemainingDiesel = initialDieselStock - activeDieselUsed - formDieselQty;
   const remainingDiesel = rawRemainingDiesel <= 0? initialDieselStock : rawRemainingDiesel;
+
   const rawRemainingBalance = initialTotalAmount - activeAmountUsed - formBalance;
   const remainingBalance = rawRemainingBalance <= 0? initialTotalAmount : rawRemainingBalance;
+
   const formAmount = formPayable;
   const formBalanceDisplay = formBalance;
 
@@ -132,8 +135,8 @@ export default function DieselExpensesPage() {
           </div>
         </section>
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <SummaryCard title="Diesel Used" subtitle={isFiltered? "Filtered usage" : "Initial stock / Total used"} value={`${formatNumber(dieselUsedDisplay)} L`} icon={<Droplets size={22} />} color="cyan" />
-          <SummaryCard title="Total Amount" subtitle={isFiltered? "Filtered amount" : "Initial / Remaining balance"} value={`Rs. ${formatNumber(totalAmountDisplay)}`} icon={<Wallet size={22} />} color="blue" />
+          <SummaryCard title="Diesel Used" subtitle="Initial stock" value={`${formatNumber(dieselUsedDisplay)} L`} icon={<Droplets size={22} />} color="cyan" />
+          <SummaryCard title="Total Amount" subtitle="Initial amount" value={`Rs. ${formatNumber(totalAmountDisplay)}`} icon={<Wallet size={22} />} color="blue" />
           <SummaryCard title="Remaining Diesel" subtitle={rawRemainingDiesel <=0? "Shows initial" : "After form input"} value={`${formatNumber(remainingDiesel)} L`} icon={<Droplets size={22} />} color="orange" />
           <SummaryCard title="Remaining Balance" subtitle={rawRemainingBalance <=0? "Shows initial" : "After amount input"} value={`Rs. ${formatNumber(remainingBalance)}`} icon={<CreditCard size={22} />} color="green" />
           <SummaryCard title="Total Diesel" subtitle="Initial stock" value={`${formatNumber(initialDieselStock)} L`} icon={<AlertCircle size={22} />} color="red" />
