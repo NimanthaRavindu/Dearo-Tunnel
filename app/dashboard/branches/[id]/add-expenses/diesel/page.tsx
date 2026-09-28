@@ -3,21 +3,9 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { AlertCircle, CalendarDays, CreditCard, Droplets, Fuel, Plus, RefreshCw, Trash2, Truck, Wallet } from "lucide-react";
 import { useParams } from "next/navigation";
 
-type DieselExpense = {
-  id: number;
-  branch_id: string;
-  date: string;
-  machine: string;
-  diesel: number | string;
-  amount: number | string;
-  payable: number | string;
-  paid: number | string;
-};
-
+type DieselExpense = { id: number; branch_id: string; date: string; machine: string; diesel: number | string; amount: number | string; payable: number | string; paid: number | string; };
 type CardColor = "cyan" | "blue" | "orange" | "green" | "red";
-
 const machines = ["Komatsu","CAT","JCB","Excavator","Backhoe Loader","Wheel Loader","Landy","Other Machine"];
-
 const inputClass = "h-12 w-full rounded-xl border border-slate-600/80 bg-slate-800/80 px-4 text-sm text-white outline-none transition placeholder:text-slate-500 hover:border-slate-500 focus:border-cyan-400 focus:ring-4 focus:ring-cyan-500/10";
 const numberValue = (value: number | string | undefined) => Number(value || 0);
 const formatNumber = (value: number | string) => Number(value || 0).toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -56,15 +44,14 @@ export default function DieselExpensesPage() {
       alert(error instanceof Error? error.message : "Failed to load diesel expenses");
     } finally { setLoading(false); }
   };
-
   useEffect(() => { if (branchId) loadExpenses(); }, [branchId]);
-
   const resetForm = () => { setSelectedMachine(""); setOtherMachine(""); setDate(""); setDiesel(""); setPayable(""); setPaid(""); };
 
-  // === FINAL LOGIC - VENAS WENNE 0 / 0.00 VITA WITHARAI ===
-  const formPayableVal = numberValue(payable);
-  const formPaidVal = numberValue(paid);
+  // === FINAL FIXED CALCULATION ===
+  const formPayable = numberValue(payable);
+  const formPaid = numberValue(paid);
   const formDieselQty = numberValue(diesel);
+  const formBalance = Math.max(0, formPayable - formPaid);
 
   const filteredExpenses = useMemo(() => expenses.filter((item) => {
     const itemDate = item.date?.slice(0, 10);
@@ -80,23 +67,22 @@ export default function DieselExpensesPage() {
   const activeDieselUsed = isFiltered? filteredDieselTotal : totalUsedDieselFromList;
   const activeAmountUsed = isFiltered? filteredAmountTotal : totalUsedAmountFromList;
 
-  // Uda cards 2 - DB eken ena ithuru stock / balance eka
-  const dieselUsedDisplay = Math.max(0, initialDieselStock - activeDieselUsed);
+  // 1. Uda cards - DB eken ena values
+  // Diesel Used eka 0 pennanne na, use karapu agaya pennanawa
+  const dieselUsedDisplay = activeDieselUsed;
   const totalAmountDisplay = Math.max(0, initialTotalAmount - activeAmountUsed);
 
-  // Pahala form eke calculation
-  const formBalanceCalc = Math.max(0, formPayableVal - formPaidVal);
+  // 2. Remaining cards - Form eke agaya type karana kota adu wenawa
+  // Oya illapu widiyata 0 vu pasu initial agaya pennanawa
+  const rawRemainingDiesel = initialDieselStock - activeDieselUsed - formDieselQty;
+  const remainingDiesel = rawRemainingDiesel <= 0? initialDieselStock : rawRemainingDiesel;
 
-  // Diesel Used card eke agaya 0 nam witharai Remaining Diesel wenas wenna ona
-  // Form eke 0 dammama Total Diesel ekata add wenne na
-  const remainingDiesel = formDieselQty === 0? dieselUsedDisplay : Math.max(0, dieselUsedDisplay - formDieselQty);
+  const rawRemainingBalance = initialTotalAmount - activeAmountUsed - formBalance;
+  const remainingBalance = rawRemainingBalance <= 0? initialTotalAmount : rawRemainingBalance;
 
-  // Total Amount card eke count eka 0.00 nam witharai Remaining Balance eka Total Amount ekata ekathu wenna ona
-  const remainingBalance = formPayableVal === 0? totalAmountDisplay : Math.max(0, totalAmountDisplay - formBalanceCalc);
-
-  // Pahala Amount card eke display - 0.00 nam 0 pennanne na, total eka pennanawa
-  const formAmountDisplay = formPayableVal === 0? totalAmountDisplay : formPayableVal;
-  const formBalanceDisplay = formPayableVal === 0? totalAmountDisplay : formBalanceCalc;
+  // 3. Pahala cards - 0 nam 0.00 thamai, initial enne na
+  const formAmount = formPayable;
+  const formBalanceDisplay = formBalance;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -142,27 +128,24 @@ export default function DieselExpensesPage() {
     <main className="min-h-screen bg-slate-950 p-4 text-white md:p-6">
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col justify-between gap-5 rounded-3xl border border-slate-700/80 bg-slate-900 p-5 shadow-2xl md:flex-row md:items-center md:p-6">
-          <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400 ring-1 ring-cyan-400/20"><Fuel size={29} /></div>
-            <div><p className="mb-1 text-xs font-bold uppercase tracking-widest text-cyan-400">Expense Management</p><h1 className="text-2xl font-bold md:text-3xl">Diesel Expenses</h1><p className="mt-1 text-sm text-slate-400">Manage machine-wise diesel usage and payments</p></div>
-          </div>
+          <div className="flex items-center gap-4"><div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400 ring-1 ring-cyan-400/20"><Fuel size={29} /></div><div><p className="mb-1 text-xs font-bold uppercase tracking-widest text-cyan-400">Expense Management</p><h1 className="text-2xl font-bold md:text-3xl">Diesel Expenses</h1><p className="mt-1 text-sm text-slate-400">Manage machine-wise diesel usage and payments</p></div></div>
           <button type="button" onClick={loadExpenses} disabled={loading} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-600 bg-slate-800 px-5 text-sm font-bold transition hover:bg-slate-700 disabled:opacity-60"><RefreshCw size={17} className={loading? "animate-spin" : ""} />{loading? "Refreshing..." : "Refresh"}</button>
         </header>
 
         <section className="rounded-3xl border border-slate-700/80 bg-slate-900 p-5 shadow-xl">
           <div className="mb-4 flex items-center justify-between"><div><h2 className="text-sm font-bold uppercase tracking-wide">Filter Records</h2><p className="mt-1 text-xs text-slate-500">View records by date and machine</p></div>{isFiltered && <span className="rounded-full bg-cyan-500/10 px-3 py-1 text-xs font-semibold text-cyan-400">Filter active</span>}</div>
           <div className="grid gap-4 md:grid-cols-[1fr_1fr_auto]">
-            <Field label="Filter Date"><div className="relative"><CalendarDays size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-cyan-400" /><input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className={`${inputClass} pl-11`} /></div></Field>
-            <Field label="Filter Machine"><div className="relative"><Truck size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-cyan-400" /><select value={filterMachine} onChange={(e) => setFilterMachine(e.target.value)} className={`${inputClass} cursor-pointer appearance-none pl-11`}><option value="">All Machines</option>{machineOptions.map((m) => <option key={m} value={m}>{m}</option>)}</select></div></Field>
+            <Field label="Filter Date"><div className="relative"><CalendarDays size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-cyan-400" /><input type="date" value={filterDate} onChange={(event) => setFilterDate(event.target.value)} className={`${inputClass} pl-11`} /></div></Field>
+            <Field label="Filter Machine"><div className="relative"><Truck size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-cyan-400" /><select value={filterMachine} onChange={(event) => setFilterMachine(event.target.value)} className={`${inputClass} cursor-pointer appearance-none pl-11`}><option value="">All Machines</option>{machineOptions.map((machine) => (<option key={machine} value={machine}>{machine}</option>))}</select></div></Field>
             <button type="button" onClick={() => { setFilterDate(""); setFilterMachine(""); }} className="h-12 self-end rounded-xl border border-slate-600 bg-slate-800 px-5 text-sm font-bold transition hover:bg-slate-700">Clear Filters</button>
           </div>
         </section>
 
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <SummaryCard title="Diesel Used" subtitle={isFiltered? "Filtered usage" : "Current available stock"} value={`${formatNumber(dieselUsedDisplay)} L`} icon={<Droplets size={22} />} color="cyan" />
-          <SummaryCard title="Total Amount" subtitle={isFiltered? "Filtered amount" : "Current available balance"} value={`Rs. ${formatNumber(totalAmountDisplay)}`} icon={<Wallet size={22} />} color="blue" />
-          <SummaryCard title="Remaining Diesel" subtitle={formDieselQty === 0? "No change - 0 entered" : `After -${formDieselQty} L`} value={`${formatNumber(remainingDiesel)} L`} icon={<Droplets size={22} />} color="orange" />
-          <SummaryCard title="Remaining Balance" subtitle={formPayableVal === 0? "No change - 0.00 entered" : `After -Rs. ${formatNumber(formBalanceCalc)}`} value={`Rs. ${formatNumber(remainingBalance)}`} icon={<CreditCard size={22} />} color="green" />
+          <SummaryCard title="Diesel Used" subtitle={isFiltered? "Filtered usage" : "Total used"} value={`${formatNumber(dieselUsedDisplay)} L`} icon={<Droplets size={22} />} color="cyan" />
+          <SummaryCard title="Total Amount" subtitle={isFiltered? "Filtered balance" : "Remaining balance"} value={`Rs. ${formatNumber(totalAmountDisplay)}`} icon={<Wallet size={22} />} color="blue" />
+          <SummaryCard title="Remaining Diesel" subtitle={rawRemainingDiesel <=0? "Stock ended - shows initial" : "After form input"} value={`${formatNumber(remainingDiesel)} L`} icon={<Droplets size={22} />} color="orange" />
+          <SummaryCard title="Remaining Balance" subtitle={rawRemainingBalance <=0? "Balance ended - shows initial" : "After amount input"} value={`Rs. ${formatNumber(remainingBalance)}`} icon={<CreditCard size={22} />} color="green" />
           <SummaryCard title="Total Diesel" subtitle="Initial stock" value={`${formatNumber(initialDieselStock)} L`} icon={<AlertCircle size={22} />} color="red" />
         </section>
 
@@ -170,20 +153,20 @@ export default function DieselExpensesPage() {
           <div className="border-b border-slate-700/80 bg-slate-800/30 px-6 py-5"><div className="flex items-center gap-4"><div className="flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-400 ring-1 ring-cyan-500/20"><Plus size={22} /></div><div><h2 className="text-xl font-bold">Add Diesel Expense</h2><p className="mt-1 text-sm text-slate-400">Enter machine usage and payment information</p></div></div></div>
           <form onSubmit={handleSubmit} className="space-y-7 p-6">
             <div className="grid gap-6 md:grid-cols-2">
-              <Field label="Machine"><div className="relative"><Truck size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-cyan-400" /><select value={selectedMachine} onChange={(e) => { setSelectedMachine(e.target.value); if (e.target.value!== "Other Machine") setOtherMachine(""); }} className={`${inputClass} cursor-pointer appearance-none pl-11`}><option value="">Select Machine</option>{machines.map((m) => <option key={m} value={m}>{m}</option>)}</select></div></Field>
-              <Field label="Date"><div className="relative"><CalendarDays size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-cyan-400" /><input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={`${inputClass} pl-11`} /></div></Field>
+              <Field label="Machine"><div className="relative"><Truck size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-cyan-400" /><select value={selectedMachine} onChange={(event) => { setSelectedMachine(event.target.value); if (event.target.value!== "Other Machine") { setOtherMachine(""); } }} className={`${inputClass} cursor-pointer appearance-none pl-11`}><option value="">Select Machine</option>{machines.map((machine) => (<option key={machine} value={machine}>{machine}</option>))}</select></div></Field>
+              <Field label="Date"><div className="relative"><CalendarDays size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-cyan-400" /><input type="date" value={date} onChange={(event) => setDate(event.target.value)} className={`${inputClass} pl-11`} /></div></Field>
             </div>
-            {selectedMachine === "Other Machine" && (<Field label="Machine Name"><input type="text" value={otherMachine} onChange={(e) => setOtherMachine(e.target.value)} placeholder="Enter machine name" className={inputClass} /></Field>)}
+            {selectedMachine === "Other Machine" && (<Field label="Machine Name"><input type="text" value={otherMachine} onChange={(event) => setOtherMachine(event.target.value)} placeholder="Enter machine name" className={inputClass} /></Field>)}
             <div className="grid gap-6 md:grid-cols-3">
-              <Field label="Diesel Quantity (L)"><div className="relative"><Droplets size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-cyan-400" /><input type="number" min="0" step="0.01" value={diesel} onChange={(e) => setDiesel(e.target.value)} placeholder="0.00" className={`${inputClass} pl-11`} /></div></Field>
-              <Field label="Payable Amount (Rs.)"><input type="number" min="0" step="0.01" value={payable} onChange={(e) => setPayable(e.target.value)} placeholder="0.00" className={inputClass} /></Field>
-              <Field label="Paid Amount (Rs.)"><input type="number" min="0" step="0.01" value={paid} onChange={(e) => setPaid(e.target.value)} placeholder="0.00" className={inputClass} /></Field>
+              <Field label="Diesel Quantity (L)"><div className="relative"><Droplets size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-cyan-400" /><input type="number" min="0" step="0.01" value={diesel} onChange={(event) => setDiesel(event.target.value)} placeholder="0.00" className={`${inputClass} pl-11`} /></div></Field>
+              <Field label="Payable Amount (Rs.)"><input type="number" min="0" step="0.01" value={payable} onChange={(event) => setPayable(event.target.value)} placeholder="0.00" className={inputClass} /></Field>
+              <Field label="Paid Amount (Rs.)"><input type="number" min="0" step="0.01" value={paid} onChange={(event) => setPaid(event.target.value)} placeholder="0.00" className={inputClass} /></Field>
             </div>
             <div className="grid gap-5 border-t border-slate-700/80 pt-6 md:grid-cols-2">
-              <CalculationCard title="Amount" value={`Rs. ${formatNumber(formAmountDisplay)}`} description={formPayableVal === 0? "No amount entered - shows total" : "Total payable amount"} icon={<Wallet size={19} />} color="blue" />
+              <CalculationCard title="Amount" value={`Rs. ${formatNumber(formAmount)}`} description="Total payable amount" icon={<Wallet size={19} />} color="blue" />
               <CalculationCard title="Remaining Balance" value={`Rs. ${formatNumber(formBalanceDisplay)}`} description="Payable − Paid" icon={<CreditCard size={19} />} color="red" />
             </div>
-            <div className="flex justify-end border-t border-slate-700/80 pt-6"><button type="submit" disabled={saving} className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-cyan-600 px-7 text-sm font-bold transition hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-60">{saving? <RefreshCw size={18} className="animate-spin" /> : <Plus size={18} />}{saving? "Saving..." : "Save Diesel Expense"}</button></div>
+            <div className="flex justify-end border-t border-slate-700/80 pt-6"><button type="submit" disabled={saving} className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-cyan-600 px-7 text-sm font-bold transition hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-60">{saving? (<RefreshCw size={18} className="animate-spin" />) : (<Plus size={18} />)}{saving? "Saving..." : "Save Diesel Expense"}</button></div>
           </form>
         </section>
 
@@ -195,7 +178,6 @@ export default function DieselExpensesPage() {
     </main>
   );
 }
-
 function SummaryCard({ title, subtitle, value, icon, color }: { title: string; subtitle: string; value: string; icon: React.ReactNode; color: CardColor; }) {
   const styles: Record<CardColor, { border: string; icon: string; value: string }> = { cyan: { border: "border-cyan-500/25 hover:border-cyan-400/50", icon: "bg-cyan-500/10 text-cyan-400", value: "text-cyan-300" }, blue: { border: "border-blue-500/25 hover:border-blue-400/50", icon: "bg-blue-500/10 text-blue-400", value: "text-blue-300" }, orange: { border: "border-orange-500/25 hover:border-orange-400/50", icon: "bg-orange-500/10 text-orange-400", value: "text-orange-300" }, green: { border: "border-green-500/25 hover:border-green-400/50", icon: "bg-green-500/10 text-green-400", value: "text-green-300" }, red: { border: "border-red-500/25 hover:border-red-400/50", icon: "bg-red-500/10 text-red-400", value: "text-red-300" } };
   const selected = styles[color];
@@ -206,5 +188,5 @@ function CalculationCard({ title, value, description, icon, color }: { title: st
   const selected = styles[color];
   return (<div className={`rounded-2xl border ${selected.border} ${selected.background} p-5`}><div className="flex items-center justify-between"><span className="text-sm font-semibold text-slate-300">{title}</span><span className={selected.icon}>{icon}</span></div><p className={`mt-3 text-2xl font-bold ${selected.value}`}>{value}</p><p className="mt-1 text-xs text-slate-500">{description}</p></div>);
 }
-function Field({ label, children }: { label: string; children: React.ReactNode; }) { return <label className="block"><span className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-400">{label}</span>{children}</label>; }
-function TableHeader({ children, align = "left" }: { children: React.ReactNode; align?: "left" | "right" | "center"; }) { const alignment = { left: "text-left", right: "text-right", center: "text-center" }; return <th className={`px-5 py-4 text-xs font-bold uppercase tracking-wider text-slate-400 ${alignment[align]}`}>{children}</th>; }
+function Field({ label, children }: { label: string; children: React.ReactNode; }) { return (<label className="block"><span className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-400">{label}</span>{children}</label>); }
+function TableHeader({ children, align = "left" }: { children: React.ReactNode; align?: "left" | "right" | "center"; }) { const alignment = { left: "text-left", right: "text-right", center: "text-center" }; return (<th className={`px-5 py-4 text-xs font-bold uppercase tracking-wider text-slate-400 ${alignment[align]}`}>{children}</th>); }

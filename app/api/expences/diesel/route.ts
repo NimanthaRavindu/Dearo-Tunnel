@@ -65,35 +65,32 @@ export async function GET(request: NextRequest) {
 
     const dieselUsed = Number(expense.dieselUsed || 0);
     const amountUsed = Number(expense.amountUsed || 0);
-    const totalDiesel = Number(stock.totalDiesel || 0);
-    const totalAmount = Number(stock.totalAmount || 0);
+    const totalDiesel = Number(stock.totalDiesel || 331);
+    const totalAmount = Number(stock.totalAmount || 317000);
 
-    // === FINAL LOGIC ===
-    // totalDiesel / totalAmount = INITIAL STOCK (331 / 317000)
-    // dieselUsed / amountUsed = DB eken SUM karapu pramanaya
-    // 0 vita witharai wenas wenne - nathnam ehemama thiyenawa
+    // === FINAL LOGIC - OYA ILLAPU WIDIYATA ===
+    // Diesel Used = total use karapu pramanaya (331 wage)
+    // Remaining = initial - used. 0 unama ayeth initial pennanawa
+    const rawRemainingDiesel = totalDiesel - dieselUsed;
+    const rawRemainingBalance = totalAmount - amountUsed;
 
-    // Diesel Used card eke agaya 0 nam witharai Remaining wenas wenna ona
-    const remainingDiesel = totalDiesel === 0 || dieselUsed === 0
-     ? totalDiesel
-      : Math.max(0, totalDiesel - dieselUsed);
-
-    // Total Amount card eke count eka 0.00 nam witharai Remaining Balance ekathu wenna ona
-    const remainingBalance = totalAmount === 0 || amountUsed === 0
-     ? totalAmount
-      : Math.max(0, totalAmount - amountUsed);
+    const remainingDiesel = rawRemainingDiesel <= 0? totalDiesel : rawRemainingDiesel;
+    const remainingBalance = rawRemainingBalance <= 0? totalAmount : rawRemainingBalance;
 
     return NextResponse.json({
       expenses,
       summary: {
-        dieselUsed: totalDiesel === 0? 0 : Math.max(0, totalDiesel - dieselUsed), // Diesel Used card eke pennanne ithuru tika
-        amountUsed: totalAmount === 0? 0 : Math.max(0, totalAmount - amountUsed), // Total Amount card eke pennanne ithuru tika
+        dieselUsed: dieselUsed, // Uda card eke pennanne meka - 0 wenne na
+        amountUsed: amountUsed,
         totalDiesel,
         totalAmount,
         remainingDiesel,
         remainingBalance,
         initialDieselStock: totalDiesel,
         initialTotalAmount: totalAmount,
+        // Pahala check karanna
+        rawRemainingDiesel,
+        rawRemainingBalance,
       },
     });
   } catch (error) {
@@ -133,7 +130,7 @@ export async function POST(request: NextRequest) {
 
     connection = await mysql.createConnection(dbConfig);
 
-    // FIX: diesel_stock eka update karanne na - initial stock eka ehemama thiyenawa
+    // diesel_stock eka update karanne na - initial eka ehemama thiyenawa
     // Wenas wenne diesel_expenses table eke witharai
     const [result] = await connection.execute(
       `
@@ -165,14 +162,12 @@ export async function DELETE(request: NextRequest) {
     }
 
     connection = await mysql.createConnection(dbConfig);
-
     const [result] = await connection.execute("DELETE FROM diesel_expenses WHERE id =?", [id]);
 
     if ((result as mysql.ResultSetHeader).affectedRows === 0) {
       return NextResponse.json({ error: "Expense record not found" }, { status: 404 });
     }
 
-    // FIX: stock eka wadi karanna / adu karanna ona na
     return NextResponse.json({ message: "Diesel expense deleted successfully" });
   } catch (error) {
     console.error("DELETE DIESEL EXPENSE ERROR:", error);
