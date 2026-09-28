@@ -47,7 +47,6 @@ export default function DieselExpensesPage() {
   useEffect(() => { if (branchId) loadExpenses(); }, [branchId]);
   const resetForm = () => { setSelectedMachine(""); setOtherMachine(""); setDate(""); setDiesel(""); setPayable(""); setPaid(""); };
 
-  // === FINAL FIXED CALCULATION ===
   const formPayable = numberValue(payable);
   const formPaid = numberValue(paid);
   const formDieselQty = numberValue(diesel);
@@ -67,20 +66,13 @@ export default function DieselExpensesPage() {
   const activeDieselUsed = isFiltered? filteredDieselTotal : totalUsedDieselFromList;
   const activeAmountUsed = isFiltered? filteredAmountTotal : totalUsedAmountFromList;
 
-  // 1. Uda cards - DB eken ena values
-  // Diesel Used eka 0 pennanne na, use karapu agaya pennanawa
-  const dieselUsedDisplay = activeDieselUsed;
-  const totalAmountDisplay = Math.max(0, initialTotalAmount - activeAmountUsed);
-
-  // 2. Remaining cards - Form eke agaya type karana kota adu wenawa
-  // Oya illapu widiyata 0 vu pasu initial agaya pennanawa
+  // === FINAL FIX - OYA ILLAPU WIDIYATA 0 UNAMA INITIAL PENNANWA ===
+  const dieselUsedDisplay = activeDieselUsed <= 0? initialDieselStock : activeDieselUsed;
+  const totalAmountDisplay = activeAmountUsed <= 0? initialTotalAmount : Math.max(0, initialTotalAmount - activeAmountUsed);
   const rawRemainingDiesel = initialDieselStock - activeDieselUsed - formDieselQty;
   const remainingDiesel = rawRemainingDiesel <= 0? initialDieselStock : rawRemainingDiesel;
-
   const rawRemainingBalance = initialTotalAmount - activeAmountUsed - formBalance;
   const remainingBalance = rawRemainingBalance <= 0? initialTotalAmount : rawRemainingBalance;
-
-  // 3. Pahala cards - 0 nam 0.00 thamai, initial enne na
   const formAmount = formPayable;
   const formBalanceDisplay = formBalance;
 
@@ -131,7 +123,6 @@ export default function DieselExpensesPage() {
           <div className="flex items-center gap-4"><div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400 ring-1 ring-cyan-400/20"><Fuel size={29} /></div><div><p className="mb-1 text-xs font-bold uppercase tracking-widest text-cyan-400">Expense Management</p><h1 className="text-2xl font-bold md:text-3xl">Diesel Expenses</h1><p className="mt-1 text-sm text-slate-400">Manage machine-wise diesel usage and payments</p></div></div>
           <button type="button" onClick={loadExpenses} disabled={loading} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-600 bg-slate-800 px-5 text-sm font-bold transition hover:bg-slate-700 disabled:opacity-60"><RefreshCw size={17} className={loading? "animate-spin" : ""} />{loading? "Refreshing..." : "Refresh"}</button>
         </header>
-
         <section className="rounded-3xl border border-slate-700/80 bg-slate-900 p-5 shadow-xl">
           <div className="mb-4 flex items-center justify-between"><div><h2 className="text-sm font-bold uppercase tracking-wide">Filter Records</h2><p className="mt-1 text-xs text-slate-500">View records by date and machine</p></div>{isFiltered && <span className="rounded-full bg-cyan-500/10 px-3 py-1 text-xs font-semibold text-cyan-400">Filter active</span>}</div>
           <div className="grid gap-4 md:grid-cols-[1fr_1fr_auto]">
@@ -140,15 +131,13 @@ export default function DieselExpensesPage() {
             <button type="button" onClick={() => { setFilterDate(""); setFilterMachine(""); }} className="h-12 self-end rounded-xl border border-slate-600 bg-slate-800 px-5 text-sm font-bold transition hover:bg-slate-700">Clear Filters</button>
           </div>
         </section>
-
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <SummaryCard title="Diesel Used" subtitle={isFiltered? "Filtered usage" : "Total used"} value={`${formatNumber(dieselUsedDisplay)} L`} icon={<Droplets size={22} />} color="cyan" />
-          <SummaryCard title="Total Amount" subtitle={isFiltered? "Filtered balance" : "Remaining balance"} value={`Rs. ${formatNumber(totalAmountDisplay)}`} icon={<Wallet size={22} />} color="blue" />
-          <SummaryCard title="Remaining Diesel" subtitle={rawRemainingDiesel <=0? "Stock ended - shows initial" : "After form input"} value={`${formatNumber(remainingDiesel)} L`} icon={<Droplets size={22} />} color="orange" />
-          <SummaryCard title="Remaining Balance" subtitle={rawRemainingBalance <=0? "Balance ended - shows initial" : "After amount input"} value={`Rs. ${formatNumber(remainingBalance)}`} icon={<CreditCard size={22} />} color="green" />
+          <SummaryCard title="Diesel Used" subtitle={isFiltered? "Filtered usage" : "Initial stock / Total used"} value={`${formatNumber(dieselUsedDisplay)} L`} icon={<Droplets size={22} />} color="cyan" />
+          <SummaryCard title="Total Amount" subtitle={isFiltered? "Filtered amount" : "Initial / Remaining balance"} value={`Rs. ${formatNumber(totalAmountDisplay)}`} icon={<Wallet size={22} />} color="blue" />
+          <SummaryCard title="Remaining Diesel" subtitle={rawRemainingDiesel <=0? "Shows initial" : "After form input"} value={`${formatNumber(remainingDiesel)} L`} icon={<Droplets size={22} />} color="orange" />
+          <SummaryCard title="Remaining Balance" subtitle={rawRemainingBalance <=0? "Shows initial" : "After amount input"} value={`Rs. ${formatNumber(remainingBalance)}`} icon={<CreditCard size={22} />} color="green" />
           <SummaryCard title="Total Diesel" subtitle="Initial stock" value={`${formatNumber(initialDieselStock)} L`} icon={<AlertCircle size={22} />} color="red" />
         </section>
-
         <section className="overflow-hidden rounded-3xl border border-slate-700/80 bg-slate-900 shadow-2xl">
           <div className="border-b border-slate-700/80 bg-slate-800/30 px-6 py-5"><div className="flex items-center gap-4"><div className="flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-400 ring-1 ring-cyan-500/20"><Plus size={22} /></div><div><h2 className="text-xl font-bold">Add Diesel Expense</h2><p className="mt-1 text-sm text-slate-400">Enter machine usage and payment information</p></div></div></div>
           <form onSubmit={handleSubmit} className="space-y-7 p-6">
@@ -169,7 +158,6 @@ export default function DieselExpensesPage() {
             <div className="flex justify-end border-t border-slate-700/80 pt-6"><button type="submit" disabled={saving} className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-cyan-600 px-7 text-sm font-bold transition hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-60">{saving? (<RefreshCw size={18} className="animate-spin" />) : (<Plus size={18} />)}{saving? "Saving..." : "Save Diesel Expense"}</button></div>
           </form>
         </section>
-
         <section className="overflow-hidden rounded-3xl border border-slate-700/80 bg-slate-900 shadow-2xl">
           <div className="flex flex-col justify-between gap-4 border-b border-slate-700/80 p-5 md:flex-row md:items-center md:p-6"><div><h2 className="text-xl font-bold">Diesel Expense Records</h2><p className="mt-1 text-sm text-slate-400">Filtered machine-wise expense records</p></div><div className="rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-bold text-slate-300">{filteredExpenses.length} Records</div></div>
           <div className="overflow-x-auto"><table className="w-full min-w-[1050px]"><thead className="bg-slate-800/80"><tr className="border-b border-slate-700 text-left"><TableHeader>Date</TableHeader><TableHeader>Machine</TableHeader><TableHeader align="right">Diesel (L)</TableHeader><TableHeader align="right">Amount</TableHeader><TableHeader align="right">Payable</TableHeader><TableHeader align="right">Paid</TableHeader><TableHeader align="right">Balance</TableHeader><TableHeader align="center">Action</TableHeader></tr></thead><tbody>{loading? (<tr><td colSpan={8} className="px-5 py-14 text-center text-sm text-slate-400"><RefreshCw size={18} className="mx-auto animate-spin text-cyan-400" /></td></tr>) : filteredExpenses.length === 0? (<tr><td colSpan={8} className="px-5 py-14 text-center"><Fuel size={30} className="mx-auto mb-3 text-slate-600" /><p className="font-semibold text-slate-300">No diesel expenses found</p><p className="mt-1 text-sm text-slate-500">Add a new expense or change the filters.</p></td></tr>) : (filteredExpenses.map((item) => { const itemPayable = numberValue(item.payable); const itemPaid = numberValue(item.paid); const itemAmount = itemPayable; const itemBalance = Math.max(0, itemPayable - itemPaid); return (<tr key={item.id} className="border-b border-slate-800 transition hover:bg-slate-800/50"><td className="px-5 py-4 text-sm text-slate-300">{item.date? new Date(`${item.date.slice(0, 10)}T00:00:00`).toLocaleDateString("en-GB") : "-"}</td><td className="px-5 py-4"><div className="flex items-center gap-3"><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-400"><Truck size={15} /></span><span className="font-semibold text-slate-200">{item.machine}</span></div></td><td className="px-5 py-4 text-right text-sm font-semibold text-slate-300">{formatNumber(item.diesel)}</td><td className="px-5 py-4 text-right text-sm font-bold text-blue-400">Rs. {formatNumber(itemAmount)}</td><td className="px-5 py-4 text-right text-sm font-bold text-orange-400">Rs. {formatNumber(itemPayable)}</td><td className="px-5 py-4 text-right text-sm font-bold text-green-400">Rs. {formatNumber(itemPaid)}</td><td className="px-5 py-4 text-right text-sm font-bold text-red-400">Rs. {formatNumber(itemBalance)}</td><td className="px-5 py-4 text-center"><button type="button" onClick={() => handleDelete(item.id)} title="Delete expense" className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-500/20 bg-red-500/10 text-red-400 transition hover:bg-red-500/20"><Trash2 size={16} /></button></td></tr>); }))}</tbody></table></div>
