@@ -66,13 +66,22 @@ export default function DieselExpensesPage() {
   const activeDieselUsed = isFiltered? filteredDieselTotal : totalUsedDieselFromList;
   const activeAmountUsed = isFiltered? filteredAmountTotal : totalUsedAmountFromList;
 
-  // === FIXED - OYA ILLAPU WIDIYATA INITIAL VALUES PENNANWA ===
-  const dieselUsedDisplay = activeDieselUsed <= 0? initialDieselStock : activeDieselUsed;
-  const totalAmountDisplay = initialTotalAmount; // FIXED: Rs.0.00 nathuwa initial 317000 pennanwa
-  const rawRemainingDiesel = initialDieselStock - activeDieselUsed - formDieselQty;
-  const remainingDiesel = rawRemainingDiesel <= 0? initialDieselStock : rawRemainingDiesel;
-  const rawRemainingBalance = initialTotalAmount - activeAmountUsed - formBalance;
-  const remainingBalance = rawRemainingBalance <= 0? initialTotalAmount : rawRemainingBalance;
+  // === FINAL FIX - DIESEL USED ADU WENNE NA ===
+  const dieselUsedDisplay = activeDieselUsed; // 86L - form eken adu wenne na
+  const totalAmountDisplay = initialTotalAmount; // 317000 - form eken adu wenne na
+
+  // Remaining = Total Stock - Used - Form Input (ithuru gana)
+  const baseRemainingDiesel = initialDieselStock - activeDieselUsed; // 331 - 86 = 245
+  const baseRemainingBalance = initialTotalAmount - activeAmountUsed; // 317k - 110k = 207k
+
+  const rawDisplayRemainingDiesel = baseRemainingDiesel - formDieselQty; // 245 - form
+  const rawDisplayRemainingBalance = baseRemainingBalance - formPayable; // 207k - form
+
+  // Form eke value eka nathnam pera ithuru gana, thiyenawanam adu karala ithuru gana
+  // 0 unama pera thibu sampurna ithuru gana enawa
+  const displayRemainingDiesel = formDieselQty > 0? (rawDisplayRemainingDiesel < 0? 0 : rawDisplayRemainingDiesel) : baseRemainingDiesel;
+  const displayRemainingBalance = formPayable > 0? (rawDisplayRemainingBalance < 0? 0 : rawDisplayRemainingBalance) : baseRemainingBalance;
+
   const formAmount = formPayable;
   const formBalanceDisplay = formBalance;
 
@@ -132,10 +141,10 @@ export default function DieselExpensesPage() {
           </div>
         </section>
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <SummaryCard title="Diesel Used" subtitle={isFiltered? "Filtered usage" : "Initial stock / Total used"} value={`${formatNumber(dieselUsedDisplay)} L`} icon={<Droplets size={22} />} color="cyan" />
+          <SummaryCard title="Diesel Used" subtitle="Total used - fix" value={`${formatNumber(dieselUsedDisplay)} L`} icon={<Droplets size={22} />} color="cyan" />
           <SummaryCard title="Total Amount" subtitle="Initial amount" value={`Rs. ${formatNumber(totalAmountDisplay)}`} icon={<Wallet size={22} />} color="blue" />
-          <SummaryCard title="Remaining Diesel" subtitle={rawRemainingDiesel <=0? "Shows initial" : "After form input"} value={`${formatNumber(remainingDiesel)} L`} icon={<Droplets size={22} />} color="orange" />
-          <SummaryCard title="Remaining Balance" subtitle={rawRemainingBalance <=0? "Shows initial" : "After amount input"} value={`Rs. ${formatNumber(remainingBalance)}`} icon={<CreditCard size={22} />} color="green" />
+          <SummaryCard title="Remaining Diesel" subtitle="Stock - Used - Form" value={`${formatNumber(displayRemainingDiesel)} L`} icon={<Droplets size={22} />} color="orange" />
+          <SummaryCard title="Remaining Balance" subtitle="Total - Used - Payable" value={`Rs. ${formatNumber(displayRemainingBalance)}`} icon={<CreditCard size={22} />} color="green" />
           <SummaryCard title="Total Diesel" subtitle="Initial stock" value={`${formatNumber(initialDieselStock)} L`} icon={<AlertCircle size={22} />} color="red" />
         </section>
         <section className="overflow-hidden rounded-3xl border border-slate-700/80 bg-slate-900 shadow-2xl">
