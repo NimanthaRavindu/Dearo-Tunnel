@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
         WHERE branch_id =?
         ORDER BY date DESC, id DESC
       `,
-      [branchId],
+      [branchId]
     );
 
     const [expenseRows] = await connection.execute(
@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
         FROM diesel_expenses
         WHERE branch_id =?
       `,
-      [branchId],
+      [branchId]
     );
 
     const [stockRows] = await connection.execute(
@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
         WHERE branch_id =?
         LIMIT 1
       `,
-      [branchId],
+      [branchId]
     );
 
     const expense = (expenseRows as any[])[0] || {};
@@ -65,32 +65,27 @@ export async function GET(request: NextRequest) {
 
     const dieselUsed = Number(expense.dieselUsed || 0);
     const amountUsed = Number(expense.amountUsed || 0);
-    const totalDiesel = Number(stock.totalDiesel || 331);
-    const totalAmount = Number(stock.totalAmount || 317000);
 
-    // === FINAL LOGIC - OYA ILLAPU WIDIYATA ===
-    // Diesel Used = total use karapu pramanaya (331 wage)
-    // Remaining = initial - used. 0 unama ayeth initial pennanawa
-    const rawRemainingDiesel = totalDiesel - dieselUsed;
-    const rawRemainingBalance = totalAmount - amountUsed;
+    // MULIN 0 - stock nathnam 0
+    const totalDiesel = Number(stock.totalDiesel || 0);
+    const totalAmount = Number(stock.totalAmount || 0);
 
-    const remainingDiesel = rawRemainingDiesel <= 0? totalDiesel : rawRemainingDiesel;
-    const remainingBalance = rawRemainingBalance <= 0? totalAmount : rawRemainingBalance;
+    // 0 VITHARAI LOGIC - professional
+    const remainingDiesel = Math.max(0, totalDiesel - dieselUsed);
+    const remainingBalance = Math.max(0, totalAmount - amountUsed);
 
     return NextResponse.json({
       expenses,
       summary: {
-        dieselUsed: dieselUsed, // Uda card eke pennanne meka - 0 wenne na
-        amountUsed: amountUsed,
-        totalDiesel,
-        totalAmount,
-        remainingDiesel,
+        dieselUsed,
+        amountUsed,
+        totalDiesel, // Initial - mulin 0, Add karama 331
+        totalAmount, // Initial Amount - mulin 0, Add karama 317000
+        remainingDiesel, // total - used = 0 vitharai
         remainingBalance,
         initialDieselStock: totalDiesel,
         initialTotalAmount: totalAmount,
-        // Pahala check karanna
-        rawRemainingDiesel,
-        rawRemainingBalance,
+        isInitialSet: totalDiesel > 0,
       },
     });
   } catch (error) {
@@ -105,9 +100,42 @@ export async function POST(request: NextRequest) {
   let connection: mysql.Connection | undefined;
   try {
     const body = await request.json();
-    const { branch_id: branchId, date, machine, diesel, payable, paid } = body;
+    const { branch_id: branchId, date, machine, diesel, payable, paid, initialDiesel, initialAmount, action } = body;
 
-    if (!branchId ||!date ||!machine || diesel === undefined || payable === undefined || paid === undefined) {
+    if (!branchId) {
+      return NextResponse.json({ error: "branch_id is required" }, { status: 400 });
+    }
+
+    connection = await mysql.createConnection(dbConfig);
+
+    // === INITIAL STOCK SET KARANA ACTION ===
+    if (action === "set_initial") {
+      const d = Number(initialDiesel);
+      const a = Number(initialAmount);
+      if (!d || d <= 0) {
+        return NextResponse.json({ error: "Valid initial diesel required" }, { status: 400 });
+      }
+      if (!Number.isFinite(a) || a < 0) {
+        return NextResponse.json({ error: "Valid initial amount required" }, { status: 400 });
+      }
+
+      await connection.execute(
+        `
+          INSERT INTO diesel_stock (branch_id, total_diesel, total_amount)
+          VALUES (?,?,?)
+          ON DUPLICATE KEY UPDATE total_diesel = VALUES(total_diesel), total_amount = VALUES(total_amount)
+        `,
+        [branchId, d, a]
+      );
+
+      return NextResponse.json(
+        { message: "Initial stock set successfully", totalDiesel: d, totalAmount: a },
+        { status: 200 }
+      );
+    }
+
+    // === NORMAL EXPENSE SAVE ===
+    if (!date ||!machine || diesel === undefined || payable === undefined || paid === undefined) {
       return NextResponse.json({ error: "All required fields must be provided" }, { status: 400 });
     }
 
@@ -115,35 +143,28 @@ export async function POST(request: NextRequest) {
     const payableValue = Number(payable);
     const paidValue = Number(paid);
 
-    if (!Number.isFinite(dieselValue) ||!Number.isFinite(payableValue) ||!Number.isFinite(paidValue)) {
-      return NextResponse.json({ error: "Invalid numeric values" }, { status: 400 });
-    }
-    if (dieselValue <= 0) {
+    if (!Number.isFinite(dieselValue) || dieselValue <= 0) {
       return NextResponse.json({ error: "Diesel quantity must be greater than 0" }, { status: 400 });
     }
-    if (payableValue < 0 || paidValue < 0) {
-      return NextResponse.json({ error: "Payable and paid values cannot be negative" }, { status: 400 });
+    if (!Number.isFinite(payableValue) ||!Number.isFinite(paidValue)) {
+      return NextResponse.json({ error: "Invalid numeric values" }, { status: 400 });
     }
     if (paidValue > payableValue) {
       return NextResponse.json({ error: "Paid cannot be greater than payable" }, { status: 400 });
     }
 
-    connection = await mysql.createConnection(dbConfig);
-
-    // diesel_stock eka update karanne na - initial eka ehemama thiyenawa
-    // Wenas wenne diesel_expenses table eke witharai
     const [result] = await connection.execute(
       `
         INSERT INTO diesel_expenses
           (branch_id, date, machine, diesel, amount, payable, paid)
         VALUES (?,?,?,?,?,?,?)
       `,
-      [branchId, date, machine, dieselValue, payableValue, payableValue, paidValue],
+      [branchId, date, machine, dieselValue, payableValue, payableValue, paidValue]
     );
 
     return NextResponse.json(
       { message: "Diesel expense saved successfully", id: (result as mysql.ResultSetHeader).insertId },
-      { status: 201 },
+      { status: 201 }
     );
   } catch (error) {
     console.error("POST DIESEL EXPENSE ERROR:", error);
