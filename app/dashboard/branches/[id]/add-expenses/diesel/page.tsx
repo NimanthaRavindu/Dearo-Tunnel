@@ -66,34 +66,14 @@ export default function DieselExpensesPage() {
   const activeDieselUsed = isFiltered? filteredDieselTotal : totalUsedDieselFromList;
   const activeAmountUsed = isFiltered? filteredAmountTotal : totalUsedAmountFromList;
 
-  // === FINAL LOGIC - SUBMIT KALAMA ADU WELA 0 UNOTH PERA AGAYA ===
-
-  // Base ithuru gana (DB eken)
-  const baseRemainingDiesel = initialDieselStock - activeDieselUsed; // 331 - 86 = 245
+  // === FINAL - 0 VITHARAI PENNANA ===
+  const baseRemainingDiesel = initialDieselStock - activeDieselUsed;
   const baseRemainingAmount = initialTotalAmount - activeAmountUsed;
 
-  // Preview + Submit logic eka ekata
-  // Diesel Used card eke - ithuru gana pennanawa, form eke gahaddi preview, submit kalama DB eken adu wela enawa
-  let dieselUsedDisplay: number;
-  const previewRemainingDiesel = baseRemainingDiesel - formDieselQty;
-  if (formDieselQty > 0) {
-    // type karana welawata preview
-    dieselUsedDisplay = previewRemainingDiesel <= 0? initialDieselStock : previewRemainingDiesel;
-  } else {
-    // form eke na - DB eken ena ithuru gana, 0 unoth pera sampurna gana
-    dieselUsedDisplay = baseRemainingDiesel <= 0? initialDieselStock : baseRemainingDiesel;
-  }
+  // Diesel Used + Total Amount deka ma form eken adu wela 0 vitharai pennanawa
+  const dieselUsedDisplay = Math.max(0, baseRemainingDiesel - formDieselQty);
+  const totalAmountDisplay = Math.max(0, baseRemainingAmount - formPayable);
 
-  // Total Amount card eke
-  let totalAmountDisplay: number;
-  const previewRemainingAmount = baseRemainingAmount - formPayable;
-  if (formPayable > 0) {
-    totalAmountDisplay = previewRemainingAmount <= 0? initialTotalAmount : previewRemainingAmount;
-  } else {
-    totalAmountDisplay = baseRemainingAmount <= 0? initialTotalAmount : baseRemainingAmount;
-  }
-
-  // Remaining cards (same logic)
   const displayRemainingDiesel = dieselUsedDisplay;
   const displayRemainingBalance = totalAmountDisplay;
 
@@ -117,7 +97,7 @@ export default function DieselExpensesPage() {
       const response = await fetch("/api/expences/diesel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ branch_id: branchId, date, machine: machineName, diesel: dieselValue, payable: payableValue, paid: paidValue }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error || "Failed to save diesel expense");
-      resetForm(); await loadExpenses(); // submit kalama DB eken adu wela enawa
+      resetForm(); await loadExpenses();
     } catch (error) {
       console.error("SAVE DIESEL EXPENSE ERROR:", error);
       alert(error instanceof Error? error.message : "Failed to save diesel expense");
@@ -156,8 +136,8 @@ export default function DieselExpensesPage() {
           </div>
         </section>
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <SummaryCard title="Diesel Used" subtitle="331 - Used - Form (ithuru)" value={`${formatNumber(dieselUsedDisplay)} L`} icon={<Droplets size={22} />} color="cyan" />
-          <SummaryCard title="Total Amount" subtitle="317k - Used - Form (ithuru)" value={`Rs. ${formatNumber(totalAmountDisplay)}`} icon={<Wallet size={22} />} color="blue" />
+          <SummaryCard title="Diesel Used" subtitle="Ithuru - Form = 0 vitharai" value={`${formatNumber(dieselUsedDisplay)} L`} icon={<Droplets size={22} />} color="cyan" />
+          <SummaryCard title="Total Amount" subtitle="Ithuru - Form = 0 vitharai" value={`Rs. ${formatNumber(totalAmountDisplay)}`} icon={<Wallet size={22} />} color="blue" />
           <SummaryCard title="Remaining Diesel" subtitle="Same as Diesel Used" value={`${formatNumber(displayRemainingDiesel)} L`} icon={<Droplets size={22} />} color="orange" />
           <SummaryCard title="Remaining Balance" subtitle="Same as Total Amount" value={`Rs. ${formatNumber(displayRemainingBalance)}`} icon={<CreditCard size={22} />} color="green" />
           <SummaryCard title="Total Diesel" subtitle="Initial stock" value={`${formatNumber(initialDieselStock)} L`} icon={<AlertCircle size={22} />} color="red" />
