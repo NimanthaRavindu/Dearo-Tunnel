@@ -14,19 +14,16 @@ export async function GET(request: NextRequest) {
   try {
     const branchId = new URL(request.url).searchParams.get("branch_id");
     if (!branchId) return NextResponse.json({ error: "branch_id is required" }, { status: 400 });
-
     connection = await mysql.createConnection(dbConfig);
 
     const [expenses] = await connection.execute(
       `SELECT id, branch_id, DATE_FORMAT(date, '%Y-%m-%d') AS date, machine, diesel, amount, payable, paid
        FROM diesel_expenses WHERE branch_id =? ORDER BY date DESC, id DESC`, [branchId]
     );
-
     const [expenseRows] = await connection.execute(
-      `SELECT COALESCE(SUM(diesel),0) AS dieselUsed, COALESCE(SUM(payable),0) AS amountUsed
+      `SELECT COALESCE(SUM(diesel),0) AS dieselUsed, COALESCE(SUM(payable),0) AS amountUsed, COALESCE(SUM(paid),0) AS paidUsed
        FROM diesel_expenses WHERE branch_id =?`, [branchId]
     );
-
     const [stockRows] = await connection.execute(
       `SELECT COALESCE(total_diesel,0) AS totalDiesel, COALESCE(total_amount,0) AS totalAmount
        FROM diesel_stock WHERE branch_id =? LIMIT 1`, [branchId]
@@ -34,23 +31,25 @@ export async function GET(request: NextRequest) {
 
     const expense = (expenseRows as any[])[0] || {};
     const stock = (stockRows as any[])[0] || {};
-
     const dieselUsed = Number(expense.dieselUsed || 0);
     const amountUsed = Number(expense.amountUsed || 0);
     const totalDiesel = Number(stock.totalDiesel || 0);
     const totalAmount = Number(stock.totalAmount || 0);
 
+    // Remaining = Initial - Used, minus na 0 ta clamp
     const remainingDiesel = Math.max(0, totalDiesel - dieselUsed);
-    const remainingBalance = Math.max(0, totalAmount - amountUsed);
+    const remainingAmount = Math.max(0, totalAmount - amountUsed);
+    const remainingBalance = Math.max(0, amountUsed - Number(expense.paidUsed||0));
 
     return NextResponse.json({
       expenses,
       summary: {
         dieselUsed,
         amountUsed,
-        totalDiesel, // Initial Add kalama Diesel Used card ekata add wenawa
-        totalAmount, // Initial Add kalama Total Amount card ekata add wenawa
-        remainingDiesel, // Submit kalama adu wenawa
+        totalDiesel,
+        totalAmount,
+        remainingDiesel,
+        remainingAmount,
         remainingBalance,
         initialDieselStock: totalDiesel,
         initialTotalAmount: totalAmount,
@@ -69,14 +68,11 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { branch_id: branchId, date, machine, diesel, payable, paid, initialDiesel, initialAmount, action } = body;
     if (!branchId) return NextResponse.json({ error: "branch_id is required" }, { status: 400 });
-
     connection = await mysql.createConnection(dbConfig);
 
     if (action === "set_initial") {
-      const d = Number(initialDiesel);
-      const a = Number(initialAmount);
+      const d = Number(initialDiesel); const a = Number(initialAmount);
       if (!d || d <= 0) return NextResponse.json({ error: "Valid initial diesel required" }, { status: 400 });
-
       await connection.execute(
         `INSERT INTO diesel_stock (branch_id, total_diesel, total_amount)
          VALUES (?,?,?) ON DUPLICATE KEY UPDATE total_diesel=VALUES(total_diesel), total_amount=VALUES(total_amount)`,
@@ -88,18 +84,13 @@ export async function POST(request: NextRequest) {
     if (!date ||!machine || diesel === undefined || payable === undefined || paid === undefined) {
       return NextResponse.json({ error: "All fields required" }, { status: 400 });
     }
-
-    const dieselValue = Number(diesel);
-    const payableValue = Number(payable);
-    const paidValue = Number(paid);
-
+    const dieselValue = Number(diesel); const payableValue = Number(payable); const paidValue = Number(paid);
     if (paidValue > payableValue) return NextResponse.json({ error: "Paid > Payable" }, { status: 400 });
 
     const [result] = await connection.execute(
       `INSERT INTO diesel_expenses (branch_id, date, machine, diesel, amount, payable, paid) VALUES (?,?,?,?,?,?,?)`,
       [branchId, date, machine, dieselValue, payableValue, payableValue, paidValue]
     );
-
     return NextResponse.json({ message: "Saved", id: (result as mysql.ResultSetHeader).insertId }, { status: 201 });
   } catch (error) {
     console.error("POST DIESEL ERROR:", error);
