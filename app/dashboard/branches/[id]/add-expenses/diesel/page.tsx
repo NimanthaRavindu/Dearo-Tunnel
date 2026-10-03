@@ -57,9 +57,10 @@ export default function DieselExpensesPage() {
 
   const totalUsedDiesel = useMemo(() => expenses.reduce((s, i) => s + numberValue(i.diesel), 0), [expenses]);
   const totalPayable = useMemo(() => expenses.reduce((s, i) => s + numberValue(i.payable), 0), [expenses]);
-
+  const totalPaid = useMemo(() => expenses.reduce((s, i) => s + numberValue(i.paid), 0), [expenses]);
   const fDiesel = useMemo(() => filteredExpenses.reduce((s, i) => s + numberValue(i.diesel), 0), [filteredExpenses]);
   const fPayable = useMemo(() => filteredExpenses.reduce((s, i) => s + numberValue(i.payable), 0), [filteredExpenses]);
+  const fPaid = useMemo(() => filteredExpenses.reduce((s, i) => s + numberValue(i.paid), 0), [filteredExpenses]);
 
   const isFiltered = Boolean(filterDate || filterMachine);
   const activeDieselUsed = isFiltered? fDiesel : totalUsedDiesel;
@@ -70,15 +71,21 @@ export default function DieselExpensesPage() {
   const formPaid = numberValue(paid);
   const formBalance = Math.max(0, formPayable - formPaid);
 
-  // === FINAL LOGIC - OYA ILLAPU 2 MA ===
-  // 1. Total Diesel = Diesel Used + Remaining Diesel
-  const displayDieselUsed = activeDieselUsed + formDiesel; // 170 + form = submit kalama wadi
-  const displayRemainingDiesel = Math.max(0, initialDieselStock - activeDieselUsed - formDiesel); // 100 - form = submit kalama adu, minus na
-  const displayTotalDiesel = displayDieselUsed + displayRemainingDiesel; // 170+100=270 = Initial
+  // === FINAL FIX - OYA ONA WIDIYATA ADU WENNA ===
+  const displayTotalDiesel = initialDieselStock;
 
-  // 2. Remaining Balance = Total Amount ithuru
-  const displayTotalAmount = Math.max(0, initialTotalAmount - activePayable - formPayable); // 40000-20000=20000
-  const displayRemainingBalance = displayTotalAmount; // 20000 - oya illapu eka
+  // Base - Save kala passe thiyena agaya (adu wela)
+  const baseDieselRemaining = Math.max(0, initialDieselStock - activeDieselUsed);
+  const baseAmountRemaining = Math.max(0, initialTotalAmount - activePayable);
+
+  // Live - Form eke type karaddi ma card eken adu wenawa penna
+  const liveDieselRemaining = Math.max(0, initialDieselStock - activeDieselUsed - formDiesel);
+  const liveAmountRemaining = Math.max(0, initialTotalAmount - activePayable - formPayable);
+
+  const displayDieselUsed = formDiesel > 0? liveDieselRemaining : baseDieselRemaining;
+  const displayTotalAmount = formPayable > 0? liveAmountRemaining : baseAmountRemaining;
+  const displayRemainingDiesel = formDiesel > 0? liveDieselRemaining : baseDieselRemaining;
+  const balanceDisplay = Math.max(0, activePayable - (isFiltered? fPaid : totalPaid));
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -99,27 +106,27 @@ export default function DieselExpensesPage() {
       <div className="mx-auto max-w-7xl space-y-6">
         <button onClick={() => router.back()} className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-bold"><ArrowLeft size={16}/> Back</button>
         <header className="flex justify-between rounded-3xl border border-slate-700/80 bg-slate-900 p-5">
-          <div className="flex items-center gap-4"><div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400"><Fuel size={29}/></div><div><h1 className="text-2xl font-bold">Diesel Expenses</h1><p className="text-sm text-slate-400">Total Diesel = Used + Remaining | Remaining Balance = Total Amount ithura</p></div></div>
+          <div className="flex items-center gap-4"><div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400"><Fuel size={29}/></div><div><h1 className="text-2xl font-bold">Diesel Expenses</h1><p className="text-sm text-slate-400">Type karaddi ma card adu wenawa - Minus na</p></div></div>
           <button onClick={loadExpenses} className="h-11 inline-flex items-center gap-2 rounded-xl border border-slate-600 bg-slate-800 px-5 text-sm font-bold"><RefreshCw size={17} className={loading? "animate-spin" : ""}/>Refresh</button>
         </header>
         <section className="rounded-3xl border border-cyan-500/30 bg-slate-900 p-5">
-          <h2 className="text-sm font-bold uppercase mb-4 flex items-center gap-2"><PackagePlus size={18} className="text-cyan-400"/>INITIAL STOCK - ADD KALAMA WADI WENAWA</h2>
+          <h2 className="text-sm font-bold uppercase mb-4 flex items-center gap-2"><PackagePlus size={18} className="text-cyan-400"/>Initial Stock - Add kalama wadi wenawa</h2>
           <div className="grid gap-4 md:grid-cols-[1fr_1fr_auto]">
             <Field label="Initial Diesel (L)"><input type="number" value={tempInitialDiesel} onChange={e => setTempInitialDiesel(e.target.value)} placeholder="331" className={inputClass}/></Field>
             <Field label="Initial Amount (Rs.)"><input type="number" value={tempInitialAmount} onChange={e => setTempInitialAmount(e.target.value)} placeholder="317000" className={inputClass}/></Field>
             <button onClick={handleAddInitial} disabled={savingInitial} className="h-12 self-end inline-flex items-center gap-2 rounded-xl bg-cyan-600 px-6 font-bold">{savingInitial? <RefreshCw size={17} className="animate-spin"/> : <Save size={17}/>}Add</button>
           </div>
-          {isInitialSet && <p className="mt-3 text-xs text-green-400">✓ Initial: {initialDieselStock} L / Rs. {initialTotalAmount.toLocaleString()} | Used: {activeDieselUsed} L = Diesel Used + Remaining = Total Diesel | Payable: Rs. {activePayable.toLocaleString()}</p>}
+          {isInitialSet && <p className="mt-3 text-xs text-green-400">✓ Initial: {initialDieselStock} L / Rs. {initialTotalAmount.toLocaleString()} | Used: {totalUsedDiesel} L</p>}
         </section>
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <SummaryCard title="Diesel Used" subtitle="Actual Used + Form (170 L)" value={`${formatNumber(displayDieselUsed)} L`} icon={<Droplets size={22}/>} color="cyan"/>
-          <SummaryCard title="Total Amount" subtitle="Initial - Payable (ithura 20,000)" value={`Rs. ${formatNumber(displayTotalAmount)}`} icon={<Wallet size={22}/>} color="blue"/>
-          <SummaryCard title="Remaining Diesel" subtitle="Initial - Used - Form (100 L) minus na" value={`${formatNumber(displayRemainingDiesel)} L`} icon={<Droplets size={22}/>} color="orange"/>
-          <SummaryCard title="Remaining Balance" subtitle="Total Amount ithura (20,000)" value={`Rs. ${formatNumber(displayRemainingBalance)}`} icon={<CreditCard size={22}/>} color="green"/>
-          <SummaryCard title="Total Diesel" subtitle="Used + Remaining = 270 L" value={`${formatNumber(displayTotalDiesel)} L`} icon={<AlertCircle size={22}/>} color="red"/>
+          <SummaryCard title="Diesel Used" subtitle="Diesel Qty type karaddi adu" value={`${formatNumber(displayDieselUsed)} L`} icon={<Droplets size={22}/>} color="cyan"/>
+          <SummaryCard title="Total Amount" subtitle="Payable type karaddi adu" value={`Rs. ${formatNumber(displayTotalAmount)}`} icon={<Wallet size={22}/>} color="blue"/>
+          <SummaryCard title="Remaining Diesel" subtitle="Initial - Used - Form (minus na)" value={`${formatNumber(displayRemainingDiesel)} L`} icon={<Droplets size={22}/>} color="orange"/>
+          <SummaryCard title="Remaining Balance" subtitle="Payable - Paid" value={`Rs. ${formatNumber(balanceDisplay)}`} icon={<CreditCard size={22}/>} color="green"/>
+          <SummaryCard title="Total Diesel" subtitle="Initial stock" value={`${formatNumber(displayTotalDiesel)} L`} icon={<AlertCircle size={22}/>} color="red"/>
         </section>
         <section className="rounded-3xl border border-slate-700/80 bg-slate-900 overflow-hidden">
-          <div className="border-b border-slate-700/80 bg-slate-800/30 px-6 py-5"><h2 className="text-xl font-bold">Add Diesel Expense</h2><p className="text-xs text-slate-400 mt-1">Diesel Used + Remaining Diesel = Total Diesel | Remaining Balance = Total Amount ithura</p></div>
+          <div className="border-b border-slate-700/80 bg-slate-800/30 px-6 py-5"><h2 className="text-xl font-bold">Add Diesel Expense</h2><p className="text-xs text-slate-400 mt-1">Qty / Payable type karaddi ma uda card adu wenawa - Balance auto pennanawa</p></div>
           <form onSubmit={handleSubmit} className="space-y-6 p-6">
             <div className="grid gap-6 md:grid-cols-2">
               <Field label="Machine"><select value={selectedMachine} onChange={e => { setSelectedMachine(e.target.value); if (e.target.value!== "Other Machine") setOtherMachine(""); }} className={inputClass}><option value="">Select Machine</option>{machines.map(m => <option key={m} value={m}>{m}</option>)}</select>{selectedMachine === "Other Machine" && <input value={otherMachine} onChange={e => setOtherMachine(e.target.value)} placeholder="Other machine name" className={`${inputClass} mt-3`}/>}</Field>
