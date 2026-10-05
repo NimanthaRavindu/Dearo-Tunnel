@@ -30,6 +30,8 @@ export default function DieselExpensesPage() {
       if (data.summary) {
         const d = Number(data.summary.totalDiesel || 0); const a = Number(data.summary.totalAmount || 0);
         setInitialDieselStock(d); setInitialTotalAmount(a); setIsInitialSet(d > 0 || a > 0);
+      } else {
+        setInitialDieselStock(0); setInitialTotalAmount(0); setIsInitialSet(false);
       }
     } catch (e) { console.error(e); } finally { setLoading(false); }
   };
@@ -57,13 +59,17 @@ export default function DieselExpensesPage() {
   const formPayable = numberValue(payable);
   const formPaid = numberValue(paid);
 
-  // === FIXED LOGIC ===
-  // DB empty = 0
-  const displayDieselUsed = totalUsedDiesel + formDiesel;
-  const displayTotalAmountActual = totalPayable + formPayable;
-  const displayRemainingDiesel = Math.max(0, initialDieselStock - totalUsedDiesel - formDiesel);
-  const displayRemainingBalance = Math.max(0, initialTotalAmount - totalPayable - formPayable);
-  const displayTotalDiesel = initialDieselStock;
+  // === ALL CARDS 0 WHEN DB EMPTY ===
+  const isDbEmpty = expenses.length === 0 && totalUsedDiesel === 0 && totalPayable === 0 &&!isInitialSet? true : expenses.length === 0 && totalUsedDiesel === 0;
+
+  // Agar initial bhi nahi to sab 0, agar initial hai aur expenses empty to bhi user chahta hai sab 0
+  const showZero = expenses.length === 0;
+
+  const displayDieselUsed = showZero? 0 : totalUsedDiesel + formDiesel;
+  const displayTotalAmountActual = showZero? 0 : totalPayable + formPayable;
+  const displayRemainingDiesel = showZero? 0 : Math.max(0, initialDieselStock - totalUsedDiesel - formDiesel);
+  const displayRemainingBalance = showZero? 0 : Math.max(0, initialTotalAmount - totalPayable - formPayable);
+  const displayTotalDiesel = showZero? 0 : initialDieselStock;
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -84,7 +90,7 @@ export default function DieselExpensesPage() {
       <div className="mx-auto max-w-7xl space-y-6">
         <button onClick={() => router.back()} className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-bold"><ArrowLeft size={16}/> Back</button>
         <header className="flex justify-between rounded-3xl border border-slate-700/80 bg-slate-900 p-5">
-          <div className="flex items-center gap-4"><div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400"><Fuel size={29}/></div><div><h1 className="text-2xl font-bold">Diesel Expenses</h1><p className="text-sm text-slate-400">DB Empty = Used 0</p></div></div>
+          <div className="flex items-center gap-4"><div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400"><Fuel size={29}/></div><div><h1 className="text-2xl font-bold">Diesel Expenses</h1><p className="text-sm text-slate-400">DB Empty = All Cards 0</p></div></div>
           <button onClick={loadExpenses} className="h-11 inline-flex items-center gap-2 rounded-xl border border-slate-600 bg-slate-800 px-5 text-sm font-bold"><RefreshCw size={17} className={loading? "animate-spin" : ""}/>Refresh</button>
         </header>
         <section className="rounded-3xl border border-cyan-500/30 bg-slate-900 p-5">
@@ -94,14 +100,14 @@ export default function DieselExpensesPage() {
             <Field label="Initial Amount (Rs.)"><input type="number" value={tempInitialAmount} onChange={e => setTempInitialAmount(e.target.value)} placeholder="10000" className={inputClass}/></Field>
             <button onClick={handleAddInitial} disabled={savingInitial} className="h-12 self-end inline-flex items-center gap-2 rounded-xl bg-cyan-600 px-6 font-bold">{savingInitial? <RefreshCw size={17} className="animate-spin"/> : <Save size={17}/>}Add</button>
           </div>
-          {isInitialSet && <p className="mt-3 text-xs text-green-400">✓ Initial: {initialDieselStock} L / Rs. {initialTotalAmount.toLocaleString()} | DB Used: {totalUsedDiesel} L</p>}
+          {isInitialSet && <p className="mt-3 text-xs text-green-400">✓ Initial: {initialDieselStock} L / Rs. {initialTotalAmount.toLocaleString()}</p>}
         </section>
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <SummaryCard title="Diesel Used" subtitle="Actual Used - DB empty = 0" value={`${formatNumber(displayDieselUsed)} L`} icon={<Droplets size={22}/>} color="cyan"/>
-          <SummaryCard title="Total Amount" subtitle="Actual Payable - DB empty = 0" value={`Rs. ${formatNumber(displayTotalAmountActual)}`} icon={<Wallet size={22}/>} color="blue"/>
-          <SummaryCard title="Remaining Diesel" subtitle="Initial - Used" value={`${formatNumber(displayRemainingDiesel)} L`} icon={<Droplets size={22}/>} color="orange"/>
-          <SummaryCard title="Remaining Balance" subtitle="Initial - Payable" value={`Rs. ${formatNumber(displayRemainingBalance)}`} icon={<CreditCard size={22}/>} color="green"/>
-          <SummaryCard title="Total Diesel" subtitle="Initial Stock" value={`${formatNumber(displayTotalDiesel)} L`} icon={<AlertCircle size={22}/>} color="red"/>
+          <SummaryCard title="Diesel Used" subtitle="DB empty = 0" value={`${formatNumber(displayDieselUsed)} L`} icon={<Droplets size={22}/>} color="cyan"/>
+          <SummaryCard title="Total Amount" subtitle="DB empty = 0" value={`Rs. ${formatNumber(displayTotalAmountActual)}`} icon={<Wallet size={22}/>} color="blue"/>
+          <SummaryCard title="Remaining Diesel" subtitle="DB empty = 0" value={`${formatNumber(displayRemainingDiesel)} L`} icon={<Droplets size={22}/>} color="orange"/>
+          <SummaryCard title="Remaining Balance" subtitle="DB empty = 0" value={`Rs. ${formatNumber(displayRemainingBalance)}`} icon={<CreditCard size={22}/>} color="green"/>
+          <SummaryCard title="Total Diesel" subtitle="DB empty = 0" value={`${formatNumber(displayTotalDiesel)} L`} icon={<AlertCircle size={22}/>} color="red"/>
         </section>
         <section className="rounded-3xl border border-slate-700/80 bg-slate-900 overflow-hidden">
           <div className="border-b border-slate-700/80 bg-slate-800/30 px-6 py-5"><h2 className="text-xl font-bold">Add Diesel Expense</h2></div>
@@ -122,7 +128,7 @@ export default function DieselExpensesPage() {
         </section>
         <section className="rounded-3xl border border-slate-700/80 bg-slate-900 overflow-hidden">
           <div className="flex justify-between p-5 border-b border-slate-700/80"><h2 className="font-bold">Records ({expenses.length})</h2></div>
-          <div className="overflow-x-auto"><table className="w-full min-w-[700px]"><thead className="bg-slate-800/80"><tr className="text-xs text-slate-400 uppercase"><th className="px-5 py-4 text-left">Date</th><th className="px-5 py-4 text-left">Machine</th><th className="px-5 py-4 text-right">Diesel</th><th className="px-5 py-4 text-right">Payable</th><th className="px-5 py-4 text-right">Action</th></tr></thead><tbody>{expenses.length===0? <tr><td colSpan={5} className="py-10 text-center text-slate-500">No Records - Diesel Used should be 0 now</td></tr> : expenses.map(item => <tr key={item.id} className="border-b border-slate-800"><td className="px-5 py-4 text-sm">{item.date?.slice(0, 10)}</td><td className="px-5 py-4 font-semibold">{item.machine}</td><td className="px-5 py-4 text-right">{formatNumber(item.diesel)}</td><td className="px-5 py-4 text-right">Rs. {formatNumber(item.payable)}</td><td className="px-5 py-4 text-center"><button onClick={() => handleDelete(item.id)} className="h-9 w-9 inline-flex items-center justify-center rounded-lg bg-red-500/10 text-red-400"><Trash2 size={16}/></button></td></tr>)}</tbody></table></div>
+          <div className="overflow-x-auto"><table className="w-full min-w-[700px]"><thead className="bg-slate-800/80"><tr className="text-xs text-slate-400 uppercase"><th className="px-5 py-4 text-left">Date</th><th className="px-5 py-4 text-left">Machine</th><th className="px-5 py-4 text-right">Diesel</th><th className="px-5 py-4 text-right">Payable</th><th className="px-5 py-4 text-right">Action</th></tr></thead><tbody>{expenses.length===0? <tr><td colSpan={5} className="py-10 text-center text-slate-500">No Records - All cards 0 now</td></tr> : expenses.map(item => <tr key={item.id} className="border-b border-slate-800"><td className="px-5 py-4 text-sm">{item.date?.slice(0, 10)}</td><td className="px-5 py-4 font-semibold">{item.machine}</td><td className="px-5 py-4 text-right">{formatNumber(item.diesel)}</td><td className="px-5 py-4 text-right">Rs. {formatNumber(item.payable)}</td><td className="px-5 py-4 text-center"><button onClick={() => handleDelete(item.id)} className="h-9 w-9 inline-flex items-center justify-center rounded-lg bg-red-500/10 text-red-400"><Trash2 size={16}/></button></td></tr>)}</tbody></table></div>
         </section>
       </div>
     </main>
