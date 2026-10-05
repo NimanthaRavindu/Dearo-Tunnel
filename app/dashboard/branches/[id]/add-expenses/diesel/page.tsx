@@ -71,30 +71,25 @@ export default function DieselExpensesPage() {
   const formPaid = numberValue(paid);
   const formBalance = Math.max(0, formPayable - formPaid);
 
-  // === FINAL FIX - OYA ILLAPU LOGIC ===
-  // Initial Add = Wadi, Form Submit = Adu, Minus na, Total = Used+Remaining
-
-  // Base ithuru
+  // === FINAL FIX - OYA ILLAPU WIDIHATA ===
+  // Diesel Used = ithuru (Initial Add WADI, Form Save ADU)
   const baseDieselRemaining = Math.max(0, initialDieselStock - activeDieselUsed);
-  const baseAmountRemaining = Math.max(0, initialTotalAmount - activePayable);
-
-  // Live - type karaddi ma adu
   const liveDieselRemaining = Math.max(0, initialDieselStock - activeDieselUsed - formDiesel);
-  const liveAmountRemaining = Math.max(0, initialTotalAmount - activePayable - formPayable);
-
-  // Diesel Used = ithuru (Initial Add wadi, Form Save adu) - Image eke 200 wage
   const displayDieselUsed = formDiesel > 0? liveDieselRemaining : baseDieselRemaining;
 
-  // Total Amount = ithuru (Initial Add wadi, Form Save adu) - Image eke 20,000 wage
-  const displayTotalAmount = formPayable > 0? liveAmountRemaining : baseAmountRemaining;
-
-  // Remaining Diesel = actual used (620) -> Total = Used(200)+Remaining(620)=820
+  // Remaining Diesel = Used
   const displayRemainingDieselActual = activeDieselUsed + formDiesel;
 
   // Total Diesel = Diesel Used + Remaining Diesel = Initial
   const displayTotalDiesel = displayDieselUsed + displayRemainingDieselActual;
 
-  const balanceDisplay = Math.max(0, (activePayable - (isFiltered? fPaid : totalPaid)) + (formPayable - formPaid));
+  // Total Amount = ithuru (Initial Add WADI, Form Save ADU)
+  const baseAmountRemaining = Math.max(0, initialTotalAmount - activePayable);
+  const liveAmountRemaining = Math.max(0, initialTotalAmount - activePayable - formPayable);
+  const displayTotalAmount = formPayable > 0? liveAmountRemaining : baseAmountRemaining;
+
+  // Remaining Balance = Total Amount eken adu wena gana (Total Payable)
+  const displayRemainingBalance = activePayable + formPayable;
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -115,27 +110,27 @@ export default function DieselExpensesPage() {
       <div className="mx-auto max-w-7xl space-y-6">
         <button onClick={() => router.back()} className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-bold"><ArrowLeft size={16}/> Back</button>
         <header className="flex justify-between rounded-3xl border border-slate-700/80 bg-slate-900 p-5">
-          <div className="flex items-center gap-4"><div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400"><Fuel size={29}/></div><div><h1 className="text-2xl font-bold">Diesel Expenses</h1><p className="text-sm text-slate-400">Initial Add Wadi | Form Save Adu | Minus Na</p></div></div>
+          <div className="flex items-center gap-4"><div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400"><Fuel size={29}/></div><div><h1 className="text-2xl font-bold">Diesel Expenses</h1><p className="text-sm text-slate-400">Total = Used + Remaining | Balance = Adu wena gana</p></div></div>
           <button onClick={loadExpenses} className="h-11 inline-flex items-center gap-2 rounded-xl border border-slate-600 bg-slate-800 px-5 text-sm font-bold"><RefreshCw size={17} className={loading? "animate-spin" : ""}/>Refresh</button>
         </header>
         <section className="rounded-3xl border border-cyan-500/30 bg-slate-900 p-5">
-          <h2 className="text-sm font-bold uppercase mb-4 flex items-center gap-2"><PackagePlus size={18} className="text-cyan-400"/>Initial Stock - Add kalama wadi wenawa</h2>
+          <h2 className="text-sm font-bold uppercase mb-4 flex items-center gap-2"><PackagePlus size={18} className="text-cyan-400"/>Initial Stock</h2>
           <div className="grid gap-4 md:grid-cols-[1fr_1fr_auto]">
             <Field label="Initial Diesel (L)"><input type="number" value={tempInitialDiesel} onChange={e => setTempInitialDiesel(e.target.value)} placeholder="331" className={inputClass}/></Field>
             <Field label="Initial Amount (Rs.)"><input type="number" value={tempInitialAmount} onChange={e => setTempInitialAmount(e.target.value)} placeholder="317000" className={inputClass}/></Field>
             <button onClick={handleAddInitial} disabled={savingInitial} className="h-12 self-end inline-flex items-center gap-2 rounded-xl bg-cyan-600 px-6 font-bold">{savingInitial? <RefreshCw size={17} className="animate-spin"/> : <Save size={17}/>}Add</button>
           </div>
-          {isInitialSet && <p className="mt-3 text-xs text-green-400">✓ Initial: {initialDieselStock} L / Rs. {initialTotalAmount.toLocaleString()} | Used: {totalUsedDiesel} L | Total Diesel = Diesel Used + Remaining = {initialDieselStock} L</p>}
+          {isInitialSet && <p className="mt-3 text-xs text-green-400">✓ Initial: {initialDieselStock} L / Rs. {initialTotalAmount.toLocaleString()} | Used: {totalUsedDiesel} L | Payable: {totalPayable.toLocaleString()}</p>}
         </section>
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <SummaryCard title="Diesel Used" subtitle="Initial Add Wadi | Save Adu" value={`${formatNumber(displayDieselUsed)} L`} icon={<Droplets size={22}/>} color="cyan"/>
-          <SummaryCard title="Total Amount" subtitle="Initial Add Wadi | Save Adu" value={`Rs. ${formatNumber(displayTotalAmount)}`} icon={<Wallet size={22}/>} color="blue"/>
-          <SummaryCard title="Remaining Diesel" subtitle="Actual Used (Total - Diesel Used)" value={`${formatNumber(displayRemainingDieselActual)} L`} icon={<Droplets size={22}/>} color="orange"/>
-          <SummaryCard title="Remaining Balance" subtitle="Payable - Paid" value={`Rs. ${formatNumber(balanceDisplay)}`} icon={<CreditCard size={22}/>} color="green"/>
-          <SummaryCard title="Total Diesel" subtitle="Diesel Used + Remaining" value={`${formatNumber(displayTotalDiesel)} L`} icon={<AlertCircle size={22}/>} color="red"/>
+          <SummaryCard title="Diesel Used" subtitle="Initial - Used (ithuru)" value={`${formatNumber(displayDieselUsed)} L`} icon={<Droplets size={22}/>} color="cyan"/>
+          <SummaryCard title="Total Amount" subtitle="Initial - Payable (ithuru)" value={`Rs. ${formatNumber(displayTotalAmount)}`} icon={<Wallet size={22}/>} color="blue"/>
+          <SummaryCard title="Remaining Diesel" subtitle="Actual Used" value={`${formatNumber(displayRemainingDieselActual)} L`} icon={<Droplets size={22}/>} color="orange"/>
+          <SummaryCard title="Remaining Balance" subtitle="Total Amount eken adu wena gana" value={`Rs. ${formatNumber(displayRemainingBalance)}`} icon={<CreditCard size={22}/>} color="green"/>
+          <SummaryCard title="Total Diesel" subtitle="Used + Remaining = Initial" value={`${formatNumber(displayTotalDiesel)} L`} icon={<AlertCircle size={22}/>} color="red"/>
         </section>
         <section className="rounded-3xl border border-slate-700/80 bg-slate-900 overflow-hidden">
-          <div className="border-b border-slate-700/80 bg-slate-800/30 px-6 py-5"><h2 className="text-xl font-bold">Add Diesel Expense</h2><p className="text-xs text-slate-400 mt-1">Diesel Qty / Payable type karaddi ma Diesel Used & Total Amount adu wenawa</p></div>
+          <div className="border-b border-slate-700/80 bg-slate-800/30 px-6 py-5"><h2 className="text-xl font-bold">Add Diesel Expense</h2><p className="text-xs text-slate-400 mt-1">Diesel Qty type kalama Diesel Used adu | Payable type kalama Total Amount adu, Remaining Balance wadi</p></div>
           <form onSubmit={handleSubmit} className="space-y-6 p-6">
             <div className="grid gap-6 md:grid-cols-2">
               <Field label="Machine"><select value={selectedMachine} onChange={e => { setSelectedMachine(e.target.value); if (e.target.value!== "Other Machine") setOtherMachine(""); }} className={inputClass}><option value="">Select Machine</option>{machines.map(m => <option key={m} value={m}>{m}</option>)}</select>{selectedMachine === "Other Machine" && <input value={otherMachine} onChange={e => setOtherMachine(e.target.value)} placeholder="Other machine name" className={`${inputClass} mt-3`}/>}</Field>
@@ -148,7 +143,7 @@ export default function DieselExpensesPage() {
             </div>
             {(formPayable > 0 || formPaid > 0 || formDiesel > 0) && (
               <div className="grid grid-cols-2 gap-4 rounded-2xl bg-slate-800/50 p-4 border border-slate-700/50">
-                <div><p className="text-xs text-slate-400 uppercase">Form Amount (Payable)</p><p className="text-lg font-bold text-blue-300">Rs. {formatNumber(formPayable)}</p></div>
+                <div><p className="text-xs text-slate-400 uppercase">Form Payable (Adu wena gana)</p><p className="text-lg font-bold text-blue-300">Rs. {formatNumber(formPayable)}</p></div>
                 <div><p className="text-xs text-slate-400 uppercase">Form Balance (Payable - Paid)</p><p className="text-lg font-bold text-red-300">Rs. {formatNumber(formBalance)}</p></div>
               </div>
             )}
