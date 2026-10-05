@@ -71,21 +71,19 @@ export default function DieselExpensesPage() {
   const formPaid = numberValue(paid);
   const formBalance = Math.max(0, formPayable - formPaid);
 
-  // === FINAL FIX - OYA ONA WIDIYATA ADU WENNA ===
+  // === OYA LOGIC EKA WENAS NA - FIX EKA WITHARAK ===
   const displayTotalDiesel = initialDieselStock;
-
-  // Base - Save kala passe thiyena agaya (adu wela)
   const baseDieselRemaining = Math.max(0, initialDieselStock - activeDieselUsed);
   const baseAmountRemaining = Math.max(0, initialTotalAmount - activePayable);
-
-  // Live - Form eke type karaddi ma card eken adu wenawa penna
   const liveDieselRemaining = Math.max(0, initialDieselStock - activeDieselUsed - formDiesel);
   const liveAmountRemaining = Math.max(0, initialTotalAmount - activePayable - formPayable);
 
   const displayDieselUsed = formDiesel > 0? liveDieselRemaining : baseDieselRemaining;
   const displayTotalAmount = formPayable > 0? liveAmountRemaining : baseAmountRemaining;
   const displayRemainingDiesel = formDiesel > 0? liveDieselRemaining : baseDieselRemaining;
-  const balanceDisplay = Math.max(0, activePayable - (isFiltered? fPaid : totalPaid));
+
+  // FIX: Remaining Balance = Total Amount (samana)
+  const displayRemainingBalance = displayTotalAmount;
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -122,7 +120,7 @@ export default function DieselExpensesPage() {
           <SummaryCard title="Diesel Used" subtitle="Diesel Qty type karaddi adu" value={`${formatNumber(displayDieselUsed)} L`} icon={<Droplets size={22}/>} color="cyan"/>
           <SummaryCard title="Total Amount" subtitle="Payable type karaddi adu" value={`Rs. ${formatNumber(displayTotalAmount)}`} icon={<Wallet size={22}/>} color="blue"/>
           <SummaryCard title="Remaining Diesel" subtitle="Initial - Used - Form (minus na)" value={`${formatNumber(displayRemainingDiesel)} L`} icon={<Droplets size={22}/>} color="orange"/>
-          <SummaryCard title="Remaining Balance" subtitle="Payable - Paid" value={`Rs. ${formatNumber(balanceDisplay)}`} icon={<CreditCard size={22}/>} color="green"/>
+          <SummaryCard title="Remaining Balance" subtitle="= Total Amount (samana)" value={`Rs. ${formatNumber(displayRemainingBalance)}`} icon={<CreditCard size={22}/>} color="green"/>
           <SummaryCard title="Total Diesel" subtitle="Initial stock" value={`${formatNumber(displayTotalDiesel)} L`} icon={<AlertCircle size={22}/>} color="red"/>
         </section>
         <section className="rounded-3xl border border-slate-700/80 bg-slate-900 overflow-hidden">
