@@ -14,7 +14,7 @@ interface DieselSummary { diesel: number; amount: number; payable: number; paid:
 
 const DIESEL_API = "/api/expences/diesel";
 const EMPTY_SUMMARY: DieselSummary = { diesel: 0, amount: 0, payable: 0, paid: 0, balance: 0 };
-const INITIAL_DIESEL_STOCK = 331.00;
+const INITIAL_DIESEL_STOCK = 0.00;
 
 function numeric(value: unknown): number { return Number(value?? 0) || 0; }
 function dateOnly(value: unknown): string { return String(value?? "").slice(0, 10); }
