@@ -23,7 +23,8 @@ export async function GET(req: NextRequest) {
         COALESCE(d.diesel_total, 0) AS diesel_expenses,
         COALESCE(s.salary_balance, 0) AS salary_balance,
         COALESCE(o.other_balance, 0) AS other_balance,
-        COALESCE(d.diesel_balance, 0) AS diesel_balance
+        COALESCE(d.diesel_balance, 0) AS diesel_balance,
+        COALESCE(inc.income_total, 0) AS income_total
       FROM branch b
       LEFT JOIN (
         SELECT branch_id, SUM(COALESCE(total_payable, 0)) AS salary_total, SUM(COALESCE(balance, 0)) AS salary_balance
@@ -45,9 +46,19 @@ export async function GET(req: NextRequest) {
         SELECT branch_id, SUM(COALESCE(payable, 0)) AS diesel_total, SUM(COALESCE(payable, 0) - COALESCE(paid, 0)) AS diesel_balance
         FROM diesel_expenses WHERE (? IS NULL OR id =?) GROUP BY branch_id
       ) d ON b.id = d.branch_id
+      LEFT JOIN (
+        SELECT branch_id, SUM(COALESCE(amount, 0)) AS income_total FROM sales_incomes
+        WHERE (? IS NULL OR DATE(date) =?)
+        GROUP BY branch_id
+      ) inc ON b.id = inc.branch_id
     `;
 
-    const [rows] = await db.query<RowDataPacket[]>(query, [salesId, salesId, capitalId, capitalId, dieselId, dieselId]);
+    const [rows] = await db.query<RowDataPacket[]>(query, [
+      salesId, salesId,
+      capitalId, capitalId,
+      dieselId, dieselId,
+      selectedDate, selectedDate
+    ]);
 
     const branches = rows.map((branch: any) => {
       const salaryExpenses = Number(branch.salary_expenses || 0);
@@ -58,13 +69,22 @@ export async function GET(req: NextRequest) {
       const salaryBalance = Number(branch.salary_balance || 0);
       const otherBalance = Number(branch.other_balance || 0);
       const dieselBalance = Number(branch.diesel_balance || 0);
+      const incomeTotal = Number(branch.income_total || 0);
+
       return {
-      ...branch,
-        salary_expenses: salaryExpenses, sales_expenses: salesExpenses, capital_expenses: capitalExpenses,
-        other_expenses: otherExpenses, diesel_expenses: dieselExpenses,
-        salary_balance: salaryBalance, other_balance: otherBalance, diesel_balance: dieselBalance,
+       ...branch,
+        salary_expenses: salaryExpenses,
+        sales_expenses: salesExpenses,
+        capital_expenses: capitalExpenses,
+        other_expenses: otherExpenses,
+        diesel_expenses: dieselExpenses,
+        salary_balance: salaryBalance,
+        other_balance: otherBalance,
+        diesel_balance: dieselBalance,
+        income_total: incomeTotal,
         total_expenses: salaryExpenses + salesExpenses + capitalExpenses + otherExpenses + dieselExpenses,
         total_balance: salaryBalance + salesExpenses + capitalExpenses + otherBalance + dieselBalance,
+        total_incomes: incomeTotal,
       };
     });
 
@@ -91,9 +111,10 @@ export async function GET(req: NextRequest) {
 
     const totalExpenses = branches.reduce((total, branch: any) => total + Number(branch.total_expenses || 0), 0);
     const totalRemaining = branches.reduce((total, branch: any) => total + Number(branch.total_balance || 0), 0);
+    const totalIncomes = branches.reduce((total, branch: any) => total + Number(branch.total_incomes || 0), 0);
 
     return NextResponse.json({
-      cards: { totalBranches: branches.length, totalExpenses, totalRemaining },
+      cards: { totalBranches: branches.length, totalExpenses, totalRemaining, totalIncomes },
       branches,
       sales: salesRows.map((row: any) => ({
         id: row.id,
