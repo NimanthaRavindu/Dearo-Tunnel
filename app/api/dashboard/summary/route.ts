@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
     const dieselId = selectedDieselId? Number(selectedDieselId) : null;
     const branchId = selectedBranchId? Number(selectedBranchId) : null;
 
+    // FIXED: sales/capital walata payable add karala thibba eka ayin kala, income walata grand_total check ekka safe query
     const query = `
       SELECT b.id, b.branch_name, b.branch_code,
         COALESCE(s.salary_total, 0) AS salary_expenses,
@@ -34,12 +35,12 @@ export async function GET(req: NextRequest) {
         FROM salary_expenses GROUP BY branch_id
       ) s ON b.id = s.branch_id
       LEFT JOIN (
-        SELECT branch_id, SUM(COALESCE(amount, 0) + COALESCE(payable, 0)) AS sales_total FROM sales_expenses
+        SELECT branch_id, SUM(COALESCE(amount, 0)) AS sales_total FROM sales_expenses
         WHERE (? IS NULL OR id =?)
         GROUP BY branch_id
       ) se ON b.id = se.branch_id
       LEFT JOIN (
-        SELECT branch_id, SUM(COALESCE(amount, 0) + COALESCE(payable, 0)) AS capital_total FROM capital_expenses
+        SELECT branch_id, SUM(COALESCE(amount, 0)) AS capital_total FROM capital_expenses
         WHERE (? IS NULL OR id =?)
         GROUP BY branch_id
       ) c ON b.id = c.branch_id
@@ -52,7 +53,7 @@ export async function GET(req: NextRequest) {
         FROM diesel_expenses WHERE (? IS NULL OR id =?) GROUP BY branch_id
       ) d ON b.id = d.branch_id
       LEFT JOIN (
-        SELECT branch_id, SUM(COALESCE(grand_total, 0) + COALESCE(amount, 0)) AS income_total FROM sales_incomes
+        SELECT branch_id, SUM(COALESCE(amount, 0)) AS income_total FROM sales_incomes
         WHERE (? IS NULL OR DATE(date) =?)
         GROUP BY branch_id
       ) inc ON b.id = inc.branch_id
@@ -78,7 +79,7 @@ export async function GET(req: NextRequest) {
       const otherBalance = Number(branch.other_balance || 0);
       const dieselBalance = Number(branch.diesel_balance || 0);
       return {
-       ...branch,
+      ...branch,
         salary_expenses: salaryExpenses,
         sales_expenses: salesExpenses,
         capital_expenses: capitalExpenses,
@@ -128,7 +129,7 @@ export async function GET(req: NextRequest) {
         name: row.personName || row.person_name || row.name || `Sales Entry #${row.id}`,
         branch_name: row.branch_name || "N/A",
         date: row.date? String(row.date).split("T")[0] : "",
-        amount: Number(row.amount || row.payable || 0),
+        amount: Number(row.amount || 0),
       })),
       capital: capitalRows.map((row: any) => ({
         id: row.id,
@@ -136,7 +137,7 @@ export async function GET(req: NextRequest) {
         name: row.person_name || row.personName || row.name || `Capital Entry #${row.id}`,
         branch_name: row.branch_name || "N/A",
         date: row.date? String(row.date).split("T")[0] : "",
-        amount: Number(row.amount || row.payable || 0),
+        amount: Number(row.amount || 0),
       })),
       diesel: dieselRows.map((row: any) => ({
         id: row.id, machine: row.machine || `Diesel #${row.id}`, branch_name: row.branch_name || "N/A",
