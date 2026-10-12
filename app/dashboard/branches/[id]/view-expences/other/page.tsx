@@ -37,7 +37,7 @@ const EMPTY_SUMMARY: OtherSummary = {
 };
 
 function numeric(value: unknown): number {
-  return Number(value ?? 0) || 0;
+  return Number(value?? 0) || 0;
 }
 
 function money(value: unknown): string {
@@ -58,7 +58,7 @@ export default function ViewOtherExpensesPage({
   const routeParams = use(params);
 
   const branchId = routeParams?.id
-    ? decodeURIComponent(routeParams.id)
+   ? decodeURIComponent(routeParams.id)
     : "";
 
   const [data, setData] = useState<OtherExpense[]>([]);
@@ -94,7 +94,7 @@ export default function ViewOtherExpensesPage({
 
       setData(
         Array.isArray(expenseResult)
-          ? expenseResult
+         ? expenseResult
           : expenseResult.data || expenseResult.rows || [],
       );
 
@@ -126,7 +126,7 @@ export default function ViewOtherExpensesPage({
       setData([]);
       setError(
         requestError instanceof Error
-          ? requestError.message
+         ? requestError.message
           : "Unable to load other expenses.",
       );
     } finally {
@@ -142,16 +142,23 @@ export default function ViewOtherExpensesPage({
     const query = search.trim().toLowerCase();
 
     return data.filter((item) => {
+      // FIX: expense_type saha reason dekama check karanawa
+      const type = String(item.expense_type || "").toLowerCase();
+      const reason = String(item.reason || "").toLowerCase();
+      const filterLower = categoryFilter.toLowerCase();
+
       const matchesCategory =
         categoryFilter === "ALL" ||
-        String(item.expense_type || "").toLowerCase() ===
-          categoryFilter.toLowerCase();
+        type === filterLower ||
+        reason === filterLower ||
+        type.includes(filterLower) ||
+        reason.includes(filterLower);
 
       const matchesDate =
-        !selectedDate || expenseDate(item) === selectedDate;
+       !selectedDate || expenseDate(item) === selectedDate;
 
       const matchesSearch =
-        !query ||
+       !query ||
         [
           item.reason,
           item.expense_type,
@@ -160,7 +167,7 @@ export default function ViewOtherExpensesPage({
           item.balance,
           expenseDate(item),
         ].some((value) =>
-          String(value ?? "").toLowerCase().includes(query),
+          String(value?? "").toLowerCase().includes(query),
         );
 
       return matchesCategory && matchesDate && matchesSearch;
@@ -212,6 +219,7 @@ export default function ViewOtherExpensesPage({
               <p className="mt-1 text-[10px] uppercase tracking-wide text-purple-400/80">
                 Scope Context:{" "}
                 {branchName || `Branch Node ID: ${branchId}`}
+                {categoryFilter!== "ALL"? ` • Filter: ${categoryFilter}` : ""}
               </p>
             </div>
           </div>
@@ -222,7 +230,7 @@ export default function ViewOtherExpensesPage({
               onChange={(event) =>
                 setCategoryFilter(event.target.value)
               }
-              className="rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-xs uppercase tracking-wider text-slate-300 outline-none focus:border-purple-500"
+              className="rounded-lg border border-violet-500/30 bg-slate-950 px-3 py-2 text-xs uppercase tracking-wider text-slate-300 outline-none focus:border-purple-500"
             >
               <option value="ALL">ALL CLASSIFICATIONS</option>
               <option value="Food">Food</option>
@@ -230,6 +238,10 @@ export default function ViewOtherExpensesPage({
               <option value="Water">Water</option>
               <option value="Electricity">Electricity</option>
               <option value="Other Payments">Other Payments</option>
+              <option value="Petty Cash">Petty Cash</option>
+              <option value="Monthly Rental">Monthly Rental</option>
+              <option value="Chemical Float">Chemical Float</option>
+              <option value="Construction Repair">Construction Repair</option>
             </select>
 
             <div className="relative">
@@ -257,7 +269,7 @@ export default function ViewOtherExpensesPage({
               />
             </div>
 
-            {(categoryFilter !== "ALL" || selectedDate || search) && (
+            {(categoryFilter!== "ALL" || selectedDate || search) && (
               <button
                 type="button"
                 onClick={clearFilters}
@@ -274,7 +286,7 @@ export default function ViewOtherExpensesPage({
               disabled={loading}
               className="flex items-center justify-center gap-2 rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-slate-300 transition hover:text-purple-400 disabled:opacity-50"
             >
-              <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+              <RefreshCw size={14} className={loading? "animate-spin" : ""} />
               Refresh
             </button>
 
@@ -305,13 +317,13 @@ export default function ViewOtherExpensesPage({
 
         <section className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
           <SummaryCard
-            title="Total Payable"
+            title={`Total Payable ${categoryFilter!== "ALL"? `(${categoryFilter})` : ""}`}
             value={money(summary.payable)}
             color="purple"
           />
 
           <SummaryCard
-            title="Total Paid"
+            title={`Total Paid ${categoryFilter!== "ALL"? `(${categoryFilter})` : ""}`}
             value={money(summary.paid)}
             color="emerald"
           />
@@ -340,7 +352,7 @@ export default function ViewOtherExpensesPage({
               </thead>
 
               <tbody className="divide-y divide-slate-900/40 font-mono text-[11px]">
-                {loading ? (
+                {loading? (
                   <tr>
                     <td
                       colSpan={6}
@@ -349,14 +361,14 @@ export default function ViewOtherExpensesPage({
                       Loading operational entries...
                     </td>
                   </tr>
-                ) : filteredData.length === 0 ? (
+                ) : filteredData.length === 0? (
                   <tr>
                     <td
                       colSpan={6}
                       className="p-12 text-center text-slate-600"
                     >
                       <AlertCircle size={18} className="mx-auto mb-2" />
-                      No operational records found.
+                      No operational records found for {categoryFilter}.
                     </td>
                   </tr>
                 ) : (
@@ -366,13 +378,13 @@ export default function ViewOtherExpensesPage({
 
                     return (
                       <tr
-                        key={item.id ?? index}
+                        key={item.id?? index}
                         className="transition-colors hover:bg-slate-900/30"
                       >
                         <td className="whitespace-nowrap p-4">
                           <span className="inline-flex items-center gap-1.5 rounded-md border border-purple-500/10 bg-purple-500/5 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-purple-400">
                             <Tag size={10} />
-                            {item.reason || "General Overhead"}
+                            {item.expense_type || item.reason || "General Overhead"}
                           </span>
                         </td>
 
@@ -385,7 +397,7 @@ export default function ViewOtherExpensesPage({
                         </td>
 
                         <td className="p-4 text-right font-bold">
-                          {settled ? (
+                          {settled? (
                             <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-[9px] uppercase tracking-wider text-emerald-400">
                               <ShieldCheck size={10} />
                               Settled
@@ -433,7 +445,7 @@ export default function ViewOtherExpensesPage({
                 <tfoot>
                   <tr className="border-t border-slate-800 bg-slate-950/70 font-bold">
                     <td className="p-4 text-slate-400">
-                      Filtered Total
+                      Filtered Total {categoryFilter!== "ALL"? `(${categoryFilter})` : ""}
                     </td>
 
                     <td className="p-4 text-right text-purple-400">
