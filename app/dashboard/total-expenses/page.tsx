@@ -1,7 +1,7 @@
 "use client";
-import React, { Suspense, useCallback, useEffect, useState } from "react";
+import React, { Suspense, useCallback, useEffect, useState, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Coins, FileSpreadsheet, Fuel, RefreshCw } from "lucide-react";
+import { ArrowLeft, Coins, FileSpreadsheet, Fuel, RefreshCw, MapPin, X, Search } from "lucide-react";
 import { ExpenseFilters } from "@/components/ExpenseFilters";
 
 interface BranchExpense {
@@ -40,6 +40,8 @@ function TotalExpensesContent() {
   const selectedSalesId = searchParams.get("selected_sales_id");
   const selectedCapitalId = searchParams.get("selected_capital_id");
   const selectedDieselId = searchParams.get("selected_diesel_id");
+  const selectedBranchId = searchParams.get("branch_id");
+  const selectedBranchName = searchParams.get("branch_name");
 
   const [branches, setBranches] = useState<BranchExpense[]>([]);
   const [salesList, setSalesList] = useState<FilterItem[]>([]);
@@ -47,37 +49,22 @@ function TotalExpensesContent() {
   const [dieselList, setDieselList] = useState<FilterItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [searchText, setSearchText] = useState("");
 
   const fetchExpenseBreakdown = useCallback(async () => {
     try {
       const params = new URLSearchParams();
-
-      if (selectedSalesId) {
-        params.set("selected_sales_id", selectedSalesId);
-      }
-
-      if (selectedCapitalId) {
-        params.set("selected_capital_id", selectedCapitalId);
-      }
-
-      if (selectedDieselId) {
-        params.set("selected_diesel_id", selectedDieselId);
-      }
+      if (selectedSalesId) params.set("selected_sales_id", selectedSalesId);
+      if (selectedCapitalId) params.set("selected_capital_id", selectedCapitalId);
+      if (selectedDieselId) params.set("selected_diesel_id", selectedDieselId);
 
       const query = params.toString();
       const response = await fetch(
-        query
-          ? `/api/dashboard/summary?${query}`
-          : "/api/dashboard/summary",
+        query ? `/api/dashboard/summary?${query}` : "/api/dashboard/summary",
         { cache: "no-store" },
       );
-
-      if (!response.ok) {
-        throw new Error("Failed to load expense breakdown.");
-      }
-
+      if (!response.ok) throw new Error("Failed to load expense breakdown.");
       const json = await response.json();
-
       setBranches(json.branches || []);
       setSalesList(json.sales || []);
       setCapitalList(json.capital || []);
@@ -94,24 +81,32 @@ function TotalExpensesContent() {
     }
   }, [selectedSalesId, selectedCapitalId, selectedDieselId]);
 
-  useEffect(() => {
-    fetchExpenseBreakdown();
-  }, [fetchExpenseBreakdown]);
+  useEffect(() => { fetchExpenseBreakdown(); }, [fetchExpenseBreakdown]);
 
   const updateFilter = (key: string, value?: string) => {
     const params = new URLSearchParams(searchParams.toString());
-
     if (value) params.set(key, value);
     else params.delete(key);
-
     const query = params.toString();
-
-    router.push(
-      `/dashboard/total-expenses${query ? `?${query}` : ""}`,
-    );
+    router.push(`/dashboard/total-expenses${query ? `?${query}` : ""}`);
   };
 
-  const total = branches.reduce(
+  // === NEW: Branch filter logic ===
+  const filteredBranches = useMemo(() => {
+    let result = branches;
+    if (selectedBranchId) {
+      result = result.filter((b) => String(b.id) === String(selectedBranchId));
+    }
+    if (searchText) {
+      result = result.filter((b) =>
+        b.branch_name.toLowerCase().includes(searchText.toLowerCase()) ||
+        b.branch_code.toLowerCase().includes(searchText.toLowerCase())
+      );
+    }
+    return result;
+  }, [branches, selectedBranchId, searchText]);
+
+  const total = filteredBranches.reduce(
     (sum, branch) =>
       sum +
       Number(branch.salary_expenses || 0) +
@@ -122,15 +117,13 @@ function TotalExpensesContent() {
     0,
   );
 
-  if (loading) {
-    return <Loading text="Compiling Expense Ledger Sheets..." />;
-  }
+  if (loading) return <Loading text="Compiling Expense Ledger Sheets..." />;
 
   return (
     <main className="min-h-screen bg-slate-950 p-3 text-slate-100 sm:p-5 lg:p-6">
       <div className="mx-auto max-w-7xl space-y-4">
         <header className="flex flex-col justify-between gap-3 border-b border-slate-800 pb-3 sm:flex-row sm:items-center">
-          <div className="space-y-1">
+          <div className="space-y-2">
             <button
               type="button"
               onClick={() => {
@@ -145,10 +138,26 @@ function TotalExpensesContent() {
 
             <div className="flex flex-wrap items-center gap-2">
               <Coins size={15} className="text-emerald-400" />
-
               <h1 className="text-base font-semibold text-white">
                 Gross Expense Breakdown Sub-Ledger
               </h1>
+
+              {/* Branch Dropdown Filter */}
+              <div className="relative flex items-center">
+                <MapPin size={12} className="absolute left-2 text-slate-500 pointer-events-none" />
+                <select
+                  value={selectedBranchId || ""}
+                  onChange={(e) => updateFilter("branch_id", e.target.value || undefined)}
+                  className="bg-slate-900 border border-slate-700 rounded-lg pl-6 pr-6 py-1 text-[11px] text-cyan-300 outline-none focus:border-cyan-500/50"
+                >
+                  <option value="">All Branches ({branches.length})</option>
+                  {branches.map((b) => (
+                    <option key={b.id} value={String(b.id)}>
+                      {b.branch_name} ({b.branch_code})
+                    </option>
+                  ))}
+                </select>
+              </div>
 
               <ExpenseFilters
                 selectedSalesId={selectedSalesId}
@@ -157,47 +166,56 @@ function TotalExpensesContent() {
                 salesList={salesList}
                 capitalList={capitalList}
                 dieselList={dieselList}
-                onSelectSales={(id) =>
-                  updateFilter("selected_sales_id", id)
-                }
-                onSelectCapital={(id) =>
-                  updateFilter("selected_capital_id", id)
-                }
-                onSelectDiesel={(id) =>
-                  updateFilter("selected_diesel_id", id)
-                }
-                onClearSales={() =>
-                  updateFilter("selected_sales_id")
-                }
-                onClearCapital={() =>
-                  updateFilter("selected_capital_id")
-                }
-                onClearDiesel={() =>
-                  updateFilter("selected_diesel_id")
-                }
+                onSelectSales={(id) => updateFilter("selected_sales_id", id)}
+                onSelectCapital={(id) => updateFilter("selected_capital_id", id)}
+                onSelectDiesel={(id) => updateFilter("selected_diesel_id", id)}
+                onClearSales={() => updateFilter("selected_sales_id")}
+                onClearCapital={() => updateFilter("selected_capital_id")}
+                onClearDiesel={() => updateFilter("selected_diesel_id")}
               />
             </div>
+
+            {(selectedBranchId || searchText) && (
+              <div className="flex items-center gap-2 mt-1">
+                {selectedBranchId && (
+                  <span className="flex items-center gap-1 bg-cyan-950/50 border border-cyan-500/30 px-2 py-1 rounded text-[10px] text-cyan-400">
+                    <MapPin size={10} /> Branch: {filteredBranches[0]?.branch_name || selectedBranchId}
+                    <button onClick={() => updateFilter("branch_id")} className="ml-1 hover:text-white"><X size={12}/></button>
+                  </span>
+                )}
+                {searchText && (
+                  <span className="flex items-center gap-1 bg-slate-800 border border-slate-700 px-2 py-1 rounded text-[10px]">
+                    Search: {searchText}
+                    <button onClick={() => setSearchText("")} className="ml-1"><X size={12}/></button>
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500"/>
+              <input
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                placeholder="Filter branch..."
+                className="bg-slate-900 border border-slate-800 rounded-lg pl-6 pr-2 py-1.5 text-[11px] w-[160px] outline-none focus:border-slate-700"
+              />
+            </div>
+
             <button
               type="button"
-              onClick={() => {
-                setRefreshing(true);
-                fetchExpenseBreakdown();
-              }}
+              onClick={() => { setRefreshing(true); fetchExpenseBreakdown(); }}
               disabled={refreshing}
               className="rounded-lg border border-slate-800 bg-slate-900 p-2 text-slate-400 hover:text-white"
             >
-              <RefreshCw
-                size={14}
-                className={refreshing ? "animate-spin" : ""}
-              />
+              <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
             </button>
 
             <div className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-2">
               <span className="block text-[9px] uppercase text-emerald-400">
-                Aggregate Gross Expenses
+                {selectedBranchId ? "Branch Gross" : "Aggregate Gross Expenses"}
               </span>
               <span className="font-mono text-sm font-bold text-emerald-400">
                 LKR {formatCurrency(total)}
@@ -207,9 +225,9 @@ function TotalExpensesContent() {
         </header>
 
         <section className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/70">
-          <div className="flex items-center gap-2 border-b border-slate-800 px-4 py-3 text-xs font-semibold">
-            <FileSpreadsheet size={14} className="text-emerald-400" />
-            Infrastructure Financial Auditing Matrix
+          <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3 text-xs font-semibold">
+            <div className="flex items-center gap-2"><FileSpreadsheet size={14} className="text-emerald-400" /> Infrastructure Financial Auditing Matrix</div>
+            <span className="text-[10px] text-slate-500">{filteredBranches.length} Branches Shown</span>
           </div>
 
           <div className="overflow-x-auto p-4">
@@ -225,32 +243,20 @@ function TotalExpensesContent() {
                   <th className="px-3 py-2 text-right text-emerald-400">Gross Combined Expenses</th>
                 </tr>
               </thead>
-
               <tbody className="divide-y divide-slate-800/50">
-                {branches.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="py-8 text-center text-slate-500">
-                      No Expense Records Found
-                    </td>
-                  </tr>
+                {filteredBranches.length === 0 ? (
+                  <tr><td colSpan={7} className="py-8 text-center text-slate-500">No Expense Records Found</td></tr>
                 ) : (
-                  branches.map((branch) => {
+                  filteredBranches.map((branch) => {
                     const salary = Number(branch.salary_expenses || 0);
                     const sales = Number(branch.sales_expenses || 0);
                     const capital = Number(branch.capital_expenses || 0);
                     const other = Number(branch.other_expenses || 0);
                     const diesel = Number(branch.diesel_expenses || 0);
-                    const rowTotal =
-                      salary + sales + capital + other + diesel;
-
+                    const rowTotal = salary + sales + capital + other + diesel;
                     return (
                       <tr key={branch.id} className="hover:bg-slate-800/40">
-                        <td className="px-3 py-2.5 font-mono text-slate-200">
-                          {branch.branch_name}{" "}
-                          <span className="text-[10px] text-slate-500">
-                            ({branch.branch_code})
-                          </span>
-                        </td>
+                        <td className="px-3 py-2.5 font-mono text-slate-200">{branch.branch_name} <span className="text-[10px] text-slate-500">({branch.branch_code})</span></td>
                         <MoneyCell value={salary} />
                         <MoneyCell value={sales} className="text-emerald-400" />
                         <MoneyCell value={capital} className="text-amber-400" />
@@ -270,21 +276,10 @@ function TotalExpensesContent() {
   );
 }
 
-function MoneyCell({
-  value,
-  className = "",
-  icon = false,
-}: {
-  value: number;
-  className?: string;
-  icon?: boolean;
-}) {
+function MoneyCell({ value, className = "", icon = false }: { value: number; className?: string; icon?: boolean; }) {
   return (
     <td className={`px-3 py-2.5 text-right font-mono text-[11px] ${className}`}>
-      <span className="inline-flex items-center gap-1">
-        {icon && <Fuel size={12} />}
-        {formatCurrency(value)}
-      </span>
+      <span className="inline-flex items-center gap-1">{icon && <Fuel size={12} />}{formatCurrency(value)}</span>
     </td>
   );
 }
@@ -292,10 +287,7 @@ function MoneyCell({
 function Loading({ text }: { text: string }) {
   return (
     <div className="flex h-screen items-center justify-center bg-slate-950 font-mono text-xs text-slate-500">
-      <div className="text-center">
-        <div className="mx-auto mb-2 h-5 w-5 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
-        {text}
-      </div>
+      <div className="text-center"><div className="mx-auto mb-2 h-5 w-5 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />{text}</div>
     </div>
   );
 }
