@@ -1,8 +1,8 @@
 "use client";
 import React, {Suspense,useCallback,useEffect,useMemo,useState} from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { BarChart3,CalendarDays,CheckCircle2,CircleDollarSign,FileText,Filter,RefreshCw,RotateCcw,Search,TrendingDown,TrendingUp,Wallet} from "lucide-react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { BarChart3,CalendarDays,CheckCircle2,CircleDollarSign,FileText,Filter,RefreshCw,RotateCcw,Search,TrendingDown,TrendingUp,Wallet,MapPin,X,Building2} from "lucide-react";
 
 const SUMMARY_API = "/api/dashboard/summary";
 const INCOME_API = "/api/expences/sales-incomes";
@@ -16,10 +16,12 @@ type Entry = {
   amount?: number | string;
   branch_name?: string;
   branch_id?: number | string;
+  branch_code?: string;
 };
 
 type DashboardResponse = {
   cards?: { totalExpenses?: number | string; };
+  branches?: any[];
   sales?: Entry[];
   capital?: Entry[];
 };
@@ -32,14 +34,17 @@ type IncomeResponse = {
 
 function ViewEntriesContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const selectedSalesId = searchParams.get("selected_sales_id");
   const selectedCapitalId = searchParams.get("selected_capital_id");
+  const selectedBranchId = searchParams.get("branch_id") || "";
   const selectedDate = searchParams.get("date") || "";
 
   const [entries, setEntries] = useState<Entry[]>([]);
   const [incomeEntries, setIncomeEntries] = useState<Entry[]>([]);
   const [totalIncome, setTotalIncome] = useState(0);
   const [totalExpenses, setTotalExpenses] = useState(0);
+  const [allBranches, setAllBranches] = useState<any[]>([]);
 
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -55,16 +60,21 @@ function ViewEntriesContent() {
       const dashboardParams = new URLSearchParams();
       if (selectedSalesId) dashboardParams.set("selected_sales_id", selectedSalesId);
       if (selectedCapitalId) dashboardParams.set("selected_capital_id", selectedCapitalId);
+      if (selectedBranchId) dashboardParams.set("branch_id", selectedBranchId);
       if (selectedDate) dashboardParams.set("date", selectedDate);
 
       const dashboardResponse = await fetch(`${SUMMARY_API}${dashboardParams.toString()? `?${dashboardParams.toString()}` : ""}`, { cache: "no-store" });
       if (!dashboardResponse.ok) throw new Error("Failed to load dashboard summary.");
       const dashboardResult: DashboardResponse = await dashboardResponse.json();
       setTotalExpenses(Number(dashboardResult.cards?.totalExpenses?? 0) || 0);
+      if (dashboardResult.branches && allBranches.length === 0) {
+        setAllBranches(dashboardResult.branches);
+      }
 
       const incomeParams = new URLSearchParams({ summary: "true" });
       if (selectedSalesId) incomeParams.set("selected_sales_id", selectedSalesId);
       if (selectedCapitalId) incomeParams.set("selected_capital_id", selectedCapitalId);
+      if (selectedBranchId) incomeParams.set("branch_id", selectedBranchId);
       if (selectedDate) incomeParams.set("date", selectedDate);
 
       const incomeResponse = await fetch(`${INCOME_API}?${incomeParams.toString()}`, { cache: "no-store" });
@@ -75,19 +85,19 @@ function ViewEntriesContent() {
       setTotalIncome(Number(incomeResult.grandTotal?? 0) || 0);
 
       const salesEntries: Entry[] = Array.isArray(dashboardResult.sales)? dashboardResult.sales.map((entry) => ({
-      ...entry, type: entry.type || "Expense", category: entry.category || "Sales Expense",
+     ...entry, type: entry.type || "Expense", category: entry.category || "Sales Expense",
         description: entry.description || `Sales Expense #${entry.id?? ""}`,
         date: String(entry.date?? "").substring(0, 10), amount: entry.amount?? 0,
       })) : [];
 
       const capitalEntries: Entry[] = Array.isArray(dashboardResult.capital)? dashboardResult.capital.map((entry) => ({
-      ...entry, type: entry.type || "Expense", category: entry.category || "Capital Expense",
+     ...entry, type: entry.type || "Expense", category: entry.category || "Capital Expense",
         description: entry.description || `Capital Expense #${entry.id?? ""}`,
         date: String(entry.date?? "").substring(0, 10), amount: entry.amount?? 0,
       })) : [];
 
       const incomeRecords: Entry[] = Array.isArray(incomeResult.data)? incomeResult.data.map((entry: any) => ({
-      ...entry, type: entry.type || "Income", category: entry.category || "Income",
+     ...entry, type: entry.type || "Income", category: entry.category || "Income",
         description: entry.description || entry.personName || entry.person_name || entry.name || `Income Entry #${entry.id?? ""}`,
         date: String(entry.date || entry.income_date || entry.created_at || "").substring(0, 10),
         amount: entry.amount?? entry.income_amount?? entry.total?? 0,
@@ -99,9 +109,27 @@ function ViewEntriesContent() {
       setError(err instanceof Error? err.message : "Unable to load entries.");
       setEntries([]); setIncomeEntries([]); setTotalIncome(0); setTotalExpenses(0);
     } finally { setLoading(false); }
-  }, [selectedSalesId, selectedCapitalId, selectedDate]);
+  }, [selectedSalesId, selectedCapitalId, selectedBranchId, selectedDate]);
 
   useEffect(() => { loadEntries(); }, [loadEntries]);
+
+  // all branches dropdown - first load eke full list ganna
+  useEffect(() => {
+    const fetchAllBranches = async () => {
+      try {
+        const res = await fetch(`${SUMMARY_API}`, { cache: "no-store" });
+        const json = await res.json();
+        if (json.branches) setAllBranches(json.branches);
+      } catch {}
+    };
+    fetchAllBranches();
+  }, []);
+
+  const updateBranchFilter = (branchId: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (branchId) params.set("branch_id", branchId); else params.delete("branch_id");
+    router.push(`/dashboard/view-entries${params.toString()?`?${params.toString()}`:""}`);
+  };
 
   const dateFilteredEntries = useMemo(() => {
     if (!fromDate &&!toDate) return entries;
@@ -129,7 +157,7 @@ function ViewEntriesContent() {
   }, []);
 
   const filteredSummary = useMemo(() => {
-    if (selectedDate) {
+    if (selectedDate || selectedBranchId) {
       const expenses = dateFilteredEntries.reduce((total, entry) => isIncomeEntry(entry)? total : total + (Number(entry.amount?? 0) || 0), 0);
       return { income: totalIncome, expenses: totalExpenses > 0? totalExpenses : expenses };
     }
@@ -143,7 +171,7 @@ function ViewEntriesContent() {
     }, 0);
     const expenses = dateFilteredEntries.reduce((total, entry) => isIncomeEntry(entry)? total : total + (Number(entry.amount?? 0) || 0), 0);
     return { income, expenses };
-  }, [selectedDate, fromDate, toDate, incomeEntries, dateFilteredEntries, totalIncome, totalExpenses, isIncomeEntry]);
+  }, [selectedDate, selectedBranchId, fromDate, toDate, incomeEntries, dateFilteredEntries, totalIncome, totalExpenses, isIncomeEntry]);
 
   const balance = filteredSummary.income - filteredSummary.expenses;
   const formatMoney = (value: number) => `Rs. ${value.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -159,29 +187,31 @@ function ViewEntriesContent() {
       <div className="mx-auto max-w-7xl">
         <header className="mb-8 flex flex-col justify-between gap-5 lg:flex-row lg:items-center">
           <div>
-            <div className="mb-2 flex gap-2 text-xs text-slate-500"><Link href={dashboardHref} className="hover:text-cyan-400">Dashboard</Link><span>/</span><span>View Entries</span></div>
-            <div className="flex items-center gap-3"><div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-3"><FileText className="text-cyan-400" /></div><div><h1 className="text-2xl font-bold text-white">View Entries</h1><p className="mt-1 text-sm text-slate-500">Review income, expenses and financial entries</p></div></div>
+            <div className="mb-2 flex gap-2 text-xs text-slate-500"><Link href={dashboardHref} className="hover:text-cyan-400">Dashboard</Link><span>/</span><span>View Entries</span>{selectedBranchId && <span className="text-cyan-400">/ Branch #{selectedBranchId}</span>}</div>
+            <div className="flex items-center gap-3"><div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-3"><FileText className="text-cyan-400" /></div><div><h1 className="text-2xl font-bold text-white">View Entries {selectedBranchId? <span className="text-cyan-400 text-base">- {allBranches.find((b:any)=>String(b.id)===String(selectedBranchId))?.branch_name || `Branch #${selectedBranchId}`}</span> : ""}</h1><p className="mt-1 text-sm text-slate-500">Review income, expenses and financial entries {selectedBranchId? `for selected branch` : ""}</p></div></div>
           </div>
           <button type="button" onClick={loadEntries} disabled={loading} className="flex items-center justify-center gap-2 rounded-xl border border-slate-700 px-5 py-3 text-sm hover:text-cyan-400 disabled:opacity-50"><RefreshCw size={17} className={loading? "animate-spin" : ""} />{loading? "Refreshing..." : "Refresh"}</button>
         </header>
         {error && <div className="mb-6 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">{error}</div>}
         <section className="mb-7 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          <SummaryCard title="Total Income" value={formatMoney(filteredSummary.income)} icon={<TrendingUp className="text-emerald-400" />} iconClass="border-emerald-500/20 bg-emerald-500/10" footer="Income recorded" footerIcon={<CheckCircle2 size={14} />} footerClass="text-emerald-400" />
-          <SummaryCard title="Total Expenses" value={formatMoney(filteredSummary.expenses)} icon={<TrendingDown className="text-orange-400" />} iconClass="border-orange-500/20 bg-orange-500/10" footer="Expenses recorded" footerIcon={<CircleDollarSign size={14} />} footerClass="text-orange-400" />
-          <SummaryCard title="Balance" value={formatMoney(Math.abs(balance))} icon={<Wallet className="text-blue-400" />} iconClass="border-blue-500/20 bg-blue-500/10" footer={balance < 0? "LOSS" : "PROFIT"} footerIcon={balance < 0? <TrendingDown size={14} /> : <TrendingUp size={14} />} footerClass={balance < 0? "text-red-400" : "text-emerald-400"} />
+          <SummaryCard title={`Total Income ${selectedBranchId? "(Filtered)" : ""}`} value={formatMoney(filteredSummary.income)} icon={<TrendingUp className="text-emerald-400" />} iconClass="border-emerald-500/20 bg-emerald-500/10" footer="Income recorded" footerIcon={<CheckCircle2 size={14} />} footerClass="text-emerald-400" />
+          <SummaryCard title={`Total Expenses ${selectedBranchId? "(Filtered)" : ""}`} value={formatMoney(filteredSummary.expenses)} icon={<TrendingDown className="text-orange-400" />} iconClass="border-orange-500/20 bg-orange-500/10" footer="Expenses recorded" footerIcon={<CircleDollarSign size={14} />} footerClass="text-orange-400" />
+          <SummaryCard title={`Balance ${selectedBranchId? "(Filtered)" : ""}`} value={formatMoney(Math.abs(balance))} icon={<Wallet className="text-blue-400" />} iconClass="border-blue-500/20 bg-blue-500/10" footer={balance < 0? "LOSS" : "PROFIT"} footerIcon={balance < 0? <TrendingDown size={14} /> : <TrendingUp size={14} />} footerClass={balance < 0? "text-red-400" : "text-emerald-400"} />
         </section>
         <section className="mb-7 rounded-2xl border border-slate-800 bg-[#0d1527] p-5">
-          <div className="mb-5 flex items-center gap-2"><Filter size={18} className="text-cyan-400" /><h2 className="text-sm font-bold uppercase text-white">Filter Entries</h2></div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="mb-5 flex items-center gap-2"><Filter size={18} className="text-cyan-400" /><h2 className="text-sm font-bold uppercase text-white">Filter Entries</h2>{selectedBranchId && <span className="ml-2 flex items-center gap-1 rounded-full border border-cyan-500/30 bg-cyan-950/40 px-2.5 py-1 text-[10px] text-cyan-400"><Building2 size={11} />{allBranches.find((b:any)=>String(b.id)===String(selectedBranchId))?.branch_code || `ID ${selectedBranchId}`}<button onClick={()=>updateBranchFilter("")} className="ml-1 hover:text-white"><X size={12} /></button></span>}</div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+            {/* BRANCH FILTER - NEW */}
+            <div><label className="mb-2 block text-xs uppercase text-cyan-400">Branch</label><div className="relative"><MapPin size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-cyan-400" /><select value={selectedBranchId} onChange={(e)=>updateBranchFilter(e.target.value)} className="w-full rounded-xl border border-cyan-900/30 bg-[#070a13] py-3 pl-10 pr-3 text-sm outline-none focus:border-cyan-500 text-cyan-200"><option value="">All Branches ({allBranches.length})</option>{allBranches.map((b:any)=><option key={b.id} value={String(b.id)}>{b.branch_name} ({b.branch_code})</option>)}</select></div></div>
             <DateInput label="From Date" value={fromDate} onChange={setFromDate} />
             <DateInput label="To Date" value={toDate} onChange={setToDate} />
             <div><label className="mb-2 block text-xs uppercase text-slate-500">Search</label><div className="relative"><Search size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" /><input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search entries..." className="w-full rounded-xl border border-slate-700 bg-[#070a13] py-3 pl-10 pr-3 text-sm outline-none focus:border-cyan-500" /></div></div>
           </div>
-          <div className="mt-5 flex items-center justify-between"><p className="text-xs text-slate-500">Showing {filteredEntries.length} entries</p><button type="button" onClick={resetFilter} className="flex items-center gap-2 rounded-xl border border-slate-700 px-4 py-2 text-xs uppercase text-slate-400 hover:text-white"><RotateCcw size={15} />Reset Filter</button></div>
+          <div className="mt-5 flex items-center justify-between"><p className="text-xs text-slate-500">Showing {filteredEntries.length} entries {selectedBranchId? `for selected branch` : ""}</p><button type="button" onClick={resetFilter} className="flex items-center gap-2 rounded-xl border border-slate-700 px-4 py-2 text-xs uppercase text-slate-400 hover:text-white"><RotateCcw size={15} />Reset Filter</button></div>
         </section>
         <section className="overflow-hidden rounded-2xl border border-slate-800 bg-[#0d1527]">
-          <div className="flex items-center justify-between border-b border-slate-800 p-5"><div className="flex items-center gap-3"><BarChart3 className="text-indigo-400" /><h2 className="text-sm font-bold uppercase text-white">Financial Entries</h2></div><span className="text-xs text-slate-500">{filteredEntries.length} Records</span></div>
-          {loading? <div className="flex flex-col items-center py-16 text-slate-500"><RefreshCw className="mb-3 animate-spin text-cyan-400" />Loading entries...</div> : filteredEntries.length === 0? <div className="py-16 text-center text-sm text-slate-500">No entries found. Click Reset Filter</div> : (
+          <div className="flex items-center justify-between border-b border-slate-800 p-5"><div className="flex items-center gap-3"><BarChart3 className="text-indigo-400" /><h2 className="text-sm font-bold uppercase text-white">Financial Entries {selectedBranchId? `(Filtered - ${filteredEntries.length})` : ""}</h2></div><span className="text-xs text-slate-500">{filteredEntries.length} Records</span></div>
+          {loading? <div className="flex flex-col items-center py-16 text-slate-500"><RefreshCw className="mb-3 animate-spin text-cyan-400" />Loading entries...</div> : filteredEntries.length === 0? <div className="py-16 text-center text-sm text-slate-500">No entries found. {selectedBranchId? `No entries for this branch.` : "Click Reset Filter"}</div> : (
             <div className="overflow-x-auto"><table className="w-full min-w-[850px]"><thead><tr className="border-b border-slate-800 bg-[#0a1020] text-left text-[10px] uppercase text-slate-500"><th className="px-5 py-4">Date</th><th className="px-5 py-4">Description</th><th className="px-5 py-4">Category</th><th className="px-5 py-4">Type</th><th className="px-5 py-4">Branch</th><th className="px-5 py-4 text-right">Amount</th></tr></thead><tbody>{filteredEntries.map((entry, index) => { const income = isIncomeEntry(entry); const amount = Number(entry.amount?? 0) || 0; return (<tr key={entry.id?? `${entry.date}-${entry.description}-${index}`} className="border-b border-slate-800/70 hover:bg-slate-800/20"><td className="px-5 py-4 text-sm text-slate-300"><span className="flex items-center gap-2"><CalendarDays size={15} />{formatDate(entry.date)}</span></td><td className="px-5 py-4 text-sm text-slate-200">{entry.description || "-"}</td><td className="px-5 py-4 text-sm text-slate-400">{entry.category || "-"}</td><td className="px-5 py-4"><span className={income? "text-emerald-400" : "text-orange-400"}>{income? "Income" : "Expense"}</span></td><td className="px-5 py-4 text-sm text-slate-400">{entry.branch_name || entry.branch_id || "-"}</td><td className={`px-5 py-4 text-right font-bold ${income? "text-emerald-400" : "text-orange-400"}`}>{income? "+" : "-"}{formatMoney(amount)}</td></tr>); })}</tbody></table></div>
           )}
         </section>
