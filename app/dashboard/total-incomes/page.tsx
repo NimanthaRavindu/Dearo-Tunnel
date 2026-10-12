@@ -1,22 +1,26 @@
 "use client";
-import React, {Suspense,useCallback,useEffect,useState} from "react";
+import React, {Suspense,useCallback,useEffect,useState,useMemo} from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft,Building2,Calendar,Filter,Layers,Loader2,TrendingUp,X} from "lucide-react";
+import { ArrowLeft,Building2,Calendar,Filter,Layers,Loader2,TrendingUp,X,MapPin,Search} from "lucide-react";
 
 interface BranchIncomeSummary {
   branchId: string; branchName?: string; branch_name?: string;
   totalAmount?: number; total_amount?: number; totalCredit?: number; total_credit?: number;
   entriesCount?: number; entries_count?: number; last_date?: string; date?: string;
+  branch_code?: string;
 }
 function TotalIncomesContent() {
   const router = useRouter(); const searchParams = useSearchParams();
   const selectedSalesId = searchParams.get("selected_sales_id");
   const selectedCapitalId = searchParams.get("selected_capital_id");
+  const selectedBranchId = searchParams.get("branch_id");
   const filterDate = searchParams.get("date") || "";
   const [summaries, setSummaries] = useState<BranchIncomeSummary[]>([]);
+  const [allBranches, setAllBranches] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [grandTotal, setGrandTotal] = useState(0);
   const [grandCredit, setGrandCredit] = useState(0);
+  const [localSearch, setLocalSearch] = useState("");
 
   const fetchTotalIncomesSummary = useCallback(async () => {
     try {
@@ -24,6 +28,7 @@ function TotalIncomesContent() {
       const params = new URLSearchParams(); params.set("summary","true");
       if (selectedSalesId) params.set("selected_sales_id",selectedSalesId);
       if (selectedCapitalId) params.set("selected_capital_id",selectedCapitalId);
+      if (selectedBranchId) params.set("branch_id",selectedBranchId);
       if (filterDate) params.set("date",filterDate);
       const res = await fetch(`/api/expences/sales-incomes?${params.toString()}`,{cache:"no-store"});
       const result = await res.json();
@@ -33,25 +38,45 @@ function TotalIncomesContent() {
       setGrandCredit(Number(result.grandCredit??0)||0);
     } catch (e) { console.error(e); setSummaries([]); setGrandTotal(0); setGrandCredit(0); }
     finally { setIsLoading(false); }
-  }, [selectedSalesId, selectedCapitalId, filterDate]);
+  }, [selectedSalesId, selectedCapitalId, selectedBranchId, filterDate]);
+
   useEffect(()=>{ fetchTotalIncomesSummary(); },[fetchTotalIncomesSummary]);
+
+  // all branches for dropdown
+  useEffect(() => {
+    const fetchAllBranches = async () => {
+      try {
+        const res = await fetch(`/api/dashboard/summary`, { cache: "no-store" });
+        const json = await res.json();
+        if (json.branches) setAllBranches(json.branches);
+      } catch {}
+    };
+    fetchAllBranches();
+  }, []);
 
   const updateDateFilter = (date: string) => {
     const params = new URLSearchParams(searchParams.toString());
     if (date) params.set("date",date); else params.delete("date");
     router.replace(`/dashboard/total-incomes${params.toString()?`?${params.toString()}`:""}`);
   };
+  const updateBranchFilter = (branchId: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (branchId) params.set("branch_id", branchId); else params.delete("branch_id");
+    router.replace(`/dashboard/total-incomes${params.toString()?`?${params.toString()}`:""}`);
+  };
   const clearDateFilter = () => updateDateFilter("");
-  const clearFilter = (type: "sales"|"capital") => {
+  const clearFilter = (type: "sales"|"capital"|"branch") => {
     const params = new URLSearchParams(searchParams.toString());
     if (type==="sales") params.delete("selected_sales_id");
     if (type==="capital") params.delete("selected_capital_id");
+    if (type==="branch") params.delete("branch_id");
     router.push(`/dashboard/total-incomes${params.toString()?`?${params.toString()}`:""}`);
   };
   const handleBackToDashboard = () => {
     const params = new URLSearchParams();
     if (selectedSalesId) params.set("selected_sales_id",selectedSalesId);
     if (selectedCapitalId) params.set("selected_capital_id",selectedCapitalId);
+    if (selectedBranchId) params.set("branch_id",selectedBranchId);
     if (filterDate) params.set("date",filterDate);
     router.push(`/dashboard${params.toString()?`?${params.toString()}`:""}`);
   };
@@ -64,6 +89,23 @@ function TotalIncomesContent() {
   };
   const formatDate = (v?: string) => { if (!v) return "-"; const [y,m,d]=v.substring(0,10).split("-"); return y&&m&&d?`${d}/${m}/${y}`:v; };
 
+  const filteredSummaries = useMemo(() => {
+    if (!localSearch) return summaries;
+    return summaries.filter(s => {
+      const name = (s.branchName || s.branch_name || "").toLowerCase();
+      const code = (s.branch_code || "").toLowerCase();
+      return name.includes(localSearch.toLowerCase()) || code.includes(localSearch.toLowerCase());
+    });
+  }, [summaries, localSearch]);
+
+  const displayTotal = useMemo(() => {
+    return filteredSummaries.reduce((sum, item) => sum + Number(item.totalAmount??item.total_amount??0), 0);
+  }, [filteredSummaries]);
+
+  const displayCredit = useMemo(() => {
+    return filteredSummaries.reduce((sum, item) => sum + Number(item.totalCredit??item.total_credit??0), 0);
+  }, [filteredSummaries]);
+
   return (
     <div className="relative flex min-h-screen flex-col items-center overflow-hidden bg-[#070a12] p-6 font-mono text-xs text-slate-100 sm:p-10">
       <div className="pointer-events-none absolute left-1/4 top-0 h-[300px] w-[500px] rounded-full bg-red-600/10 blur-[140px]" />
@@ -74,7 +116,22 @@ function TotalIncomesContent() {
             <button type="button" onClick={handleBackToDashboard} className="group rounded-xl border border-slate-800 bg-slate-900/90 p-3 text-slate-400 shadow-lg hover:text-white"><ArrowLeft size={16} /></button>
             <div><div className="flex items-center gap-2.5"><span className="flex h-2.5 w-2.5 animate-pulse rounded-full bg-red-500 shadow-lg shadow-red-500/50" /><h1 className="text-xl font-black uppercase tracking-wider text-slate-100 sm:text-2xl">Total Sales Incomes Ledger</h1></div><p className="mt-1 text-xs font-medium text-slate-400">Real-time aggregated financial revenue tracking across all active corporate infrastructure branches</p></div>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* BRANCH FILTER - NEW */}
+            <div className="relative flex items-center">
+              <MapPin size={12} className="absolute left-2.5 text-cyan-400 pointer-events-none" />
+              <select value={selectedBranchId||""} onChange={(e)=>updateBranchFilter(e.target.value)} className="bg-slate-950/60 border border-cyan-900/40 rounded-lg pl-7 pr-7 py-1.5 text-[11px] text-cyan-300 outline-none focus:border-cyan-500/50 cursor-pointer min-w-[190px]">
+                <option value="">All Branches ({allBranches.length})</option>
+                {allBranches.map((b:any)=><option key={b.id} value={String(b.id)}>{b.branch_name} ({b.branch_code})</option>)}
+              </select>
+            </div>
+
+            <div className="relative flex items-center">
+              <Search size={10} className="absolute left-2.5 text-slate-500 pointer-events-none" />
+              <input value={localSearch} onChange={(e)=>setLocalSearch(e.target.value)} placeholder="Search branch..." className="bg-slate-950/60 border border-slate-800 rounded-lg pl-7 pr-3 py-1.5 text-[11px] outline-none w-[140px]" />
+            </div>
+
+            {selectedBranchId && <div className="flex items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-950/40 px-3 py-1.5 text-[11px] text-cyan-400"><Filter size={12} /><span>Branch #{selectedBranchId}</span><button onClick={()=>clearFilter("branch")}><X size={13} /></button></div>}
             {selectedCapitalId && <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-950/40 px-3 py-1.5 text-[11px] text-amber-400"><Filter size={12} /><span>Capital #{selectedCapitalId}</span><button onClick={()=>clearFilter("capital")}><X size={13} /></button></div>}
             {selectedSalesId && <div className="flex items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-950/40 px-3 py-1.5 text-[11px] text-cyan-400"><Filter size={12} /><span>Sales #{selectedSalesId}</span><button onClick={()=>clearFilter("sales")}><X size={13} /></button></div>}
             <div className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-1.5">
@@ -87,19 +144,19 @@ function TotalIncomesContent() {
 
         <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-[#0d1527]/60 p-6 shadow-2xl sm:p-8">
           <div className="relative z-10 grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div className="flex items-center gap-5"><div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-red-400"><TrendingUp size={28} /></div><div><span className="text-[10px] font-bold uppercase text-slate-400">{filterDate?`Revenue for ${filterDate}`:"Grand Cumulative Revenue"}</span><div className="mt-1 text-2xl font-black sm:text-3xl">LKR {grandTotal.toLocaleString(undefined,{minimumFractionDigits:2})}</div></div></div>
-            <div className="flex items-center gap-5"><div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-400"><TrendingUp size={28} /></div><div><span className="text-[10px] font-bold uppercase text-slate-400">{filterDate?`Credit for ${filterDate}`:"Grand Total Credit"}</span><div className="mt-1 text-2xl font-black text-amber-400 sm:text-3xl">LKR {grandCredit.toLocaleString(undefined,{minimumFractionDigits:2})}</div></div></div>
+            <div className="flex items-center gap-5"><div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-red-400"><TrendingUp size={28} /></div><div><span className="text-[10px] font-bold uppercase text-slate-400">{selectedBranchId? `Revenue for Selected Branch${filterDate?` - ${filterDate}`:""}` : filterDate?`Revenue for ${filterDate}`:"Grand Cumulative Revenue"}</span><div className="mt-1 text-2xl font-black sm:text-3xl">LKR {(selectedBranchId? displayTotal : grandTotal).toLocaleString(undefined,{minimumFractionDigits:2})}</div></div></div>
+            <div className="flex items-center gap-5"><div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-400"><TrendingUp size={28} /></div><div><span className="text-[10px] font-bold uppercase text-slate-400">{selectedBranchId? `Credit for Selected Branch${filterDate?` - ${filterDate}`:""}` : filterDate?`Credit for ${filterDate}`:"Grand Total Credit"}</span><div className="mt-1 text-2xl font-black text-amber-400 sm:text-3xl">LKR {(selectedBranchId? displayCredit : grandCredit).toLocaleString(undefined,{minimumFractionDigits:2})}</div></div></div>
           </div>
-          <div className="relative z-10 mt-6 flex w-fit items-center gap-3 rounded-xl border border-slate-800/80 bg-slate-950/60 px-4 py-2.5"><div className="rounded-lg bg-slate-900 p-2 text-slate-400"><Layers size={16} /></div><div className="text-xs"><p className="font-medium text-slate-400">Database Status</p><p className="mt-0.5 flex items-center gap-1 font-bold text-emerald-400"><span className="h-1.5 w-1.5 animate-ping rounded-full bg-emerald-400" />Synchronized</p></div></div>
+          <div className="relative z-10 mt-6 flex w-fit items-center gap-3 rounded-xl border border-slate-800/80 bg-slate-950/60 px-4 py-2.5"><div className="rounded-lg bg-slate-900 p-2 text-slate-400"><Layers size={16} /></div><div className="text-xs"><p className="font-medium text-slate-400">Database Status</p><p className="mt-0.5 flex items-center gap-1 font-bold text-emerald-400"><span className="h-1.5 w-1.5 animate-ping rounded-full bg-emerald-400" />Synchronized {selectedBranchId? `- Branch #${selectedBranchId} Filter Active`:""}</p></div></div>
         </div>
 
         <div className="space-y-6 rounded-2xl border border-slate-800 bg-[#0d1527]/40 p-6 shadow-2xl sm:p-8">
           <div className="flex flex-col justify-between gap-3 border-b border-slate-800 pb-4 sm:flex-row sm:items-center">
-            <div className="flex items-center gap-2.5"><Building2 size={16} className="text-red-400" /><h2 className="text-xs font-extrabold uppercase tracking-widest text-slate-200">Branch-Wise Revenue Breakdown</h2></div>
-            <span className="text-[11px] font-semibold text-slate-400">{summaries.length} Operating Units Active {filterDate?`for ${formatDate(filterDate)}`:""}</span>
+            <div className="flex items-center gap-2.5"><Building2 size={16} className="text-red-400" /><h2 className="text-xs font-extrabold uppercase tracking-widest text-slate-200">Branch-Wise Revenue Breakdown {selectedBranchId? `(Filtered)`:""}</h2></div>
+            <span className="text-[11px] font-semibold text-slate-400">{filteredSummaries.length} Operating Units Active {filterDate?`for ${formatDate(filterDate)}`:""} {selectedBranchId? `- Branch Filtered`:""}</span>
           </div>
           {isLoading? <div className="flex flex-col items-center justify-center py-24"><Loader2 size={28} className="animate-spin text-red-500" /><p className="text-[11px] text-slate-400 mt-2">Aggregating branch database nodes...</p></div>
-          : summaries.length===0? <div className="flex flex-col items-center justify-center py-24"><Building2 size={28} className="text-slate-600" /><p className="text-[11px] text-slate-400 mt-2">{filterDate?`No records for ${filterDate}.`:"No active branch sales income records detected."}</p>{filterDate && <button onClick={clearDateFilter} className="text-[10px] text-red-400 mt-2">Clear date filter</button>}</div>
+          : filteredSummaries.length===0? <div className="flex flex-col items-center justify-center py-24"><Building2 size={28} className="text-slate-600" /><p className="text-[11px] text-slate-400 mt-2">{filterDate||selectedBranchId?`No records ${selectedBranchId? `for branch #${selectedBranchId}`:""} ${filterDate? `on ${filterDate}`:""}.`:"No active branch sales income records detected."}</p>{(filterDate||selectedBranchId) && <div className="flex gap-2 mt-2"><button onClick={clearDateFilter} className="text-[10px] text-red-400">Clear date</button><button onClick={()=>clearFilter("branch")} className="text-[10px] text-cyan-400">Clear branch</button></div>}</div>
           : (
             <div className="overflow-x-auto rounded-xl border border-slate-800 bg-[#090e1a]/50">
               <table className="w-full border-collapse text-left">
@@ -107,7 +164,7 @@ function TotalIncomesContent() {
                   <th className="px-4 py-3.5">Branch Name</th><th className="px-4 py-3.5">Date</th><th className="px-4 py-3.5 text-center">Logged Entries</th><th className="px-4 py-3.5 text-right">Total Revenue (LKR)</th><th className="px-4 py-3.5 text-right">Total Credit (LKR)</th>
                 </tr></thead>
                 <tbody className="divide-y divide-slate-800/50 text-xs">
-                  {summaries.map((item)=>{
+                  {filteredSummaries.map((item)=>{
                     const branchName = item.branchName||item.branch_name||`Branch #${item.branchId}`||"Unnamed Branch";
                     const totalAmount = Number(item.totalAmount??item.total_amount??0);
                     const totalCredit = Number(item.totalCredit??item.total_credit??0);
