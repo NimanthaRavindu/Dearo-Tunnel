@@ -149,7 +149,7 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
       </div>
 
       <section className="bg-[#0d1527]/40 border border-slate-800/60 rounded-xl p-5">
-        <div className="mb-4 flex items-center justify-between"><h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">Branch Expense Distribution - Sales Expenses vs Incomes</h3><span className="text-[10px] text-slate-500">{filteredBranches.length} branches | <span className="text-blue-400">■ Sales</span> <span className="text-red-400">■ Incomes</span></span></div>
+        <div className="mb-4 flex items-center justify-between"><h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">Branch Expense Distribution - Total Expenses vs Incomes</h3><span className="text-[10px] text-slate-500">{filteredBranches.length} branches | <span className="text-blue-400">■ Sales</span> <span className="text-red-400">■ Incomes</span></span></div>
         <div className="h-80 w-full relative"><Bar data={chartData} options={chartOptions as any} /></div>
       </section>
     </div>
