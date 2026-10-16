@@ -92,7 +92,7 @@ function DashboardContent({ searchQuery = "" }: PageProps) {
     labels: filteredBranches.map((b: any) => b.branch_code || b.branch_name),
     datasets: [
       {
-        label: "Sales Expenses (Rs.)",
+        label: "Total Expenses (Rs.)",
         data: filteredBranches.map((b: any) => { const s = Number(b.sales_expenses||0); return s>0? s : Number(b.total_expenses||0); }),
         backgroundColor: "rgba(59, 130, 246, 0.9)", borderColor: "#3b82f6", borderWidth: 1, borderRadius: 4, barThickness: 14,
       },
