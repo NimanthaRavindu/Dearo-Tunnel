@@ -105,7 +105,7 @@ export default function DieselExpensesPage({ params }: PageProps) {
   // FIXED: Aluth detail page ekata yano
   const openRecordDetail = (record: DieselExpense) => {
     if (!record.id) return;
-    router.push(`/dashboard/branches/${encodeURIComponent(branchId)}/view-expenses/diesel/${encodeURIComponent(String(record.id))}`);
+    router.push(`/dashboard/branches/${encodeURIComponent(branchId)}/view-expences/diesel/${encodeURIComponent(String(record.id))}`);
   };
 
   return (
