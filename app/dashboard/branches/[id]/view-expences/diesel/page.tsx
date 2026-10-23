@@ -2,7 +2,7 @@
 
 import React, { use, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CalendarDays, CircleDollarSign, Fuel, Loader2, RefreshCw, Search, X, Droplets, AlertCircle, CreditCard, Wallet, Settings2, BarChart3 } from "lucide-react";
+import { ArrowLeft, CalendarDays, CircleDollarSign, Fuel, Loader2, RefreshCw, Search, X, Droplets, AlertCircle, CreditCard, Wallet, Settings2, BarChart3, Eye } from "lucide-react";
 
 interface PageProps { params: Promise<{ id: string }> }
 interface DieselExpense {
@@ -48,7 +48,6 @@ export default function DieselExpensesPage({ params }: PageProps) {
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedMachine, setSelectedMachine] = useState("");
   const [search, setSearch] = useState("");
-  const [selectedRecord, setSelectedRecord] = useState<DieselExpense | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -100,22 +99,21 @@ export default function DieselExpensesPage({ params }: PageProps) {
     if (selectedDate) query.set("date", selectedDate);
     if (selectedMachine) query.set("machine", selectedMachine);
     if (search) query.set("search", search);
-    router.push(`/dashboard/branches/${encodeURIComponent(branchId)}/view-expences/diesel/summary?${query.toString()}`);
+    router.push(`/dashboard/branches/${encodeURIComponent(branchId)}/view-expenses/diesel/summary?${query.toString()}`);
   };
 
-  const openRecordInTotalExpenses = (record: DieselExpense) => {
+  // FIXED: Aluth detail page ekata yano
+  const openRecordDetail = (record: DieselExpense) => {
     if (!record.id) return;
-    const query = new URLSearchParams(); query.set("selected_diesel_id", String(record.id));
-    router.push(`/dashboard/total-expenses?${query.toString()}`);
+    router.push(`/dashboard/branches/${encodeURIComponent(branchId)}/view-expenses/diesel/${encodeURIComponent(String(record.id))}`);
   };
-  const handleRecordClick = (record: DieselExpense) => { setSelectedRecord(record); openRecordInTotalExpenses(record); };
 
   return (
     <main className="min-h-screen bg-[#070a12] p-4 font-sans text-slate-200 md:p-6 lg:p-8">
       <div className="mx-auto max-w-7xl">
         <header className="mb-8 flex flex-col justify-between gap-5 border-b border-slate-800/80 pb-6 xl:flex-row xl:items-center">
           <div className="flex items-center gap-4">
-            <button type="button" onClick={() => router.push(`/dashboard/branches/${encodeURIComponent(branchId)}/view-expences`)} className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-slate-400 transition hover:border-cyan-500/40 hover:bg-slate-800 hover:text-white"><ArrowLeft size={17} /></button>
+            <button type="button" onClick={() => router.push(`/dashboard/branches/${encodeURIComponent(branchId)}/view-expenses`)} className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-slate-400 transition hover:border-cyan-500/40 hover:bg-slate-800 hover:text-white"><ArrowLeft size={17} /></button>
             <div><div className="flex items-center gap-3"><div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-3 text-cyan-400"><Fuel size={20} /></div><div><p className="text-[10px] font-bold uppercase tracking-[0.25em] text-cyan-400">Expense Management</p><h1 className="mt-1 font-mono text-xl font-black uppercase tracking-wider text-white">Diesel Expenses</h1></div></div><p className="mt-3 text-xs text-slate-500">Branch ID: <span className="font-semibold text-purple-400">{branchId}</span></p></div>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
@@ -150,7 +148,7 @@ export default function DieselExpensesPage({ params }: PageProps) {
             </div>
           </div>
           {loading? (<div className="flex min-h-[280px] flex-col items-center justify-center gap-3 text-sm text-slate-500"><Loader2 size={28} className="animate-spin text-cyan-400" />Loading...</div>) : filteredRecords.length === 0? (<div className="flex min-h-[280px] flex-col items-center justify-center gap-3 text-center text-sm text-slate-500"><Fuel size={30} className="text-slate-700" /><p>No records found for selected filter.</p></div>) : (
-            <div className="overflow-x-auto"><table className="w-full min-w-[1150px]"><thead><tr className="border-b border-slate-800 bg-[#0a1020] text-left text-[10px] font-bold uppercase tracking-wider text-slate-500"><th className="px-5 py-4">Branch ID</th><th className="px-5 py-4">Date</th><th className="px-5 py-4">Machine</th><th className="px-5 py-4 text-right">Diesel</th><th className="px-5 py-4 text-right">Amount</th><th className="px-5 py-4 text-right">Payable</th><th className="px-5 py-4 text-right">Paid</th><th className="px-5 py-4 text-right">Balance</th><th className="px-5 py-4 text-center">Action</th></tr></thead><tbody className="divide-y divide-slate-800/70">{filteredRecords.map((record, index) => (<tr key={record.id?? `${record.date}-${record.machine}-${index}`} onClick={() => handleRecordClick(record)} className="cursor-pointer transition hover:bg-cyan-500/[0.08]"><td className="px-5 py-4 text-xs text-slate-400">{record.branch_id?? branchId}</td><td className="whitespace-nowrap px-5 py-4 text-xs text-slate-300">{formatDate(record.date)}</td><td className="px-5 py-4 text-sm font-bold text-white">{record.machine || "-"}</td><td className="px-5 py-4 text-right text-sm font-semibold text-cyan-400">{formatDiesel(record.diesel)} L</td><td className="px-5 py-4 text-right text-sm text-slate-200">{formatMoney(numeric(record.amount))}</td><td className="px-5 py-4 text-right text-sm text-amber-400">{formatMoney(numeric(record.payable?? record.amount))}</td><td className="px-5 py-4 text-right text-sm text-emerald-400">{formatMoney(numeric(record.paid))}</td><td className="px-5 py-4 text-right text-sm font-bold text-rose-400">{formatMoney(numeric(record.balance))}</td><td className="px-5 py-4 text-center"><button type="button" onClick={(e) => { e.stopPropagation(); handleRecordClick(record); }} className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-cyan-400 transition hover:bg-cyan-500 hover:text-slate-950">View</button></td></tr>))}</tbody><tfoot><tr className="border-t border-slate-700 bg-[#0a1020] text-sm font-bold"><td colSpan={3} className="px-5 py-4 text-slate-400">Filtered Total</td><td className="px-5 py-4 text-right text-cyan-400">{formatDiesel(summary.diesel)} L</td><td className="px-5 py-4 text-right text-white">{formatMoney(summary.amount)}</td><td className="px-5 py-4 text-right text-amber-400">{formatMoney(summary.payable)}</td><td className="px-5 py-4 text-right text-emerald-400">{formatMoney(summary.paid)}</td><td className="px-5 py-4 text-right text-rose-400">{formatMoney(summary.balance)}</td><td /></tr></tfoot></table></div>)}
+            <div className="overflow-x-auto"><table className="w-full min-w-[1150px]"><thead><tr className="border-b border-slate-800 bg-[#0a1020] text-left text-[10px] font-bold uppercase tracking-wider text-slate-500"><th className="px-5 py-4">Branch ID</th><th className="px-5 py-4">Date</th><th className="px-5 py-4">Machine</th><th className="px-5 py-4 text-right">Diesel</th><th className="px-5 py-4 text-right">Amount</th><th className="px-5 py-4 text-right">Payable</th><th className="px-5 py-4 text-right">Paid</th><th className="px-5 py-4 text-right">Balance</th><th className="px-5 py-4 text-center">Action</th></tr></thead><tbody className="divide-y divide-slate-800/70">{filteredRecords.map((record, index) => (<tr key={record.id?? `${record.date}-${record.machine}-${index}`} className="transition hover:bg-cyan-500/[0.08]"><td className="px-5 py-4 text-xs text-slate-400">{record.branch_id?? branchId}</td><td className="whitespace-nowrap px-5 py-4 text-xs text-slate-300">{formatDate(record.date)}</td><td className="px-5 py-4 text-sm font-bold text-white">{record.machine || "-"}</td><td className="px-5 py-4 text-right text-sm font-semibold text-cyan-400">{formatDiesel(record.diesel)} L</td><td className="px-5 py-4 text-right text-sm text-slate-200">{formatMoney(numeric(record.amount))}</td><td className="px-5 py-4 text-right text-sm text-amber-400">{formatMoney(numeric(record.payable?? record.amount))}</td><td className="px-5 py-4 text-right text-sm text-emerald-400">{formatMoney(numeric(record.paid))}</td><td className="px-5 py-4 text-right text-sm font-bold text-rose-400">{formatMoney(numeric(record.balance))}</td><td className="px-5 py-4 text-center"><button type="button" onClick={() => openRecordDetail(record)} className="flex items-center gap-1.5 mx-auto rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-cyan-400 transition hover:bg-cyan-500 hover:text-slate-950"><Eye size={12}/> View</button></td></tr>))}</tbody><tfoot><tr className="border-t border-slate-700 bg-[#0a1020] text-sm font-bold"><td colSpan={3} className="px-5 py-4 text-slate-400">Filtered Total</td><td className="px-5 py-4 text-right text-cyan-400">{formatDiesel(summary.diesel)} L</td><td className="px-5 py-4 text-right text-white">{formatMoney(summary.amount)}</td><td className="px-5 py-4 text-right text-amber-400">{formatMoney(summary.payable)}</td><td className="px-5 py-4 text-right text-emerald-400">{formatMoney(summary.paid)}</td><td className="px-5 py-4 text-right text-rose-400">{formatMoney(summary.balance)}</td><td /></tr></tfoot></table></div>)}
         </section>
       </div>
     </main>
