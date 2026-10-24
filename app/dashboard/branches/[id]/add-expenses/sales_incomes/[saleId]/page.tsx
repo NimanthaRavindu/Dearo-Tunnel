@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Loader2, FileText, Calendar, Tag, Hash, DollarSign, Printer, Download } from "lucide-react";
+import { ArrowLeft, Loader2, FileText, Printer, Download } from "lucide-react";
 
 export default function SaleViewPage() {
   const params = useParams();
@@ -27,10 +27,11 @@ export default function SaleViewPage() {
   const handlePrint = () => window.print();
 
   const handlePDF = async () => {
+    setDownloading(true);
     try {
-      setDownloading(true);
       const el = document.getElementById("pdf-content");
-      if (!el) return;
+      if (!el) throw new Error("Receipt element not found");
+
       // @ts-ignore
       const html2canvasMod = await import("html2canvas");
       const html2canvas = html2canvasMod.default;
@@ -38,15 +39,38 @@ export default function SaleViewPage() {
       const jspdfMod = await import("jspdf");
       const jsPDF = jspdfMod.jsPDF;
 
-      const canvas = await html2canvas(el, { scale: 3, useCORS: true, backgroundColor: "#ffffff" } as any);
-      const imgData = canvas.toDataURL("image/png");
+      const canvas = await html2canvas(el, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: "#ffffff",
+        logging: false,
+      } as any);
+
+      const imgData = canvas.toDataURL("image/png", 1.0);
       const pdf = new jsPDF("p", "mm", "a4");
       const pdfW = pdf.internal.pageSize.getWidth();
       const pdfH = (canvas.height * pdfW) / canvas.width;
+      
       pdf.addImage(imgData, "PNG", 0, 0, pdfW, pdfH);
-      pdf.save(`SALES-INCOME-${saleId}.pdf`);
+
+      // 100% download wada karana method eka
+      const fileName = `SALES-INCOME-${saleId}-${Date.now()}.pdf`;
+      const blob = pdf.output("blob");
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+
+      console.log("PDF Downloaded:", fileName);
     } catch (e) {
-      console.error(e);
+      console.error("PDF Error:", e);
+      alert("PDF download failed, trying print...");
+      window.print();
     } finally {
       setDownloading(false);
     }
@@ -63,8 +87,7 @@ export default function SaleViewPage() {
         @media print {
           body { background: white !important; }
           .no-print { display: none !important; }
-          #pdf-content { background: white !important; color: black !important; border: none !important; box-shadow: none !important; }
-          #pdf-content * { color: black !important; border-color: #e2e8f0 !important; }
+          #pdf-content { background: white !important; color: black !important; border: 1px solid #ddd !important; box-shadow: none !important; }
         }
       `}</style>
 
@@ -73,14 +96,15 @@ export default function SaleViewPage() {
           <Link href={`/dashboard/branches/${branchId}/add-expenses/sales_incomes`} className="flex items-center gap-2 px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-400 hover:text-white"><ArrowLeft size={14}/> Back</Link>
           <div className="flex gap-2">
             <button onClick={handlePrint} className="w-10 h-10 bg-slate-900 border border-slate-700 rounded-xl flex items-center justify-center hover:bg-white hover:text-black"><Printer size={14}/></button>
-            <button onClick={handlePDF} disabled={downloading} className="h-10 px-4 bg-red-600 hover:bg-red-500 text-white rounded-xl flex items-center gap-2 font-black uppercase text-[10px]">{downloading ? <Loader2 size={12} className="animate-spin"/> : <Download size={12}/>} {downloading ? "Generating..." : "Download PDF"}</button>
+            <button onClick={handlePDF} disabled={downloading} className="h-10 px-5 bg-red-600 hover:bg-red-500 text-white rounded-xl flex items-center gap-2 font-black uppercase text-[10px] tracking-wider disabled:opacity-50">
+              {downloading ? <Loader2 size={12} className="animate-spin"/> : <Download size={12}/>} {downloading ? "Downloading..." : "Download PDF"}
+            </button>
           </div>
         </div>
 
-        {/* PDF eke yanne me id eka athule thiyena tika witharak */}
         <div id="pdf-content" className="bg-white text-black rounded-2xl p-8 shadow-2xl border border-slate-200 w-full">
           <div className="flex justify-between border-b-2 border-black pb-6 mb-6">
-            <div><h1 className="text-lg font-black uppercase tracking-widest">Sales Income Receipt</h1><p className="text-[10px] text-slate-500 mt-1 uppercase font-bold">Branch #{branchId} | ID: {sale.id} | Date: {sale.date?.slice(0,10)}</p></div>
+            <div><h1 className="text-lg font-black uppercase tracking-widest flex items-center gap-2"><FileText size={18}/> Sales Income Receipt</h1><p className="text-[10px] text-slate-500 mt-1 uppercase font-bold">Branch #{branchId} | ID: {sale.id} | Date: {sale.date?.slice(0,10)}</p></div>
             <div className="text-right"><p className="text-[10px] font-black uppercase border border-black px-3 py-1 rounded-full">Verified</p><p className="text-[9px] mt-2">REF: SALE/{String(sale.id).padStart(6,'0')}</p></div>
           </div>
 
@@ -97,7 +121,7 @@ export default function SaleViewPage() {
                 <tr className="bg-slate-50"><td className="p-4 text-slate-500 uppercase text-[10px] font-bold">Quantity</td><td className="p-4 text-right font-bold">{Number(sale.quantity)}</td></tr>
                 <tr><td className="p-4 text-slate-500 uppercase text-[10px] font-bold">Amount (Unit x Qty)</td><td className="p-4 text-right font-black">LKR {Number(sale.amount).toFixed(2)}</td></tr>
                 <tr className="bg-slate-50"><td className="p-4 text-slate-500 uppercase text-[10px] font-bold">Credit (LKR)</td><td className="p-4 text-right font-black">LKR {Number(sale.credit).toFixed(2)}</td></tr>
-                <tr className="bg-black text-white"><td className="p-4 uppercase text-[10px] font-black tracking-widest">Net Balance</td><td className="p-4 text-right font-black text-lg">LKR {balance.toFixed(2)}</td></tr>
+                <tr className="bg-black text-white"><td className="p-4 uppercase text-[10px] font-black tracking-widest">Net Balance (Amount - Credit)</td><td className="p-4 text-right font-black text-lg text-white">LKR {balance.toFixed(2)}</td></tr>
               </tbody>
             </table>
           </div>
@@ -108,12 +132,12 @@ export default function SaleViewPage() {
           </div>
 
           <div className="pt-12 grid grid-cols-2 gap-10 text-center mt-10">
-            <div><div className="border-b border-black h-8 mb-2"></div><p className="text-[8px] uppercase tracking-widest font-bold">Branch Manager</p></div>
+            <div><div className="border-b border-black h-8 mb-2"></div><p className="text-[8px] uppercase tracking-widest font-bold">Branch Manager Signature</p></div>
             <div><div className="border-b border-black h-8 mb-2"></div><p className="text-[8px] uppercase tracking-widest font-bold">System Seal</p></div>
           </div>
 
           <div className="mt-8 pt-4 border-t text-[8px] text-slate-400 flex justify-between uppercase font-bold">
-            <span>System Generated Document</span><span>{new Date().toLocaleString()}</span>
+            <span>System Generated Document - Dearo Investment</span><span>{new Date().toLocaleString()}</span>
           </div>
         </div>
       </div>
