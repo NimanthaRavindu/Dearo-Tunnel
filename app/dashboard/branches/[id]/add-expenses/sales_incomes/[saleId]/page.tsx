@@ -27,50 +27,119 @@ export default function SaleViewPage() {
   const handlePrint = () => window.print();
 
   const handlePDF = async () => {
+    if (!sale) return;
     setDownloading(true);
     try {
-      const el = document.getElementById("pdf-content");
-      if (!el) throw new Error("Receipt element not found");
-
-      // @ts-ignore
-      const html2canvasMod = await import("html2canvas");
-      const html2canvas = html2canvasMod.default;
-      // @ts-ignore
+      // @ts-ignore - no more html2canvas, only jspdf
       const jspdfMod = await import("jspdf");
       const jsPDF = jspdfMod.jsPDF;
+      const doc = new jsPDF("p", "mm", "a4");
 
-      const canvas = await html2canvas(el, {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: "#ffffff",
-        logging: false,
-      } as any);
+      const balance = Number(sale.amount) - Number(sale.credit);
 
-      const imgData = canvas.toDataURL("image/png", 1.0);
-      const pdf = new jsPDF("p", "mm", "a4");
-      const pdfW = pdf.internal.pageSize.getWidth();
-      const pdfH = (canvas.height * pdfW) / canvas.width;
+      // Header
+      doc.setFillColor(0, 0, 0);
+      doc.rect(0, 0, 210, 30, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(16);
+      doc.text("SALES INCOME RECEIPT", 14, 14);
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.text(`BRANCH #${branchId} | ID: ${sale.id} | DATE: ${String(sale.date).slice(0,10)}`, 14, 22);
+
+      // Verified
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(8);
+      doc.text(`REF: SALE/${String(sale.id).padStart(6,'0')} | VERIFIED`, 140, 14);
+
+      let y = 40;
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.text("PRODUCT NAME:", 14, y);
+      doc.setFont("helvetica", "normal");
+      doc.text(String(sale.name).toUpperCase(), 50, y);
       
-      pdf.addImage(imgData, "PNG", 0, 0, pdfW, pdfH);
+      y += 8;
+      doc.setFont("helvetica", "bold");
+      doc.text("DATE:", 14, y);
+      doc.setFont("helvetica", "normal");
+      doc.text(String(sale.date).slice(0,10), 50, y);
 
-      // 100% download wada karana method eka
-      const fileName = `SALES-INCOME-${saleId}-${Date.now()}.pdf`;
-      const blob = pdf.output("blob");
-      const blobUrl = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = blobUrl;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(blobUrl);
+      y += 8;
+      doc.setFont("helvetica", "bold");
+      doc.text("TOTAL AMOUNT:", 14, y);
+      doc.setFont("helvetica", "normal");
+      doc.text(`LKR ${Number(sale.amount).toFixed(2)}`, 50, y);
 
-      console.log("PDF Downloaded:", fileName);
+      y += 15;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.text("TRANSACTION BREAKDOWN", 14, y);
+      y += 5;
+      doc.line(14, y, 196, y);
+      y += 10;
+
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      const rows = [
+        ["Unit Price (LKR)", `LKR ${Number(sale.unit_price).toFixed(2)}`],
+        ["Quantity", `${Number(sale.quantity)}`],
+        ["Amount (Unit x Qty)", `LKR ${Number(sale.amount).toFixed(2)}`],
+        ["Credit (LKR)", `LKR ${Number(sale.credit).toFixed(2)}`],
+        ["Net Balance (Amount - Credit)", `LKR ${balance.toFixed(2)}`],
+      ];
+
+      rows.forEach((row, i) => {
+        const isLast = i === rows.length - 1;
+        if (isLast) {
+          doc.setFillColor(0, 0, 0);
+          doc.rect(14, y - 6, 182, 10, "F");
+          doc.setTextColor(255, 255, 255);
+          doc.setFont("helvetica", "bold");
+        } else {
+          doc.setTextColor(0, 0, 0);
+          doc.setFont("helvetica", "normal");
+          if (i % 2 === 0) {
+            doc.setFillColor(245, 245, 245);
+            doc.rect(14, y - 6, 182, 10, "F");
+          }
+        }
+        doc.text(row[0], 16, y);
+        doc.text(row[1], 196, y, { align: "right" });
+        y += 10;
+      });
+
+      y += 10;
+      doc.setTextColor(0, 0, 0);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.text("Calculation Note:", 14, y);
+      y += 5;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.text(`${sale.unit_price} x ${sale.quantity} = ${sale.amount} | Net = ${sale.amount} - ${sale.credit} = ${balance}`, 14, y);
+
+      y += 25;
+      doc.line(14, y, 70, y);
+      doc.line(130, y, 186, y);
+      y += 5;
+      doc.setFontSize(7);
+      doc.text("Branch Manager Signature", 14, y);
+      doc.text("System Seal", 130, y);
+
+      y += 15;
+      doc.setFontSize(7);
+      doc.setTextColor(100, 100, 100);
+      doc.text(`System Generated Document - Dearo Investment | ${new Date().toLocaleString()}`, 14, y);
+
+      // 100% working download
+      const fileName = `SALES-INCOME-${saleId}.pdf`;
+      doc.save(fileName);
+
     } catch (e) {
       console.error("PDF Error:", e);
-      alert("PDF download failed, trying print...");
-      window.print();
+      alert("PDF error: " + (e as any).message);
     } finally {
       setDownloading(false);
     }
@@ -83,20 +152,13 @@ export default function SaleViewPage() {
 
   return (
     <div className="min-h-screen bg-[#070a12] p-6 sm:p-10 flex flex-col items-center font-mono text-xs text-slate-100">
-      <style>{`
-        @media print {
-          body { background: white !important; }
-          .no-print { display: none !important; }
-          #pdf-content { background: white !important; color: black !important; border: 1px solid #ddd !important; box-shadow: none !important; }
-        }
-      `}</style>
-
+      <style>{`@media print { .no-print { display: none !important; } }`}</style>
       <div className="w-full max-w-4xl space-y-6">
         <div className="flex justify-between items-center border-b border-slate-800 pb-6 no-print">
           <Link href={`/dashboard/branches/${branchId}/add-expenses/sales_incomes`} className="flex items-center gap-2 px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-400 hover:text-white"><ArrowLeft size={14}/> Back</Link>
           <div className="flex gap-2">
             <button onClick={handlePrint} className="w-10 h-10 bg-slate-900 border border-slate-700 rounded-xl flex items-center justify-center hover:bg-white hover:text-black"><Printer size={14}/></button>
-            <button onClick={handlePDF} disabled={downloading} className="h-10 px-5 bg-red-600 hover:bg-red-500 text-white rounded-xl flex items-center gap-2 font-black uppercase text-[10px] tracking-wider disabled:opacity-50">
+            <button onClick={handlePDF} disabled={downloading} className="h-10 px-5 bg-red-600 hover:bg-red-500 text-white rounded-xl flex items-center gap-2 font-black uppercase text-[10px] disabled:opacity-50">
               {downloading ? <Loader2 size={12} className="animate-spin"/> : <Download size={12}/>} {downloading ? "Downloading..." : "Download PDF"}
             </button>
           </div>
@@ -107,13 +169,11 @@ export default function SaleViewPage() {
             <div><h1 className="text-lg font-black uppercase tracking-widest flex items-center gap-2"><FileText size={18}/> Sales Income Receipt</h1><p className="text-[10px] text-slate-500 mt-1 uppercase font-bold">Branch #{branchId} | ID: {sale.id} | Date: {sale.date?.slice(0,10)}</p></div>
             <div className="text-right"><p className="text-[10px] font-black uppercase border border-black px-3 py-1 rounded-full">Verified</p><p className="text-[9px] mt-2">REF: SALE/{String(sale.id).padStart(6,'0')}</p></div>
           </div>
-
           <div className="grid grid-cols-3 gap-3 mb-6">
             <div className="p-4 rounded-xl bg-slate-50 border"><p className="text-[9px] text-slate-500 uppercase font-bold">Product Name</p><p className="font-black mt-1 uppercase text-sm">{sale.name}</p></div>
             <div className="p-4 rounded-xl bg-slate-50 border"><p className="text-[9px] text-slate-500 uppercase font-bold">Date</p><p className="font-black mt-1">{sale.date?.slice(0,10)}</p></div>
             <div className="p-4 rounded-xl bg-slate-50 border"><p className="text-[9px] text-slate-500 uppercase font-bold">Total Amount</p><p className="font-black mt-1 text-base">LKR {Number(sale.amount).toFixed(2)}</p></div>
           </div>
-
           <div className="rounded-xl overflow-hidden border border-black">
             <table className="w-full text-left">
               <tbody className="divide-y divide-slate-200">
@@ -121,23 +181,9 @@ export default function SaleViewPage() {
                 <tr className="bg-slate-50"><td className="p-4 text-slate-500 uppercase text-[10px] font-bold">Quantity</td><td className="p-4 text-right font-bold">{Number(sale.quantity)}</td></tr>
                 <tr><td className="p-4 text-slate-500 uppercase text-[10px] font-bold">Amount (Unit x Qty)</td><td className="p-4 text-right font-black">LKR {Number(sale.amount).toFixed(2)}</td></tr>
                 <tr className="bg-slate-50"><td className="p-4 text-slate-500 uppercase text-[10px] font-bold">Credit (LKR)</td><td className="p-4 text-right font-black">LKR {Number(sale.credit).toFixed(2)}</td></tr>
-                <tr className="bg-black text-white"><td className="p-4 uppercase text-[10px] font-black tracking-widest">Net Balance (Amount - Credit)</td><td className="p-4 text-right font-black text-lg text-white">LKR {balance.toFixed(2)}</td></tr>
+                <tr className="bg-black text-white"><td className="p-4 uppercase text-[10px] font-black">Net Balance</td><td className="p-4 text-right font-black text-lg text-white">LKR {balance.toFixed(2)}</td></tr>
               </tbody>
             </table>
-          </div>
-
-          <div className="mt-6 p-4 border border-dashed rounded-xl bg-slate-50">
-            <p className="text-[10px] font-bold uppercase">Calculation Note</p>
-            <p className="text-[11px] text-slate-600 mt-1">{sale.unit_price} x {sale.quantity} = {sale.amount} | Net = {sale.amount} - {sale.credit} = {balance}</p>
-          </div>
-
-          <div className="pt-12 grid grid-cols-2 gap-10 text-center mt-10">
-            <div><div className="border-b border-black h-8 mb-2"></div><p className="text-[8px] uppercase tracking-widest font-bold">Branch Manager Signature</p></div>
-            <div><div className="border-b border-black h-8 mb-2"></div><p className="text-[8px] uppercase tracking-widest font-bold">System Seal</p></div>
-          </div>
-
-          <div className="mt-8 pt-4 border-t text-[8px] text-slate-400 flex justify-between uppercase font-bold">
-            <span>System Generated Document - Dearo Investment</span><span>{new Date().toLocaleString()}</span>
           </div>
         </div>
       </div>
