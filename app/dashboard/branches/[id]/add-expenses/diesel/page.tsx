@@ -1,8 +1,7 @@
 "use client";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { AlertCircle, ArrowLeft, Droplets, Fuel, Plus, RefreshCw, Trash2, Wallet, PackagePlus, Save, CreditCard, Eye } from "lucide-react";
+import { AlertCircle, ArrowLeft, Droplets, Fuel, Plus, RefreshCw, Trash2, Wallet, PackagePlus, Save, CreditCard } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
 
 type DieselExpense = { id: number; branch_id: string; date: string; machine: string; diesel: number | string; amount: number | string; payable: number | string; paid: number | string; };
 type CardColor = "cyan" | "blue" | "orange" | "green" | "red";
@@ -72,6 +71,7 @@ export default function DieselExpensesPage() {
   const formPaid = numberValue(paid);
   const formBalance = Math.max(0, formPayable - formPaid);
 
+  // === OYA LOGIC EKA WENAS NA - FIX EKA WITHARAK ===
   const displayTotalDiesel = initialDieselStock;
   const baseDieselRemaining = Math.max(0, initialDieselStock - activeDieselUsed);
   const baseAmountRemaining = Math.max(0, initialTotalAmount - activePayable);
@@ -81,6 +81,8 @@ export default function DieselExpensesPage() {
   const displayDieselUsed = formDiesel > 0? liveDieselRemaining : baseDieselRemaining;
   const displayTotalAmount = formPayable > 0? liveAmountRemaining : baseAmountRemaining;
   const displayRemainingDiesel = formDiesel > 0? liveDieselRemaining : baseDieselRemaining;
+
+  // FIX: Remaining Balance = Total Amount (samana)
   const displayRemainingBalance = displayTotalAmount;
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -125,7 +127,7 @@ export default function DieselExpensesPage() {
           <div className="border-b border-slate-700/80 bg-slate-800/30 px-6 py-5"><h2 className="text-xl font-bold">Add Diesel Expense</h2><p className="text-xs text-slate-400 mt-1">Qty / Payable type karaddi ma uda card adu wenawa - Balance auto pennanawa</p></div>
           <form onSubmit={handleSubmit} className="space-y-6 p-6">
             <div className="grid gap-6 md:grid-cols-2">
-              <Field label="Machine"><select value={selectedMachine} onChange={e => { setSelectedMachine(e.target.value); if (e.target.value!== "Other Machine") setOtherMachine(""); }} className={inputClass}><option value="">Select Machine</option>{machines.map(m => <option key={m} value={m}>{m}</option>)}<option value="Other Machine">Other Machine</option></select>{selectedMachine === "Other Machine" && <input value={otherMachine} onChange={e => setOtherMachine(e.target.value)} placeholder="Other machine name" className={`${inputClass} mt-3`}/>}</Field>
+              <Field label="Machine"><select value={selectedMachine} onChange={e => { setSelectedMachine(e.target.value); if (e.target.value!== "Other Machine") setOtherMachine(""); }} className={inputClass}><option value="">Select Machine</option>{machines.map(m => <option key={m} value={m}>{m}</option>)}</select>{selectedMachine === "Other Machine" && <input value={otherMachine} onChange={e => setOtherMachine(e.target.value)} placeholder="Other machine name" className={`${inputClass} mt-3`}/>}</Field>
               <Field label="Date"><input type="date" value={date} onChange={e => setDate(e.target.value)} className={inputClass}/></Field>
             </div>
             <div className="grid gap-6 md:grid-cols-3">
@@ -146,7 +148,7 @@ export default function DieselExpensesPage() {
         </section>
         <section className="rounded-3xl border border-slate-700/80 bg-slate-900 overflow-hidden">
           <div className="flex justify-between p-5 border-b border-slate-700/80"><h2 className="font-bold">Records</h2><span className="text-sm bg-slate-800 px-3 py-1 rounded-xl">{filteredExpenses.length} Records</span></div>
-          <div className="overflow-x-auto"><table className="w-full min-w-[1000px]"><thead className="bg-slate-800/80"><tr className="text-xs text-slate-400 uppercase"><th className="px-5 py-4 text-left">Date</th><th className="px-5 py-4 text-left">Machine</th><th className="px-5 py-4 text-right">Diesel</th><th className="px-5 py-4 text-right">Payable</th><th className="px-5 py-4 text-right">Paid</th><th className="px-5 py-4 text-right">Balance</th><th className="px-5 py-4 text-center">Action</th></tr></thead><tbody>{filteredExpenses.map(item => { const p = numberValue(item.payable); const pd = numberValue(item.paid); return <tr key={item.id} className="border-b border-slate-800"><td className="px-5 py-4 text-sm">{item.date?.slice(0, 10)}</td><td className="px-5 py-4 font-semibold">{item.machine}</td><td className="px-5 py-4 text-right">{formatNumber(item.diesel)}</td><td className="px-5 py-4 text-right font-bold text-blue-400">Rs. {formatNumber(p)}</td><td className="px-5 py-4 text-right font-bold text-green-400">Rs. {formatNumber(pd)}</td><td className="px-5 py-4 text-right font-bold text-red-400">Rs. {formatNumber(Math.max(0, p - pd))}</td><td className="px-5 py-4 text-center"><div className="flex items-center justify-center gap-2"><Link href={`/dashboard/branches/${branchId}/add-expenses/diesel/${item.id}`} className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:bg-white hover:text-black text-[11px] font-bold uppercase"><Eye size={14}/> View</Link><button onClick={() => handleDelete(item.id)} className="h-9 w-9 inline-flex items-center justify-center rounded-lg bg-red-500/10 text-red-400"><Trash2 size={16}/></button></div></td></tr> })}</tbody></table></div>
+          <div className="overflow-x-auto"><table className="w-full min-w-[900px]"><thead className="bg-slate-800/80"><tr className="text-xs text-slate-400 uppercase"><th className="px-5 py-4 text-left">Date</th><th className="px-5 py-4 text-left">Machine</th><th className="px-5 py-4 text-right">Diesel</th><th className="px-5 py-4 text-right">Payable</th><th className="px-5 py-4 text-right">Paid</th><th className="px-5 py-4 text-right">Balance</th><th className="px-5 py-4 text-center">Action</th></tr></thead><tbody>{filteredExpenses.map(item => { const p = numberValue(item.payable); const pd = numberValue(item.paid); return <tr key={item.id} className="border-b border-slate-800"><td className="px-5 py-4 text-sm">{item.date?.slice(0, 10)}</td><td className="px-5 py-4 font-semibold">{item.machine}</td><td className="px-5 py-4 text-right">{formatNumber(item.diesel)}</td><td className="px-5 py-4 text-right font-bold text-blue-400">Rs. {formatNumber(p)}</td><td className="px-5 py-4 text-right font-bold text-green-400">Rs. {formatNumber(pd)}</td><td className="px-5 py-4 text-right font-bold text-red-400">Rs. {formatNumber(Math.max(0, p - pd))}</td><td className="px-5 py-4 text-center"><button onClick={() => handleDelete(item.id)} className="h-9 w-9 inline-flex items-center justify-center rounded-lg bg-red-500/10 text-red-400"><Trash2 size={16}/></button></td></tr> })}</tbody></table></div>
         </section>
       </div>
     </main>
