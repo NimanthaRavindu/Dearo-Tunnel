@@ -1,6 +1,6 @@
 "use client";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { AlertCircle, ArrowLeft, Droplets, Fuel, Plus, RefreshCw, Trash2, Wallet, PackagePlus, Save, CreditCard } from "lucide-react";
+import { AlertCircle, ArrowLeft, Droplets, Fuel, Plus, RefreshCw, Trash2, Wallet, PackagePlus, Save, CreditCard, Filter, X, Calendar, Search } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 
 type DieselExpense = { id: number; branch_id: string; date: string; machine: string; diesel: number | string; amount: number | string; payable: number | string; paid: number | string; };
@@ -20,7 +20,12 @@ export default function DieselExpensesPage() {
   const [isInitialSet, setIsInitialSet] = useState(false);
   const [selectedMachine, setSelectedMachine] = useState(""); const [otherMachine, setOtherMachine] = useState("");
   const [date, setDate] = useState(""); const [diesel, setDiesel] = useState(""); const [payable, setPayable] = useState(""); const [paid, setPaid] = useState("");
-  const [filterDate, setFilterDate] = useState(""); const [filterMachine, setFilterMachine] = useState("");
+  
+  // FILTER STATES - UPGRADED
+  const [filterDate, setFilterDate] = useState(""); 
+  const [filterMachine, setFilterMachine] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
 
   const loadExpenses = async () => {
     if (!branchId) return;
@@ -51,18 +56,24 @@ export default function DieselExpensesPage() {
     } catch (e) { alert((e as Error).message); } finally { setSavingInitial(false); }
   };
 
-  const filteredExpenses = useMemo(() => expenses.filter(item => {
-    const d = item.date?.slice(0, 10); return (!filterDate || d === filterDate) && (!filterMachine || item.machine === filterMachine);
-  }), [expenses, filterDate, filterMachine]);
+  // FILTER LOGIC - Date + Machine + Range
+  const filteredExpenses = useMemo(() => {
+    return expenses.filter(item => {
+      const d = item.date?.slice(0, 10);
+      const matchMachine = !filterMachine || item.machine === filterMachine;
+      const matchExactDate = !filterDate || d === filterDate;
+      const matchFrom = !fromDate || new Date(d) >= new Date(fromDate);
+      const matchTo = !toDate || new Date(d) <= new Date(toDate);
+      return matchMachine && matchExactDate && matchFrom && matchTo;
+    });
+  }, [expenses, filterDate, filterMachine, fromDate, toDate]);
 
   const totalUsedDiesel = useMemo(() => expenses.reduce((s, i) => s + numberValue(i.diesel), 0), [expenses]);
   const totalPayable = useMemo(() => expenses.reduce((s, i) => s + numberValue(i.payable), 0), [expenses]);
-  const totalPaid = useMemo(() => expenses.reduce((s, i) => s + numberValue(i.paid), 0), [expenses]);
   const fDiesel = useMemo(() => filteredExpenses.reduce((s, i) => s + numberValue(i.diesel), 0), [filteredExpenses]);
   const fPayable = useMemo(() => filteredExpenses.reduce((s, i) => s + numberValue(i.payable), 0), [filteredExpenses]);
-  const fPaid = useMemo(() => filteredExpenses.reduce((s, i) => s + numberValue(i.paid), 0), [filteredExpenses]);
 
-  const isFiltered = Boolean(filterDate || filterMachine);
+  const isFiltered = Boolean(filterDate || filterMachine || fromDate || toDate);
   const activeDieselUsed = isFiltered? fDiesel : totalUsedDiesel;
   const activePayable = isFiltered? fPayable : totalPayable;
 
@@ -71,7 +82,6 @@ export default function DieselExpensesPage() {
   const formPaid = numberValue(paid);
   const formBalance = Math.max(0, formPayable - formPaid);
 
-  // === OYA LOGIC EKA WENAS NA - FIX EKA WITHARAK ===
   const displayTotalDiesel = initialDieselStock;
   const baseDieselRemaining = Math.max(0, initialDieselStock - activeDieselUsed);
   const baseAmountRemaining = Math.max(0, initialTotalAmount - activePayable);
@@ -81,9 +91,9 @@ export default function DieselExpensesPage() {
   const displayDieselUsed = formDiesel > 0? liveDieselRemaining : baseDieselRemaining;
   const displayTotalAmount = formPayable > 0? liveAmountRemaining : baseAmountRemaining;
   const displayRemainingDiesel = formDiesel > 0? liveDieselRemaining : baseDieselRemaining;
-
-  // FIX: Remaining Balance = Total Amount (samana)
   const displayRemainingBalance = displayTotalAmount;
+
+  const clearFilters = () => { setFilterDate(""); setFilterMachine(""); setFromDate(""); setToDate(""); };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -117,8 +127,8 @@ export default function DieselExpensesPage() {
           {isInitialSet && <p className="mt-3 text-xs text-green-400">✓ Initial: {initialDieselStock} L / Rs. {initialTotalAmount.toLocaleString()} | Used: {totalUsedDiesel} L</p>}
         </section>
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <SummaryCard title="Diesel Used" subtitle="Diesel Qty type karaddi adu" value={`${formatNumber(displayDieselUsed)} L`} icon={<Droplets size={22}/>} color="cyan"/>
-          <SummaryCard title="Total Amount" subtitle="Payable type karaddi adu" value={`Rs. ${formatNumber(displayTotalAmount)}`} icon={<Wallet size={22}/>} color="blue"/>
+          <SummaryCard title="Diesel Used" subtitle={isFiltered ? `Filtered: ${fDiesel}L used` : "Diesel Qty type karaddi adu"} value={`${formatNumber(displayDieselUsed)} L`} icon={<Droplets size={22}/>} color="cyan"/>
+          <SummaryCard title="Total Amount" subtitle={isFiltered ? `Filtered payable` : "Payable type karaddi adu"} value={`Rs. ${formatNumber(displayTotalAmount)}`} icon={<Wallet size={22}/>} color="blue"/>
           <SummaryCard title="Remaining Diesel" subtitle="Initial - Used - Form (minus na)" value={`${formatNumber(displayRemainingDiesel)} L`} icon={<Droplets size={22}/>} color="orange"/>
           <SummaryCard title="Remaining Balance" subtitle="= Total Amount (samana)" value={`Rs. ${formatNumber(displayRemainingBalance)}`} icon={<CreditCard size={22}/>} color="green"/>
           <SummaryCard title="Total Diesel" subtitle="Initial stock" value={`${formatNumber(displayTotalDiesel)} L`} icon={<AlertCircle size={22}/>} color="red"/>
@@ -127,7 +137,7 @@ export default function DieselExpensesPage() {
           <div className="border-b border-slate-700/80 bg-slate-800/30 px-6 py-5"><h2 className="text-xl font-bold">Add Diesel Expense</h2><p className="text-xs text-slate-400 mt-1">Qty / Payable type karaddi ma uda card adu wenawa - Balance auto pennanawa</p></div>
           <form onSubmit={handleSubmit} className="space-y-6 p-6">
             <div className="grid gap-6 md:grid-cols-2">
-              <Field label="Machine"><select value={selectedMachine} onChange={e => { setSelectedMachine(e.target.value); if (e.target.value!== "Other Machine") setOtherMachine(""); }} className={inputClass}><option value="">Select Machine</option>{machines.map(m => <option key={m} value={m}>{m}</option>)}</select>{selectedMachine === "Other Machine" && <input value={otherMachine} onChange={e => setOtherMachine(e.target.value)} placeholder="Other machine name" className={`${inputClass} mt-3`}/>}</Field>
+              <Field label="Machine"><select value={selectedMachine} onChange={e => { setSelectedMachine(e.target.value); if (e.target.value!== "Other Machine") setOtherMachine(""); }} className={inputClass}><option value="">Select Machine</option>{machines.map(m => <option key={m} value={m}>{m}</option>)}<option value="Other Machine">Other Machine</option></select>{selectedMachine === "Other Machine" && <input value={otherMachine} onChange={e => setOtherMachine(e.target.value)} placeholder="Other machine name" className={`${inputClass} mt-3`}/>}</Field>
               <Field label="Date"><input type="date" value={date} onChange={e => setDate(e.target.value)} className={inputClass}/></Field>
             </div>
             <div className="grid gap-6 md:grid-cols-3">
@@ -146,9 +156,52 @@ export default function DieselExpensesPage() {
             </div>
           </form>
         </section>
+
+        {/* RECORDS WITH FILTER BAR - NEW */}
         <section className="rounded-3xl border border-slate-700/80 bg-slate-900 overflow-hidden">
-          <div className="flex justify-between p-5 border-b border-slate-700/80"><h2 className="font-bold">Records</h2><span className="text-sm bg-slate-800 px-3 py-1 rounded-xl">{filteredExpenses.length} Records</span></div>
-          <div className="overflow-x-auto"><table className="w-full min-w-[900px]"><thead className="bg-slate-800/80"><tr className="text-xs text-slate-400 uppercase"><th className="px-5 py-4 text-left">Date</th><th className="px-5 py-4 text-left">Machine</th><th className="px-5 py-4 text-right">Diesel</th><th className="px-5 py-4 text-right">Payable</th><th className="px-5 py-4 text-right">Paid</th><th className="px-5 py-4 text-right">Balance</th><th className="px-5 py-4 text-center">Action</th></tr></thead><tbody>{filteredExpenses.map(item => { const p = numberValue(item.payable); const pd = numberValue(item.paid); return <tr key={item.id} className="border-b border-slate-800"><td className="px-5 py-4 text-sm">{item.date?.slice(0, 10)}</td><td className="px-5 py-4 font-semibold">{item.machine}</td><td className="px-5 py-4 text-right">{formatNumber(item.diesel)}</td><td className="px-5 py-4 text-right font-bold text-blue-400">Rs. {formatNumber(p)}</td><td className="px-5 py-4 text-right font-bold text-green-400">Rs. {formatNumber(pd)}</td><td className="px-5 py-4 text-right font-bold text-red-400">Rs. {formatNumber(Math.max(0, p - pd))}</td><td className="px-5 py-4 text-center"><button onClick={() => handleDelete(item.id)} className="h-9 w-9 inline-flex items-center justify-center rounded-lg bg-red-500/10 text-red-400"><Trash2 size={16}/></button></td></tr> })}</tbody></table></div>
+          <div className="p-5 border-b border-slate-700/80 space-y-4">
+            <div className="flex justify-between items-center">
+              <h2 className="font-bold">Records</h2>
+              <span className="text-sm bg-slate-800 px-3 py-1 rounded-xl">{filteredExpenses.length} / {expenses.length} Records {isFiltered && "(Filtered)"}</span>
+            </div>
+            
+            {/* FILTER BAR - OYA ILLUWA WAGEMA */}
+            <div className="flex flex-wrap gap-3 p-3 rounded-2xl bg-slate-800/50 border border-slate-700/50">
+              <div className="flex items-center gap-2">
+                <Filter size={14} className="text-slate-400"/>
+                <span className="text-xs font-bold text-slate-400 uppercase">Filter:</span>
+              </div>
+
+              <select value={filterMachine} onChange={e=>setFilterMachine(e.target.value)} className="h-9 rounded-lg border border-slate-600 bg-slate-900 px-3 text-xs outline-none">
+                <option value="">All Machines</option>
+                {machines.map(m=> <option key={m} value={m}>{m}</option>)}
+              </select>
+
+              <div className="flex items-center gap-1.5 h-9 rounded-lg border border-slate-600 bg-slate-900 px-3">
+                <Calendar size={14} className="text-slate-400"/>
+                <input type="date" value={filterDate} onChange={e=>setFilterDate(e.target.value)} className="bg-transparent text-xs outline-none" />
+                <span className="text-[10px] text-slate-500">Exact Date</span>
+              </div>
+
+              <div className="flex items-center gap-1.5 h-9 rounded-lg border border-slate-600 bg-slate-900 px-3">
+                <span className="text-[10px] text-slate-400">From</span>
+                <input type="date" value={fromDate} onChange={e=>setFromDate(e.target.value)} className="bg-transparent text-xs outline-none" />
+              </div>
+
+              <div className="flex items-center gap-1.5 h-9 rounded-lg border border-slate-600 bg-slate-900 px-3">
+                <span className="text-[10px] text-slate-400">To</span>
+                <input type="date" value={toDate} onChange={e=>setToDate(e.target.value)} className="bg-transparent text-xs outline-none" />
+              </div>
+
+              {isFiltered && (
+                <button onClick={clearFilters} className="h-9 inline-flex items-center gap-1 rounded-lg bg-red-500/20 text-red-400 border border-red-500/30 px-3 text-xs font-bold">
+                  <X size={12}/>Clear Filter
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="overflow-x-auto"><table className="w-full min-w-[900px]"><thead className="bg-slate-800/80"><tr className="text-xs text-slate-400 uppercase"><th className="px-5 py-4 text-left">Date</th><th className="px-5 py-4 text-left">Machine</th><th className="px-5 py-4 text-right">Diesel</th><th className="px-5 py-4 text-right">Payable</th><th className="px-5 py-4 text-right">Paid</th><th className="px-5 py-4 text-right">Balance</th><th className="px-5 py-4 text-center">Action</th></tr></thead><tbody>{filteredExpenses.length===0 ? <tr><td colSpan={7} className="px-5 py-10 text-center text-sm text-slate-500">No records for selected filter - Date / Machine wenas karala balanna</td></tr> : filteredExpenses.map(item => { const p = numberValue(item.payable); const pd = numberValue(item.paid); return <tr key={item.id} className="border-b border-slate-800 hover:bg-slate-800/40"><td className="px-5 py-4 text-sm">{item.date?.slice(0, 10)}</td><td className="px-5 py-4 font-semibold">{item.machine}</td><td className="px-5 py-4 text-right">{formatNumber(item.diesel)}</td><td className="px-5 py-4 text-right font-bold text-blue-400">Rs. {formatNumber(p)}</td><td className="px-5 py-4 text-right font-bold text-green-400">Rs. {formatNumber(pd)}</td><td className="px-5 py-4 text-right font-bold text-red-400">Rs. {formatNumber(Math.max(0, p - pd))}</td><td className="px-5 py-4 text-center"><button onClick={() => handleDelete(item.id)} className="h-9 w-9 inline-flex items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20"><Trash2 size={16}/></button></td></tr> })}</tbody></table></div>
         </section>
       </div>
     </main>
