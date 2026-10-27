@@ -1,6 +1,6 @@
 "use client";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { AlertCircle, ArrowLeft, Droplets, Fuel, Plus, RefreshCw, Trash2, Wallet, PackagePlus, Save, CreditCard, Filter, X, Calendar, Search } from "lucide-react";
+import { AlertCircle, ArrowLeft, Droplets, Fuel, Plus, RefreshCw, Trash2, Wallet, PackagePlus, Save, CreditCard, Filter, X, Calendar } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 
 type DieselExpense = { id: number; branch_id: string; date: string; machine: string; diesel: number | string; amount: number | string; payable: number | string; paid: number | string; };
@@ -21,11 +21,9 @@ export default function DieselExpensesPage() {
   const [selectedMachine, setSelectedMachine] = useState(""); const [otherMachine, setOtherMachine] = useState("");
   const [date, setDate] = useState(""); const [diesel, setDiesel] = useState(""); const [payable, setPayable] = useState(""); const [paid, setPaid] = useState("");
   
-  // FILTER STATES - UPGRADED
+  // FILTER - SINGLE DATE ONLY
   const [filterDate, setFilterDate] = useState(""); 
   const [filterMachine, setFilterMachine] = useState("");
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
 
   const loadExpenses = async () => {
     if (!branchId) return;
@@ -56,24 +54,22 @@ export default function DieselExpensesPage() {
     } catch (e) { alert((e as Error).message); } finally { setSavingInitial(false); }
   };
 
-  // FILTER LOGIC - Date + Machine + Range
+  // FILTER LOGIC - EKA DATE EKIN WITHARAK
   const filteredExpenses = useMemo(() => {
     return expenses.filter(item => {
-      const d = item.date?.slice(0, 10);
+      const d = item.date?.slice(0, 10); // YYYY-MM-DD
       const matchMachine = !filterMachine || item.machine === filterMachine;
-      const matchExactDate = !filterDate || d === filterDate;
-      const matchFrom = !fromDate || new Date(d) >= new Date(fromDate);
-      const matchTo = !toDate || new Date(d) <= new Date(toDate);
-      return matchMachine && matchExactDate && matchFrom && matchTo;
+      const matchDate = !filterDate || d === filterDate;
+      return matchMachine && matchDate;
     });
-  }, [expenses, filterDate, filterMachine, fromDate, toDate]);
+  }, [expenses, filterDate, filterMachine]);
 
   const totalUsedDiesel = useMemo(() => expenses.reduce((s, i) => s + numberValue(i.diesel), 0), [expenses]);
   const totalPayable = useMemo(() => expenses.reduce((s, i) => s + numberValue(i.payable), 0), [expenses]);
   const fDiesel = useMemo(() => filteredExpenses.reduce((s, i) => s + numberValue(i.diesel), 0), [filteredExpenses]);
   const fPayable = useMemo(() => filteredExpenses.reduce((s, i) => s + numberValue(i.payable), 0), [filteredExpenses]);
 
-  const isFiltered = Boolean(filterDate || filterMachine || fromDate || toDate);
+  const isFiltered = Boolean(filterDate || filterMachine);
   const activeDieselUsed = isFiltered? fDiesel : totalUsedDiesel;
   const activePayable = isFiltered? fPayable : totalPayable;
 
@@ -93,7 +89,7 @@ export default function DieselExpensesPage() {
   const displayRemainingDiesel = formDiesel > 0? liveDieselRemaining : baseDieselRemaining;
   const displayRemainingBalance = displayTotalAmount;
 
-  const clearFilters = () => { setFilterDate(""); setFilterMachine(""); setFromDate(""); setToDate(""); };
+  const clearFilters = () => { setFilterDate(""); setFilterMachine(""); };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -127,7 +123,7 @@ export default function DieselExpensesPage() {
           {isInitialSet && <p className="mt-3 text-xs text-green-400">✓ Initial: {initialDieselStock} L / Rs. {initialTotalAmount.toLocaleString()} | Used: {totalUsedDiesel} L</p>}
         </section>
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <SummaryCard title="Diesel Used" subtitle={isFiltered ? `Filtered: ${fDiesel}L used` : "Diesel Qty type karaddi adu"} value={`${formatNumber(displayDieselUsed)} L`} icon={<Droplets size={22}/>} color="cyan"/>
+          <SummaryCard title="Diesel Used" subtitle={isFiltered ? `Filtered: ${fDiesel}L` : "Diesel Qty type karaddi adu"} value={`${formatNumber(displayDieselUsed)} L`} icon={<Droplets size={22}/>} color="cyan"/>
           <SummaryCard title="Total Amount" subtitle={isFiltered ? `Filtered payable` : "Payable type karaddi adu"} value={`Rs. ${formatNumber(displayTotalAmount)}`} icon={<Wallet size={22}/>} color="blue"/>
           <SummaryCard title="Remaining Diesel" subtitle="Initial - Used - Form (minus na)" value={`${formatNumber(displayRemainingDiesel)} L`} icon={<Droplets size={22}/>} color="orange"/>
           <SummaryCard title="Remaining Balance" subtitle="= Total Amount (samana)" value={`Rs. ${formatNumber(displayRemainingBalance)}`} icon={<CreditCard size={22}/>} color="green"/>
@@ -145,27 +141,21 @@ export default function DieselExpensesPage() {
               <Field label="Payable Amount (Rs.)"><input type="number" value={payable} onChange={e => setPayable(e.target.value)} placeholder="0.00" className={inputClass}/></Field>
               <Field label="Paid Amount (Rs.)"><input type="number" value={paid} onChange={e => setPaid(e.target.value)} placeholder="0.00" className={inputClass}/></Field>
             </div>
-            {(formPayable > 0 || formPaid > 0 || formDiesel > 0) && (
-              <div className="grid grid-cols-2 gap-4 rounded-2xl bg-slate-800/50 p-4 border border-slate-700/50">
-                <div><p className="text-xs text-slate-400 uppercase">Form Amount (Payable)</p><p className="text-lg font-bold text-blue-300">Rs. {formatNumber(formPayable)}</p></div>
-                <div><p className="text-xs text-slate-400 uppercase">Form Balance (Payable - Paid)</p><p className="text-lg font-bold text-red-300">Rs. {formatNumber(formBalance)}</p></div>
-              </div>
-            )}
             <div className="flex justify-end border-t border-slate-700/80 pt-6">
               <button type="submit" disabled={saving ||!isInitialSet} className="h-12 inline-flex items-center gap-2 rounded-xl bg-cyan-600 px-7 font-bold disabled:opacity-40">{saving? <RefreshCw size={18} className="animate-spin"/> : <Plus size={18}/>}Save Expense</button>
             </div>
           </form>
         </section>
 
-        {/* RECORDS WITH FILTER BAR - NEW */}
+        {/* RECORDS WITH SINGLE DATE FILTER */}
         <section className="rounded-3xl border border-slate-700/80 bg-slate-900 overflow-hidden">
           <div className="p-5 border-b border-slate-700/80 space-y-4">
             <div className="flex justify-between items-center">
               <h2 className="font-bold">Records</h2>
-              <span className="text-sm bg-slate-800 px-3 py-1 rounded-xl">{filteredExpenses.length} / {expenses.length} Records {isFiltered && "(Filtered)"}</span>
+              <span className="text-sm bg-slate-800 px-3 py-1 rounded-xl">{filteredExpenses.length} / {expenses.length} Records</span>
             </div>
             
-            {/* FILTER BAR - OYA ILLUWA WAGEMA */}
+            {/* FILTER BAR - EKA DATE EKAI MACHINE EKAI WITHARAK */}
             <div className="flex flex-wrap gap-3 p-3 rounded-2xl bg-slate-800/50 border border-slate-700/50">
               <div className="flex items-center gap-2">
                 <Filter size={14} className="text-slate-400"/>
@@ -180,28 +170,17 @@ export default function DieselExpensesPage() {
               <div className="flex items-center gap-1.5 h-9 rounded-lg border border-slate-600 bg-slate-900 px-3">
                 <Calendar size={14} className="text-slate-400"/>
                 <input type="date" value={filterDate} onChange={e=>setFilterDate(e.target.value)} className="bg-transparent text-xs outline-none" />
-                <span className="text-[10px] text-slate-500">Exact Date</span>
-              </div>
-
-              <div className="flex items-center gap-1.5 h-9 rounded-lg border border-slate-600 bg-slate-900 px-3">
-                <span className="text-[10px] text-slate-400">From</span>
-                <input type="date" value={fromDate} onChange={e=>setFromDate(e.target.value)} className="bg-transparent text-xs outline-none" />
-              </div>
-
-              <div className="flex items-center gap-1.5 h-9 rounded-lg border border-slate-600 bg-slate-900 px-3">
-                <span className="text-[10px] text-slate-400">To</span>
-                <input type="date" value={toDate} onChange={e=>setToDate(e.target.value)} className="bg-transparent text-xs outline-none" />
               </div>
 
               {isFiltered && (
                 <button onClick={clearFilters} className="h-9 inline-flex items-center gap-1 rounded-lg bg-red-500/20 text-red-400 border border-red-500/30 px-3 text-xs font-bold">
-                  <X size={12}/>Clear Filter
+                  <X size={12}/>Clear
                 </button>
               )}
             </div>
           </div>
 
-          <div className="overflow-x-auto"><table className="w-full min-w-[900px]"><thead className="bg-slate-800/80"><tr className="text-xs text-slate-400 uppercase"><th className="px-5 py-4 text-left">Date</th><th className="px-5 py-4 text-left">Machine</th><th className="px-5 py-4 text-right">Diesel</th><th className="px-5 py-4 text-right">Payable</th><th className="px-5 py-4 text-right">Paid</th><th className="px-5 py-4 text-right">Balance</th><th className="px-5 py-4 text-center">Action</th></tr></thead><tbody>{filteredExpenses.length===0 ? <tr><td colSpan={7} className="px-5 py-10 text-center text-sm text-slate-500">No records for selected filter - Date / Machine wenas karala balanna</td></tr> : filteredExpenses.map(item => { const p = numberValue(item.payable); const pd = numberValue(item.paid); return <tr key={item.id} className="border-b border-slate-800 hover:bg-slate-800/40"><td className="px-5 py-4 text-sm">{item.date?.slice(0, 10)}</td><td className="px-5 py-4 font-semibold">{item.machine}</td><td className="px-5 py-4 text-right">{formatNumber(item.diesel)}</td><td className="px-5 py-4 text-right font-bold text-blue-400">Rs. {formatNumber(p)}</td><td className="px-5 py-4 text-right font-bold text-green-400">Rs. {formatNumber(pd)}</td><td className="px-5 py-4 text-right font-bold text-red-400">Rs. {formatNumber(Math.max(0, p - pd))}</td><td className="px-5 py-4 text-center"><button onClick={() => handleDelete(item.id)} className="h-9 w-9 inline-flex items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20"><Trash2 size={16}/></button></td></tr> })}</tbody></table></div>
+          <div className="overflow-x-auto"><table className="w-full min-w-[900px]"><thead className="bg-slate-800/80"><tr className="text-xs text-slate-400 uppercase"><th className="px-5 py-4 text-left">Date</th><th className="px-5 py-4 text-left">Machine</th><th className="px-5 py-4 text-right">Diesel</th><th className="px-5 py-4 text-right">Payable</th><th className="px-5 py-4 text-right">Paid</th><th className="px-5 py-4 text-right">Balance</th><th className="px-5 py-4 text-center">Action</th></tr></thead><tbody>{filteredExpenses.length===0 ? <tr><td colSpan={7} className="px-5 py-10 text-center text-sm text-slate-500">No records for {filterDate} {filterMachine} - filter clear karala balanna</td></tr> : filteredExpenses.map(item => { const p = numberValue(item.payable); const pd = numberValue(item.paid); return <tr key={item.id} className="border-b border-slate-800 hover:bg-slate-800/40"><td className="px-5 py-4 text-sm">{item.date?.slice(0, 10)}</td><td className="px-5 py-4 font-semibold">{item.machine}</td><td className="px-5 py-4 text-right">{formatNumber(item.diesel)}</td><td className="px-5 py-4 text-right font-bold text-blue-400">Rs. {formatNumber(p)}</td><td className="px-5 py-4 text-right font-bold text-green-400">Rs. {formatNumber(pd)}</td><td className="px-5 py-4 text-right font-bold text-red-400">Rs. {formatNumber(Math.max(0, p - pd))}</td><td className="px-5 py-4 text-center"><button onClick={() => handleDelete(item.id)} className="h-9 w-9 inline-flex items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20"><Trash2 size={16}/></button></td></tr> })}</tbody></table></div>
         </section>
       </div>
     </main>
