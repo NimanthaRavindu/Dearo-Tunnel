@@ -46,7 +46,6 @@ export default function OtherVoucherSummaryPage() {
           const data = await res.json();
           setVoucher(data.data || data);
         } else {
-          // fallback - list eken hoyanawa
           const res2 = await fetch(`/api/expences/other?branch_id=${currentBranchId}`, { cache: "no-store" } as any);
           if (res2.ok) {
             const data2 = await res2.json();
@@ -71,7 +70,6 @@ export default function OtherVoucherSummaryPage() {
     fetchOtherVoucherData();
   }, [params]);
 
-  // PRINT - white voucher eka witharak
   const handlePrint = () => {
     const el = printRef.current;
     if (!el) { window.print(); return; }
@@ -82,7 +80,7 @@ export default function OtherVoucherSummaryPage() {
     setTimeout(()=>{ win.print(); win.close(); }, 700);
   };
 
-  // PDF DOWNLOAD - 100% working (html2canvas nathi)
+  // PDF DOWNLOAD - FIXED - NO OVERLAP
   const handleDownloadPDF = async () => {
     if (!voucher) return;
     try {
@@ -120,27 +118,40 @@ export default function OtherVoucherSummaryPage() {
       doc.text("DESCRIPTION VECTOR", 17, y+5); doc.text("METRICS (LKR)", 150, y+5); y+=8;
       doc.setTextColor(0,0,0);
 
+      // FIXED ROWS STRUCTURE
       const rows = [
-        ["EXPENDITURE REASON", voucher.reason || voucher.description || voucher.note || "-", "General Overhead"],
-        ["TOTAL COST (PAYABLE)", "", payable.toLocaleString('en-US',{minimumFractionDigits:2})],
-        ["TOTAL PAID AMOUNT", "", `(${paid.toLocaleString('en-US',{minimumFractionDigits:2})})`],
-        ["REMAINING DUE BALANCE", "", `LKR ${balance.toLocaleString('en-US',{minimumFractionDigits:2})}`],
+        { label: "EXPENDITURE REASON", value: voucher.reason || voucher.description || voucher.note || "-", metric: "General Overhead", h: 16 },
+        { label: "TOTAL COST (PAYABLE)", value: "", metric: payable.toLocaleString('en-US',{minimumFractionDigits:2}), h: 10 },
+        { label: "TOTAL PAID AMOUNT", value: "", metric: `(${paid.toLocaleString('en-US',{minimumFractionDigits:2})})`, h: 10 },
+        { label: "REMAINING DUE BALANCE", value: "", metric: `LKR ${balance.toLocaleString('en-US',{minimumFractionDigits:2})}`, h: 12, isLast: true },
       ];
 
-      rows.forEach((r,i)=>{
-        const isLast = i===rows.length-1;
-        doc.setFillColor(isLast?240: i%2===0?248:255, isLast?240:248, isLast?255:255);
-        doc.rect(15, y, 180, isLast?12:10, "F");
-        doc.rect(15, y, 180, isLast?12:10);
-        doc.setFont("helvetica", isLast?"bold":"normal");
-        doc.setFontSize(isLast?10:8);
-        doc.text(r[0], 17, y+6);
-        doc.text(r[1], 17, y+ (i===0 ? 6 : 6));
-        doc.text(r[2], 150, y+6);
-        y+= isLast?12:10;
+      rows.forEach((r)=>{
+        const isLast = !!r.isLast;
+        doc.setFillColor(isLast?240:248, isLast?240:248, isLast?255:255);
+        doc.setDrawColor(210,210,210);
+        doc.rect(15, y, 180, r.h, "FD");
+
+        if (r.label === "EXPENDITURE REASON") {
+          doc.setFont("helvetica","normal"); doc.setFontSize(6); doc.setTextColor(100,100,100);
+          doc.text(r.label, 17, y+3.5);
+          doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(0,0,0);
+          const lines = doc.splitTextToSize(r.value, 110);
+          doc.text(lines, 17, y+8);
+          doc.setFontSize(8); doc.setTextColor(80,80,80);
+          doc.text(r.metric, 150, y+7);
+        } else {
+          doc.setFont("helvetica", isLast?"bold":"normal");
+          doc.setFontSize(isLast?10:8);
+          doc.setTextColor(0,0,0);
+          doc.text(r.label, 17, y+6);
+          doc.text(r.metric, 150, y+6);
+        }
+        y+= r.h;
       });
 
       y+=15; doc.setFontSize(8); doc.setFont("helvetica","normal");
+      doc.setTextColor(0,0,0);
       doc.text("PREPARED BY", 20, y+10); doc.line(20, y+8, 70, y+8);
       doc.text("AUTHORIZED ENDORSEMENT", 125, y+10); doc.line(125, y+8, 180, y+8);
 
@@ -175,7 +186,6 @@ export default function OtherVoucherSummaryPage() {
   return (
     <div className="min-h-screen bg-[#070a12] text-slate-300 p-4 md:p-8 font-mono antialiased">
       <div className="max-w-3xl mx-auto">
-        
         <div className="mb-6 flex justify-between items-center border-b border-slate-900/60 pb-4 print:hidden">
           <button onClick={() => router.back()} className="flex items-center gap-2 text-xs text-slate-400 hover:text-white transition-colors"><ArrowLeft size={14} /> Back to Ledger</button>
           <div className="flex gap-2">
@@ -189,7 +199,6 @@ export default function OtherVoucherSummaryPage() {
             <h1 className="text-base font-bold text-slate-100 uppercase tracking-widest">DEARO INVESTMENT LIMITED (PVT)</h1>
             <p className="text-[10px] text-slate-500 uppercase tracking-wider mt-1 font-sans">General Expenditure Voucher</p>
           </div>
-
           <div className="grid grid-cols-2 gap-4 my-6 text-[11px] border-b border-slate-900/60 pb-6">
             <div className="space-y-1.5">
               <div><span className="text-slate-500">VOUCHER ID :</span> #{derivedExpenseId}</div>
@@ -200,7 +209,6 @@ export default function OtherVoucherSummaryPage() {
               <div><span className="text-slate-500">STATUS : </span> <span className={balance > 0 ? "text-amber-500 font-bold" : "text-emerald-400 font-bold"}>{balance > 0 ? "DEFERRED" : "SETTLED"}</span></div>
             </div>
           </div>
-
           <div className="border border-slate-900 rounded-xl overflow-hidden my-8">
             <table className="w-full text-left border-collapse text-xs">
               <thead><tr className="bg-slate-950 border-b border-slate-900 text-[10px] text-slate-400 font-bold uppercase"><th className="p-4">Description Vector</th><th className="p-4 text-right">Metrics (LKR)</th></tr></thead>
@@ -212,7 +220,6 @@ export default function OtherVoucherSummaryPage() {
               </tbody>
             </table>
           </div>
-
           <div className="grid grid-cols-2 gap-8 mt-16 text-[10px] text-center text-slate-500">
             <div><div className="border-b border-slate-800 mx-auto w-32 h-8"></div><p className="mt-2 uppercase tracking-wider">Prepared By</p></div>
             <div><div className="border-b border-slate-800 mx-auto w-32 h-8"></div><p className="mt-2 uppercase tracking-wider">Authorized Endorsement</p></div>
@@ -220,7 +227,6 @@ export default function OtherVoucherSummaryPage() {
         </div>
       </div>
 
-      {/* HIDDEN WHITE PRINT VERSION */}
       <div className="hidden">
         <div ref={printRef}>
           <div style={{padding:'40px', background:'white', color:'black', width:'800px', fontFamily:'sans-serif'}}>
@@ -242,11 +248,6 @@ export default function OtherVoucherSummaryPage() {
                   <tr style={{background:'#f0f0f0', fontWeight:'900', fontSize:'14px'}}><td style={{padding:'12px'}}>REMAINING DUE BALANCE</td><td style={{padding:'12px', textAlign:'right'}}>LKR {balance.toLocaleString('en-US',{minimumFractionDigits:2})}</td></tr>
                 </tbody>
               </table>
-              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'48px', marginTop:'48px'}}>
-                <div><div style={{borderBottom:'1px solid black', height:'32px'}}></div><p style={{fontSize:'10px', marginTop:'8px'}}>Prepared By</p></div>
-                <div><div style={{borderBottom:'1px solid black', height:'32px'}}></div><p style={{fontSize:'10px', marginTop:'8px'}}>Authorized Endorsement</p></div>
-              </div>
-              <div style={{background:'#0a2a5e', color:'white', textAlign:'center', padding:'8px', fontSize:'10px', marginTop:'32px'}}>DEARO INVESTMENT LIMITED (PVT) • www.dearoinvestment.com</div>
             </div>
           </div>
         </div>
