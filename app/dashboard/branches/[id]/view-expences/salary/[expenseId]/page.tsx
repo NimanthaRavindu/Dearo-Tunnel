@@ -62,7 +62,7 @@ export default function SalaryVoucherSummaryPage() {
     setTimeout(() => { win.print(); win.close(); }, 600);
   };
 
-  // PDF DOWNLOAD - 100% working (html2canvas nathi)
+  // PDF DOWNLOAD - FIXED - CLASSIFICATION REASON OVERLAP NA
   const handleDownloadPDF = async () => {
     if (!voucher) return;
     try {
@@ -103,42 +103,60 @@ export default function SalaryVoucherSummaryPage() {
       y += 8; doc.setTextColor(0, 0, 0);
 
       const rows = [
-        ["TARGET EMPLOYEE", voucher.employee_name || "N/A", `ID: ${voucher.employee_id || "-"}`],
-        ["CLASSIFICATION REASON", voucher.reason || "Monthly structural salary payout", "Salary Expense"],
-        ["TOTAL EXPENSE (PAYABLE)", "", payable.toLocaleString("en-US", { minimumFractionDigits: 2 })],
-        ["TOTAL PAID AMOUNT", "", `(${paid.toLocaleString("en-US", { minimumFractionDigits: 2 })})`],
-        ["TOTAL BALANCE DEFERRED", "", `LKR ${balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}`],
+        { label: "TARGET EMPLOYEE", value: voucher.employee_name || "N/A", metric: `ID: ${voucher.employee_id || "-"}`, h: 12 },
+        { label: "CLASSIFICATION REASON", value: voucher.reason || "Monthly structural salary payout", metric: "Salary Expense", h: 14 },
+        { label: "TOTAL EXPENSE (PAYABLE)", value: "", metric: payable.toLocaleString("en-US", { minimumFractionDigits: 2 }), h: 10 },
+        { label: "TOTAL PAID AMOUNT", value: "", metric: `(${paid.toLocaleString("en-US", { minimumFractionDigits: 2 })})`, h: 10 },
+        { label: "TOTAL BALANCE DEFERRED", value: "", metric: `LKR ${balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}`, h: 12, isLast: true },
       ];
 
-      rows.forEach((r, i) => {
-        const isLast = i === rows.length - 1;
-        doc.setFillColor(isLast ? 240 : i % 2 === 0 ? 248 : 255, isLast ? 240 : 248, isLast ? 255 : 255);
-        doc.rect(15, y, 180, isLast ? 12 : 10, "F");
-        doc.rect(15, y, 180, isLast ? 12 : 10);
-        doc.setFont("helvetica", isLast ? "bold" : "normal");
-        doc.setFontSize(isLast ? 10 : 8);
-        if (i === 0) {
-          doc.setFontSize(6); doc.text(r[0], 17, y + 3);
-          doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.text(r[1], 17, y + 7);
-          doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.text(r[2], 150, y + 5);
+      rows.forEach((r) => {
+        const isLast = !!r.isLast;
+        const rowHeight = r.h;
+        
+        doc.setFillColor(isLast ? 235 : 248, isLast ? 235 : 248, isLast ? 255 : 255);
+        doc.setDrawColor(210,210,210);
+        doc.rect(15, y, 180, rowHeight, "FD");
+
+        if (r.label === "TARGET EMPLOYEE") {
+          doc.setFont("helvetica", "normal"); doc.setFontSize(6); doc.setTextColor(100,100,100);
+          doc.text(r.label, 17, y + 3.5);
+          doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(0,0,0);
+          doc.text(r.value.toUpperCase(), 17, y + 8);
+          doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+          doc.text(r.metric, 150, y + 6.5);
+        } else if (r.label === "CLASSIFICATION REASON") {
+          doc.setFont("helvetica", "normal"); doc.setFontSize(6); doc.setTextColor(100,100,100);
+          doc.text(r.label, 17, y + 3.5);
+          doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(0,0,0);
+          const lines = doc.splitTextToSize(r.value, 110);
+          doc.text(lines, 17, y + 8);
+          doc.setFontSize(8); doc.setTextColor(80,80,80);
+          doc.text(r.metric, 150, y + 7);
         } else {
-          doc.text(r[0], 17, y + 6); doc.text(r[1], 17, y + 6); doc.text(r[2], 150, y + 6);
+          doc.setFont("helvetica", isLast ? "bold" : "normal");
+          doc.setFontSize(isLast ? 9 : 8);
+          doc.setTextColor(0,0,0);
+          doc.text(r.label, 17, y + 6.5);
+          doc.setFont("helvetica", isLast ? "bold" : "normal");
+          doc.text(r.metric, 150, y + 6.5);
         }
-        y += isLast ? 12 : 10;
+        y += rowHeight;
       });
 
       y += 15;
-      doc.setFontSize(8); doc.text("PREPARED BY (OFFICER)", 20, y + 10); doc.line(20, y + 8, 70, y + 8);
+      doc.setFontSize(8); doc.setTextColor(0,0,0);
+      doc.text("PREPARED BY (OFFICER)", 20, y + 10); doc.line(20, y + 8, 70, y + 8);
       doc.text("AUTHORIZED ENDORSEMENT", 125, y + 10); doc.line(125, y + 8, 180, y + 8);
 
       doc.setFillColor(10, 42, 94); doc.rect(0, 285, 210, 12, "F");
       doc.setTextColor(255, 255, 255); doc.setFontSize(8);
-      doc.text("DEARO INVESTMENT LIMITED (PVT) • www.dearoinvestment.com", 20, 292);
+      doc.text("DEARO INVESTMENT LIMITED (PVT) - www.dearoinvestment.com", 20, 292);
 
       doc.save(`Salary-Voucher-${derivedExpenseId}.pdf`);
     } catch (err) {
       console.error(err);
-      handlePrint(); // fallback
+      handlePrint();
     }
   };
 
