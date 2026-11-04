@@ -333,7 +333,7 @@ export default function ViewSalaryExpensesPage({
                         </td>
 
                         <td className="whitespace-nowrap p-4 text-slate-300">
-                          <Calendar size={12} className="mr-2 inline text-slate-600" />
+                          <Calendar size={12} className="mr-2 inline text-slate-100" />
 
                           {entryDate(item) || "-"}
                         </td>
