@@ -134,9 +134,9 @@ function TotalIncomesContent() {
             {selectedBranchId && <div className="flex items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-950/40 px-3 py-1.5 text-[11px] text-cyan-400"><Filter size={12} /><span>Branch #{selectedBranchId}</span><button onClick={()=>clearFilter("branch")}><X size={13} /></button></div>}
             {selectedCapitalId && <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-950/40 px-3 py-1.5 text-[11px] text-amber-400"><Filter size={12} /><span>Capital #{selectedCapitalId}</span><button onClick={()=>clearFilter("capital")}><X size={13} /></button></div>}
             {selectedSalesId && <div className="flex items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-950/40 px-3 py-1.5 text-[11px] text-cyan-400"><Filter size={12} /><span>Sales #{selectedSalesId}</span><button onClick={()=>clearFilter("sales")}><X size={13} /></button></div>}
-            <div className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-1.5">
-              <Calendar size={14} className="text-slate-300" /><label className="whitespace-nowrap text-[10px] font-bold uppercase text-slate-300">Date</label>
-              <input type="date" value={filterDate} onChange={(e)=>updateDateFilter(e.target.value)} className="bg-transparent text-[11px] text-slate-200 outline-none" />
+            <div className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-50 px-3 py-1.5">
+              <Calendar size={14} className="text-slate-900" /><label className="whitespace-nowrap text-[10px] font-bold uppercase text-slate-300">Date</label>
+              <input type="date" value={filterDate} onChange={(e)=>updateDateFilter(e.target.value)} className="bg-transparent text-[11px] text-slate-900 outline-none" />
               {filterDate && <button onClick={clearDateFilter}><X size={13} /></button>}
             </div>
           </div>

@@ -167,8 +167,8 @@ export default function DieselExpensesPage() {
                 {machines.map(m=> <option key={m} value={m}>{m}</option>)}
               </select>
 
-              <div className="flex items-center gap-1.5 h-9 rounded-lg border border-slate-600 bg-slate-900 px-3">
-                <Calendar size={14} className="text-slate-400"/>
+              <div className="flex items-center gap-1.5 h-9 rounded-lg border border-slate-600 bg-slate-50 px-3">
+                <Calendar size={14} className="text-slate-900"/>
                 <input type="date" value={filterDate} onChange={e=>setFilterDate(e.target.value)} className="bg-transparent text-xs outline-none" />
               </div>
 

@@ -127,7 +127,7 @@ export default function CapitalExpensesPage() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-800/80 mb-4">
               <h2 className="text-xs font-bold uppercase tracking-wider text-slate-200 font-mono">Recorded Transactions ({filteredExpenses.length})</h2>
               <div className="flex items-center gap-2 flex-wrap">
-                <div className="relative"><input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="bg-slate-900/90 border border-slate-800 rounded-lg py-1.5 px-2.5 text-[11px] text-slate-200 font-mono" />{filterDate && <button type="button" onClick={() => setFilterDate("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"><X size={12} /></button>}</div>
+                <div className="relative"><input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="bg-slate-50 border border-slate-800 rounded-lg py-1.5 px-2.5 text-[11px] text-slate-900 font-mono" />{filterDate && <button type="button" onClick={() => setFilterDate("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"><X size={12} /></button>}</div>
                 <div className="relative w-40"><Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" /><input type="text" placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-slate-900/90 border border-slate-800 rounded-lg py-1.5 pl-8 pr-2.5 text-[11px] text-slate-200" /></div>
               </div>
             </div>
