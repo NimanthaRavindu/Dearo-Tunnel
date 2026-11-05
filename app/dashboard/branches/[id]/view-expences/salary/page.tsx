@@ -180,7 +180,7 @@ export default function ViewSalaryExpensesPage({
                 onChange={(event) =>
                   setSelectedDate(event.target.value)
                 }
-                className="rounded-lg border border-slate-800 bg-slate-100 py-2 pl-9 pr-3 text-xs text-slate-900 outline-none focus:border-amber-500"
+                className="rounded-lg border border-slate-800 bg-slate-950 py-2 pl-9 pr-3 text-xs text-slate-50 outline-none focus:border-amber-500"
               />
             </div>
 
