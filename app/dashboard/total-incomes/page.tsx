@@ -137,7 +137,7 @@ function TotalIncomesContent() {
             <div className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-50 px-3 py-1.5">
               <Calendar size={14} className="text-slate-900" /><label className="whitespace-nowrap text-[10px] font-bold uppercase text-slate-300">Date</label>
               <input type="date" value={filterDate} onChange={(e)=>updateDateFilter(e.target.value)} className="bg-transparent text-[11px] text-slate-900 outline-none" />
-              {filterDate && <button onClick={clearDateFilter}><X size={13} /></button>}
+              {filterDate && <button onClick={clearDateFilter}><X size={13} className="text-white"/></button>}
             </div>
           </div>
         </div>
