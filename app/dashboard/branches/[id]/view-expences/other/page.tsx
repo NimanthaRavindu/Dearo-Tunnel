@@ -253,7 +253,7 @@ export default function ViewOtherExpensesPage({
                 onChange={(event) =>
                   setSelectedDate(event.target.value)
                 }
-                className="rounded-lg border border-slate-800 bg-slate-950 py-2 pl-9 pr-3 text-xs text-slate-300 outline-none focus:border-purple-500"
+                className="rounded-lg border border-slate-800 bg-slate-50 py-2 pl-9 pr-3 text-xs text-slate-900 outline-none focus:border-purple-500"
               />
             </div>
 
