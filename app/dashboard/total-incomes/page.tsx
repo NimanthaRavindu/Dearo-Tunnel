@@ -42,7 +42,6 @@ function TotalIncomesContent() {
 
   useEffect(()=>{ fetchTotalIncomesSummary(); },[fetchTotalIncomesSummary]);
 
-  // all branches for dropdown
   useEffect(() => {
     const fetchAllBranches = async () => {
       try {
@@ -80,11 +79,12 @@ function TotalIncomesContent() {
     if (filterDate) params.set("date",filterDate);
     router.push(`/dashboard${params.toString()?`?${params.toString()}`:""}`);
   };
-  const handleBranchClick = (branchId: string) => {
+  const handleBranchClick = (branchId: string, dateValue?: string) => {
     const params = new URLSearchParams();
     if (selectedSalesId) params.set("selected_sales_id",selectedSalesId);
     if (selectedCapitalId) params.set("selected_capital_id",selectedCapitalId);
     if (filterDate) params.set("date",filterDate);
+    else if (dateValue) params.set("date", dateValue);
     router.push(`/dashboard/branches/${encodeURIComponent(branchId)}/add-expenses${params.toString()?`?${params.toString()}`:""}`);
   };
   const formatDate = (v?: string) => { if (!v) return "-"; const [y,m,d]=v.substring(0,10).split("-"); return y&&m&&d?`${d}/${m}/${y}`:v; };
@@ -117,7 +117,6 @@ function TotalIncomesContent() {
             <div><div className="flex items-center gap-2.5"><span className="flex h-2.5 w-2.5 animate-pulse rounded-full bg-red-500 shadow-lg shadow-red-500/50" /><h1 className="text-xl font-black uppercase tracking-wider text-slate-100 sm:text-2xl">Total Sales Incomes Ledger</h1></div><p className="mt-1 text-xs font-medium text-slate-400">Real-time aggregated financial revenue tracking across all active corporate infrastructure branches</p></div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {/* BRANCH FILTER - NEW */}
             <div className="relative flex items-center">
               <MapPin size={12} className="absolute left-2.5 text-cyan-400 pointer-events-none" />
               <select value={selectedBranchId||""} onChange={(e)=>updateBranchFilter(e.target.value)} className="bg-slate-950/60 border border-cyan-900/40 rounded-lg pl-7 pr-7 py-1.5 text-[11px] text-cyan-300 outline-none focus:border-cyan-500/50 cursor-pointer min-w-[190px]">
@@ -135,9 +134,9 @@ function TotalIncomesContent() {
             {selectedCapitalId && <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-950/40 px-3 py-1.5 text-[11px] text-amber-400"><Filter size={12} /><span>Capital #{selectedCapitalId}</span><button onClick={()=>clearFilter("capital")}><X size={13} /></button></div>}
             {selectedSalesId && <div className="flex items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-950/40 px-3 py-1.5 text-[11px] text-cyan-400"><Filter size={12} /><span>Sales #{selectedSalesId}</span><button onClick={()=>clearFilter("sales")}><X size={13} /></button></div>}
             <div className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-50 px-3 py-1.5">
-              <Calendar size={14} className="text-slate-900" /><label className="whitespace-nowrap text-[10px] font-bold uppercase text-slate-300">Date</label>
-              <input type="date" value={filterDate} onChange={(e)=>updateDateFilter(e.target.value)} className="bg-transparent text-[11px] text-slate-900 outline-none" />
-              {filterDate && <button onClick={clearDateFilter}><X size={13} className="text-white"/></button>}
+              <Calendar size={14} className="text-slate-900" /><label className="whitespace-nowrap text-[10px] font-bold uppercase text-slate-500">Date</label>
+              <input type="date" value={filterDate} onChange={(e)=>updateDateFilter(e.target.value)} className="bg-transparent text-[11px] text-slate-900 outline-none [color-scheme:light] [&::-webkit-calendar-picker-indicator]:opacity-100 [&::-webkit-calendar-picker-indicator]:cursor-pointer" />
+              {filterDate && <button onClick={clearDateFilter}><X size={13} className="text-slate-900"/></button>}
             </div>
           </div>
         </div>
@@ -171,7 +170,7 @@ function TotalIncomesContent() {
                     const entriesCount = Number(item.entriesCount??item.entries_count??0);
                     const dateValue = item.last_date||item.date||filterDate;
                     return (
-                      <tr key={item.branchId} onClick={()=>handleBranchClick(item.branchId)} className="group cursor-pointer hover:bg-slate-900/70">
+                      <tr key={`${item.branchId}-${dateValue}`} onClick={()=>handleBranchClick(item.branchId, dateValue)} className="group cursor-pointer hover:bg-slate-900/70">
                         <td className="px-4 py-3.5 font-semibold text-slate-200"><div className="flex items-center gap-3"><div className="rounded-lg border border-slate-800 bg-slate-900 p-2 text-red-400 group-hover:scale-110"><Building2 size={14} /></div><span className="block text-sm font-bold text-white">{branchName}</span></div></td>
                         <td className="px-4 py-3.5 text-slate-300"><div className="flex items-center gap-2"><Calendar size={12} className="text-slate-500" />{formatDate(dateValue)}</div></td>
                         <td className="px-4 py-3.5 text-center"><span className="rounded-lg border border-slate-800 bg-slate-900 px-2.5 py-1 text-[10px]">{entriesCount} entries</span></td>

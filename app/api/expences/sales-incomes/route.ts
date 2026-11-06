@@ -85,7 +85,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ success: true, grandTotal, grandCredit, data }, { status: 200 });
       }
 
-      // GROUPED: total-incomes page eke anawa
+      // GROUPED: total-incomes page eke anawa - FIXED: Branch + Date walin group karanawa
       const where: string[] = [];
       const params: any[] = [];
       if (branchId) { where.push("s.branch_id =?"); params.push(branchId); }
@@ -93,12 +93,13 @@ export async function GET(request: Request) {
 
       let summaryQuery = `
         SELECT s.branch_id, COALESCE(b.branch_name, CONCAT('Branch #', s.branch_id)) as branch_name,
+               DATE(s.date) as date,
                SUM(s.amount) as total_amount, SUM(s.credit) as total_credit,
                COUNT(s.id) as entries_count, MAX(s.date) as last_date
         FROM sales_incomes s LEFT JOIN branch b ON s.branch_id = b.id
       `;
       if (where.length) summaryQuery += ` WHERE ${where.join(" AND ")}`;
-      summaryQuery += ` GROUP BY s.branch_id, b.branch_name ORDER BY total_amount DESC`;
+      summaryQuery += ` GROUP BY s.branch_id, b.branch_name, DATE(s.date) ORDER BY DATE(s.date) DESC, total_amount DESC`;
 
       const [rows]: any = await db.query(summaryQuery, params);
       let grandTotal = 0; let grandCredit = 0;
@@ -116,7 +117,7 @@ export async function GET(request: Request) {
           entriesCount: Number(row.entries_count || 0),
           entries_count: Number(row.entries_count || 0),
           last_date: formatDate(row.last_date),
-          date: formatDate(row.last_date),
+          date: formatDate(row.date || row.last_date),
         };
       });
       return NextResponse.json({ success: true, grandTotal, grandCredit, data }, { status: 200 });
@@ -161,7 +162,6 @@ export async function POST(request: Request) {
     const unit_price = Number(body.unit_price?? 0);
     const quantity = Number(body.quantity?? 0);
     let amount = Number(body.amount);
-    // auto calculate if amount not sent or 0
     if (!Number.isFinite(amount) || amount === 0) {
       amount = unit_price * quantity;
     }
@@ -171,7 +171,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Missing required fields: branch_id, name, date." }, { status: 400 });
     }
     if (body.unit_price === undefined || body.quantity === undefined) {
-       // allow old code but require at least amount
        if (body.amount === undefined) {
          return NextResponse.json({ success: false, error: "Missing unit_price, quantity or amount" }, { status: 400 });
        }
