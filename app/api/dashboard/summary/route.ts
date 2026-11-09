@@ -16,7 +16,8 @@ export async function GET(req: NextRequest) {
     const dieselId = selectedDieselId ? Number(selectedDieselId) : null;
     const branchId = selectedBranchId ? Number(selectedBranchId) : null;
 
-    // FIXED: okkoma expense walata date filter eka damma - kalin income witharai date eken filter une
+    // FIXED: salary / other walata date filter eka AYIN kala - e table wala 'date' column eka na
+    // date filter thiyenne sales / capital / diesel / income walata witharak
     const query = `
       SELECT b.id, b.branch_name, b.branch_code,
         COALESCE(s.salary_total, 0) AS salary_expenses,
@@ -33,7 +34,6 @@ export async function GET(req: NextRequest) {
       LEFT JOIN (
         SELECT branch_id, SUM(COALESCE(total_payable, 0)) AS salary_total, SUM(COALESCE(balance, 0)) AS salary_balance
         FROM salary_expenses
-        WHERE (? IS NULL OR DATE(date) = ?)
         GROUP BY branch_id
       ) s ON b.id = s.branch_id
       LEFT JOIN (
@@ -49,7 +49,6 @@ export async function GET(req: NextRequest) {
       LEFT JOIN (
         SELECT branch_id, SUM(COALESCE(total_payable, 0)) AS other_total, SUM(COALESCE(balance, 0)) AS other_balance
         FROM other_expenses
-        WHERE (? IS NULL OR DATE(date) = ?)
         GROUP BY branch_id
       ) o ON b.id = o.branch_id
       LEFT JOIN (
@@ -65,10 +64,8 @@ export async function GET(req: NextRequest) {
     `;
 
     const [rows] = await db.query<RowDataPacket[]>(query, [
-      selectedDate, selectedDate,
       salesId, salesId, selectedDate, selectedDate,
       capitalId, capitalId, selectedDate, selectedDate,
-      selectedDate, selectedDate,
       dieselId, dieselId, selectedDate, selectedDate,
       selectedDate, selectedDate,
       branchId, branchId
@@ -133,7 +130,7 @@ export async function GET(req: NextRequest) {
         id: row.id,
         description: row.description || row.personName || row.person_name || row.name || `Sales Expense #${row.id}`,
         name: row.personName || row.person_name || row.name || `Sales Entry #${row.id}`,
-        branch_name: row.branch_name || "",
+        branch_name: row.branch_name || "N/A",
         branch_id: row.branch_id,
         date: row.date ? String(row.date).split("T")[0] : "",
         amount: Number(row.amount || 0),
@@ -142,7 +139,7 @@ export async function GET(req: NextRequest) {
         id: row.id,
         description: row.description || row.person_name || row.personName || row.name || `Capital Expense #${row.id}`,
         name: row.person_name || row.personName || row.name || `Capital Entry #${row.id}`,
-        branch_name: row.branch_name || "",
+        branch_name: row.branch_name || "N/A",
         branch_id: row.branch_id,
         date: row.date ? String(row.date).split("T")[0] : "",
         amount: Number(row.amount || 0),
