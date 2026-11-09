@@ -11,12 +11,12 @@ export async function GET(req: NextRequest) {
     const selectedBranchId = searchParams.get("branch_id");
     const selectedDate = searchParams.get("date");
 
-    const salesId = selectedSalesId? Number(selectedSalesId) : null;
-    const capitalId = selectedCapitalId? Number(selectedCapitalId) : null;
-    const dieselId = selectedDieselId? Number(selectedDieselId) : null;
-    const branchId = selectedBranchId? Number(selectedBranchId) : null;
+    const salesId = selectedSalesId ? Number(selectedSalesId) : null;
+    const capitalId = selectedCapitalId ? Number(selectedCapitalId) : null;
+    const dieselId = selectedDieselId ? Number(selectedDieselId) : null;
+    const branchId = selectedBranchId ? Number(selectedBranchId) : null;
 
-    // FIXED: sales/capital walata payable add karala thibba eka ayin kala, income walata grand_total check ekka safe query
+    // FIXED: okkoma expense walata date filter eka damma - kalin income witharai date eken filter une
     const query = `
       SELECT b.id, b.branch_name, b.branch_code,
         COALESCE(s.salary_total, 0) AS salary_expenses,
@@ -32,38 +32,44 @@ export async function GET(req: NextRequest) {
       FROM branch b
       LEFT JOIN (
         SELECT branch_id, SUM(COALESCE(total_payable, 0)) AS salary_total, SUM(COALESCE(balance, 0)) AS salary_balance
-        FROM salary_expenses GROUP BY branch_id
+        FROM salary_expenses
+        WHERE (? IS NULL OR DATE(date) = ?)
+        GROUP BY branch_id
       ) s ON b.id = s.branch_id
       LEFT JOIN (
         SELECT branch_id, SUM(COALESCE(amount, 0)) AS sales_total FROM sales_expenses
-        WHERE (? IS NULL OR id =?)
+        WHERE (? IS NULL OR id = ?) AND (? IS NULL OR DATE(date) = ?)
         GROUP BY branch_id
       ) se ON b.id = se.branch_id
       LEFT JOIN (
         SELECT branch_id, SUM(COALESCE(amount, 0)) AS capital_total FROM capital_expenses
-        WHERE (? IS NULL OR id =?)
+        WHERE (? IS NULL OR id = ?) AND (? IS NULL OR DATE(date) = ?)
         GROUP BY branch_id
       ) c ON b.id = c.branch_id
       LEFT JOIN (
         SELECT branch_id, SUM(COALESCE(total_payable, 0)) AS other_total, SUM(COALESCE(balance, 0)) AS other_balance
-        FROM other_expenses GROUP BY branch_id
+        FROM other_expenses
+        WHERE (? IS NULL OR DATE(date) = ?)
+        GROUP BY branch_id
       ) o ON b.id = o.branch_id
       LEFT JOIN (
         SELECT branch_id, SUM(COALESCE(payable, 0)) AS diesel_total, SUM(COALESCE(payable, 0) - COALESCE(paid, 0)) AS diesel_balance
-        FROM diesel_expenses WHERE (? IS NULL OR id =?) GROUP BY branch_id
+        FROM diesel_expenses WHERE (? IS NULL OR id = ?) AND (? IS NULL OR DATE(date) = ?) GROUP BY branch_id
       ) d ON b.id = d.branch_id
       LEFT JOIN (
         SELECT branch_id, SUM(COALESCE(amount, 0)) AS income_total FROM sales_incomes
-        WHERE (? IS NULL OR DATE(date) =?)
+        WHERE (? IS NULL OR DATE(date) = ?)
         GROUP BY branch_id
       ) inc ON b.id = inc.branch_id
-      WHERE (? IS NULL OR b.id =?)
+      WHERE (? IS NULL OR b.id = ?)
     `;
 
     const [rows] = await db.query<RowDataPacket[]>(query, [
-      salesId, salesId,
-      capitalId, capitalId,
-      dieselId, dieselId,
+      selectedDate, selectedDate,
+      salesId, salesId, selectedDate, selectedDate,
+      capitalId, capitalId, selectedDate, selectedDate,
+      selectedDate, selectedDate,
+      dieselId, dieselId, selectedDate, selectedDate,
       selectedDate, selectedDate,
       branchId, branchId
     ]);
@@ -98,21 +104,21 @@ export async function GET(req: NextRequest) {
     const [salesRows] = await db.query<RowDataPacket[]>(`
       SELECT se.*, b.branch_name FROM sales_expenses se
       LEFT JOIN branch b ON se.branch_id = b.id
-      WHERE (? IS NULL OR DATE(se.date) =?) AND (? IS NULL OR se.id =?) AND (? IS NULL OR se.branch_id =?)
+      WHERE (? IS NULL OR DATE(se.date) = ?) AND (? IS NULL OR se.id = ?) AND (? IS NULL OR se.branch_id = ?)
       ORDER BY se.id ASC
     `, [selectedDate, selectedDate, salesId, salesId, branchId, branchId]);
 
     const [capitalRows] = await db.query<RowDataPacket[]>(`
       SELECT ce.*, b.branch_name FROM capital_expenses ce
       LEFT JOIN branch b ON ce.branch_id = b.id
-      WHERE (? IS NULL OR DATE(ce.date) =?) AND (? IS NULL OR ce.id =?) AND (? IS NULL OR ce.branch_id =?)
+      WHERE (? IS NULL OR DATE(ce.date) = ?) AND (? IS NULL OR ce.id = ?) AND (? IS NULL OR ce.branch_id = ?)
       ORDER BY ce.id ASC
     `, [selectedDate, selectedDate, capitalId, capitalId, branchId, branchId]);
 
     const [dieselRows] = await db.query<RowDataPacket[]>(`
       SELECT de.*, b.branch_name FROM diesel_expenses de
       LEFT JOIN branch b ON de.branch_id = b.id
-      WHERE (? IS NULL OR DATE(de.date) =?) AND (? IS NULL OR de.id =?) AND (? IS NULL OR de.branch_id =?)
+      WHERE (? IS NULL OR DATE(de.date) = ?) AND (? IS NULL OR de.id = ?) AND (? IS NULL OR de.branch_id = ?)
       ORDER BY de.id ASC
     `, [selectedDate, selectedDate, dieselId, dieselId, branchId, branchId]);
 
@@ -127,21 +133,24 @@ export async function GET(req: NextRequest) {
         id: row.id,
         description: row.description || row.personName || row.person_name || row.name || `Sales Expense #${row.id}`,
         name: row.personName || row.person_name || row.name || `Sales Entry #${row.id}`,
-        branch_name: row.branch_name || "N/A",
-        date: row.date? String(row.date).split("T")[0] : "",
+        branch_name: row.branch_name || "",
+        branch_id: row.branch_id,
+        date: row.date ? String(row.date).split("T")[0] : "",
         amount: Number(row.amount || 0),
       })),
       capital: capitalRows.map((row: any) => ({
         id: row.id,
         description: row.description || row.person_name || row.personName || row.name || `Capital Expense #${row.id}`,
         name: row.person_name || row.personName || row.name || `Capital Entry #${row.id}`,
-        branch_name: row.branch_name || "N/A",
-        date: row.date? String(row.date).split("T")[0] : "",
+        branch_name: row.branch_name || "",
+        branch_id: row.branch_id,
+        date: row.date ? String(row.date).split("T")[0] : "",
         amount: Number(row.amount || 0),
       })),
       diesel: dieselRows.map((row: any) => ({
         id: row.id, machine: row.machine || `Diesel #${row.id}`, branch_name: row.branch_name || "N/A",
-        date: row.date? String(row.date).split("T")[0] : "",
+        branch_id: row.branch_id,
+        date: row.date ? String(row.date).split("T")[0] : "",
         payable: Number(row.payable || row.amount || 0),
         balance: Math.max(0, Number(row.payable || 0) - Number(row.paid || 0)),
       })),

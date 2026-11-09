@@ -71,7 +71,8 @@ function ViewEntriesContent() {
         setAllBranches(dashboardResult.branches);
       }
 
-      const incomeParams = new URLSearchParams({ summary: "true" });
+      // FIXED: detailed=true damma - nathnam grouped total_amount witharai enne, amount 0 wenawa
+      const incomeParams = new URLSearchParams({ summary: "true", detailed: "true" });
       if (selectedSalesId) incomeParams.set("selected_sales_id", selectedSalesId);
       if (selectedCapitalId) incomeParams.set("selected_capital_id", selectedCapitalId);
       if (selectedBranchId) incomeParams.set("branch_id", selectedBranchId);
@@ -96,11 +97,12 @@ function ViewEntriesContent() {
         date: String(entry.date?? "").substring(0, 10), amount: entry.amount?? 0,
       })) : [];
 
+      // FIXED: grouped eken awothuth amount eka ganna - total_amount / totalAmount fallback
       const incomeRecords: Entry[] = Array.isArray(incomeResult.data)? incomeResult.data.map((entry: any) => ({
      ...entry, type: entry.type || "Income", category: entry.category || "Income",
         description: entry.description || entry.personName || entry.person_name || entry.name || `Income Entry #${entry.id?? ""}`,
-        date: String(entry.date || entry.income_date || entry.created_at || "").substring(0, 10),
-        amount: entry.amount?? entry.income_amount?? entry.total?? 0,
+        date: String(entry.date || entry.last_date || entry.income_date || entry.created_at || "").substring(0, 10),
+        amount: entry.amount ?? entry.total_amount ?? entry.totalAmount ?? entry.income_amount ?? entry.total ?? 0,
       })) : [];
 
       setIncomeEntries(incomeRecords);
@@ -113,7 +115,6 @@ function ViewEntriesContent() {
 
   useEffect(() => { loadEntries(); }, [loadEntries]);
 
-  // all branches dropdown - first load eke full list ganna
   useEffect(() => {
     const fetchAllBranches = async () => {
       try {
@@ -201,7 +202,6 @@ function ViewEntriesContent() {
         <section className="mb-7 rounded-2xl border border-slate-800 bg-[#0d1527] p-5">
           <div className="mb-5 flex items-center gap-2"><Filter size={18} className="text-cyan-400" /><h2 className="text-sm font-bold uppercase text-white">Filter Entries</h2>{selectedBranchId && <span className="ml-2 flex items-center gap-1 rounded-full border border-cyan-500/30 bg-cyan-950/40 px-2.5 py-1 text-[10px] text-cyan-400"><Building2 size={11} />{allBranches.find((b:any)=>String(b.id)===String(selectedBranchId))?.branch_code || `ID ${selectedBranchId}`}<button onClick={()=>updateBranchFilter("")} className="ml-1 hover:text-white"><X size={12} /></button></span>}</div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-            {/* BRANCH FILTER - NEW */}
             <div><label className="mb-2 block text-xs uppercase text-cyan-400">Branch</label><div className="relative"><MapPin size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-cyan-400" /><select value={selectedBranchId} onChange={(e)=>updateBranchFilter(e.target.value)} className="w-full rounded-xl border border-cyan-900/30 bg-[#070a13] py-3 pl-10 pr-3 text-sm outline-none focus:border-cyan-500 text-cyan-200"><option value="">All Branches ({allBranches.length})</option>{allBranches.map((b:any)=><option key={b.id} value={String(b.id)}>{b.branch_name} ({b.branch_code})</option>)}</select></div></div>
             <DateInput label="From Date" value={fromDate} onChange={setFromDate} />
             <DateInput label="To Date" value={toDate} onChange={setToDate} />
@@ -223,7 +223,7 @@ function SummaryCard({ title, value, icon, iconClass, footer, footerIcon, footer
   return (<div className="rounded-2xl border border-slate-800 bg-[#0d1527] p-5"><div className="flex items-start justify-between"><div><p className="text-xs uppercase text-slate-500">{title}</p><h2 className="mt-2 text-2xl font-bold text-white">{value}</h2></div><div className={`rounded-xl border p-3 ${iconClass}`}>{icon}</div></div><div className={`mt-4 flex items-center gap-2 text-xs ${footerClass}`}>{footerIcon}{footer}</div></div>);
 }
 function DateInput({ label, value, onChange }: any) {
-  return (<div><label className="mb-2 block text-xs uppercase text-slate-500">{label}</label><div className="relative"><CalendarDays size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" /><input type="date" value={value} onChange={(e) => onChange(e.target.value)} className="w-full rounded-xl border border-slate-700 bg-[#070a13] py-3 pl-10 pr-3 text-sm text-slate-200 outline-none focus:border-cyan-500" /></div></div>);
+  return (<div><label className="mb-2 block text-xs uppercase text-slate-500">{label}</label><div className="relative"><CalendarDays size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" /><input type="date" value={value} onChange={(e) => onChange(e.target.value)} className="w-full rounded-xl border border-slate-700 bg-[#070a13] py-3 pl-10 pr-3 text-sm text-slate-200 outline-none focus:border-cyan-500 [color-scheme:dark]" /></div></div>);
 }
 export default function ViewEntriesPage() {
   return (<Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-[#070a13] text-cyan-400">Loading entries...</div>}><ViewEntriesContent /></Suspense>);

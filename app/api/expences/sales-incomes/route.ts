@@ -85,7 +85,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ success: true, grandTotal, grandCredit, data }, { status: 200 });
       }
 
-      // GROUPED: total-incomes page eke anawa - FIXED: Branch + Date walin group karanawa
+      // GROUPED: total-incomes page eke anawa - FIXED: Branch + Date walin group + amount alias
       const where: string[] = [];
       const params: any[] = [];
       if (branchId) { where.push("s.branch_id =?"); params.push(branchId); }
@@ -110,6 +110,7 @@ export async function GET(request: Request) {
           branchId: String(row.branch_id),
           branchName: row.branch_name,
           branch_name: row.branch_name,
+          amount: Number(row.total_amount || 0),
           totalAmount: Number(row.total_amount || 0),
           total_amount: Number(row.total_amount || 0),
           totalCredit: Number(row.total_credit || 0),
