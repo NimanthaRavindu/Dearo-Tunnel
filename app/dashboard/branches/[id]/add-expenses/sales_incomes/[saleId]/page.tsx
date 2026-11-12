@@ -180,7 +180,7 @@ export default function SaleViewPage() {
                 <tr><td className="p-4 text-slate-500 uppercase text-[10px] font-bold">Unit Price (LKR)</td><td className="p-4 text-right font-bold">LKR {Number(sale.unit_price).toFixed(2)}</td></tr>
                 <tr className="bg-slate-50"><td className="p-4 text-slate-500 uppercase text-[10px] font-bold">Quantity</td><td className="p-4 text-right font-bold">{Number(sale.quantity)}</td></tr>
                 <tr><td className="p-4 text-slate-500 uppercase text-[10px] font-bold">Amount (Unit x Qty)</td><td className="p-4 text-right font-black">LKR {Number(sale.amount).toFixed(2)}</td></tr>
-                <tr className="bg-slate-50"><td className="p-4 text-slate-500 uppercase text-[10px] font-bold">Credit (LKR)</td><td className="p-4 text-right font-black">LKR {Number(sale.credit).toFixed(2)}</td></tr>
+                <tr className="bg-slate-50"><td className="p-4 text-slate-500 uppercase text-[10px] font-bold">Paid(LKR)</td><td className="p-4 text-right font-black">LKR {Number(sale.credit).toFixed(2)}</td></tr>
                 <tr className="bg-black text-white"><td className="p-4 uppercase text-[10px] font-black">Net Balance</td><td className="p-4 text-right font-black text-lg text-white">LKR {balance.toFixed(2)}</td></tr>
               </tbody>
             </table>
