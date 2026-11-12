@@ -86,7 +86,7 @@ export default function SaleViewPage() {
         ["Unit Price (LKR)", `LKR ${Number(sale.unit_price).toFixed(2)}`],
         ["Quantity", `${Number(sale.quantity)}`],
         ["Amount (Unit x Qty)", `LKR ${Number(sale.amount).toFixed(2)}`],
-        ["Credit (LKR)", `LKR ${Number(sale.credit).toFixed(2)}`],
+        ["Paid (LKR)", `LKR ${Number(sale.credit).toFixed(2)}`],
         ["Net Balance (Amount - Credit)", `LKR ${balance.toFixed(2)}`],
       ];
 
