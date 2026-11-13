@@ -3,7 +3,7 @@
 import React, { Suspense, useEffect, useState, useMemo } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Calendar, CheckCircle2, DollarSign, FileText, Loader2, Plus, X, Hash, Tag, Eye, Receipt, BadgePercent, CreditCard } from "lucide-react";
+import { ArrowLeft, Calendar, CheckCircle2, DollarSign, FileText, Loader2, Plus, X, Hash, Tag, Eye, Receipt, BadgePercent, CreditCard, Search } from "lucide-react";
 
 interface SalesIncomeItem {
   id: string;
@@ -30,6 +30,33 @@ interface SalesIncomeFormData {
   credit: string;
 }
 
+interface ProductPrice {
+  product_name: string;
+  unit_price: number | null;
+  category: string;
+}
+
+// ✅ Fallback - DB eke data nathnam me prices weda karanawa
+const FALLBACK_PRICES: ProductPrice[] = [
+  { product_name: "6*9", unit_price: 9000, category: "aggregate" },
+  { product_name: "3/4", unit_price: 13000, category: "aggregate" },
+  { product_name: "1 inches", unit_price: 12000, category: "aggregate" },
+  { product_name: "1 1/2 inches", unit_price: 11000, category: "aggregate" },
+  { product_name: "ABC", unit_price: 8000, category: "aggregate" },
+  { product_name: "Chip", unit_price: 8000, category: "aggregate" },
+  { product_name: "Dust", unit_price: 7000, category: "aggregate" },
+  { product_name: "Mix", unit_price: 7500, category: "aggregate" },
+  { product_name: "Quer Dust", unit_price: 5000, category: "aggregate" },
+  { product_name: "Cucumber", unit_price: null, category: "vegetable" },
+  { product_name: "Bell Pepper", unit_price: null, category: "vegetable" },
+  { product_name: "Tomato", unit_price: null, category: "vegetable" },
+  { product_name: "Gurkin", unit_price: null, category: "vegetable" },
+  { product_name: "Carrot", unit_price: null, category: "vegetable" },
+  { product_name: "Cabbage", unit_price: null, category: "vegetable" },
+  { product_name: "Beans", unit_price: null, category: "vegetable" },
+  { product_name: "Leeks", unit_price: null, category: "vegetable" },
+];
+
 function getToday(): string {
   return new Date().toISOString().split("T")[0];
 }
@@ -44,11 +71,13 @@ function SalesIncomesContent() {
   const selectedCapitalId = searchParams.get("selected_capital_id");
 
   const [incomes, setIncomes] = useState<SalesIncomeItem[]>([]);
+  const [products, setProducts] = useState<ProductPrice[]>(FALLBACK_PRICES);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [filterDate, setFilterDate] = useState("");
+  const [filterName, setFilterName] = useState("");
 
   const [formData, setFormData] = useState<SalesIncomeFormData>({
     bill_number: "",
@@ -71,7 +100,12 @@ function SalesIncomesContent() {
     return calculatedAmount - paid;
   }, [calculatedAmount, formData.credit]);
 
-  const filteredIncomes = filterDate ? incomes.filter((item) => item.date.slice(0, 10) === filterDate) : incomes;
+  // ✅ Date + Name dekama filter wenawa
+  const filteredIncomes = incomes.filter((item) => {
+    const matchDate = filterDate ? item.date.slice(0, 10) === filterDate : true;
+    const matchName = filterName ? item.name?.toLowerCase().includes(filterName.toLowerCase()) : true;
+    return matchDate && matchName;
+  });
   const totalAmount = filteredIncomes.reduce((total, item) => total + Number(item.amount || 0), 0);
   const totalCredit = filteredIncomes.reduce((total, item) => total + Number(item.credit ?? item.paid ?? 0), 0);
   const totalDiscount = filteredIncomes.reduce((total, item) => total + Number(item.discount ?? 0), 0);
@@ -92,11 +126,33 @@ function SalesIncomesContent() {
     }
   };
 
-  useEffect(() => { if (branchId) fetchSalesIncomes(); }, [branchId]);
+  // ✅ DB eken product prices gannawa - fail unoth FALLBACK eka thiyenawa
+  const fetchProducts = async () => {
+    if (!branchId) return;
+    try {
+      const res = await fetch(`/api/expences/product-prices?branch_id=${encodeURIComponent(branchId)}`, { cache: "no-store" });
+      const result = await res.json();
+      if (result.success && result.data && result.data.length > 0) setProducts(result.data);
+    } catch { /* fallback thiyenawa */ }
+  };
+
+  useEffect(() => { if (branchId) { fetchSalesIncomes(); fetchProducts(); } }, [branchId]);
 
   const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = event.target;
     setFormData((previous) => ({ ...previous, [name]: value }));
+    setErrorMessage("");
+  };
+
+  // ✅ Name select karama Unit Price auto-fill - DB eken
+  const handleNameChange = (value: string) => {
+    const found = products.find((p) => p.product_name.toLowerCase() === value.toLowerCase());
+    setFormData((prev) => ({
+      ...prev,
+      name: value,
+      // Aggregate nam DB price, Vegetable / aluth ekak nam his - manual type karanna
+      unit_price: found && found.unit_price != null ? String(found.unit_price) : "",
+    }));
     setErrorMessage("");
   };
 
@@ -110,18 +166,12 @@ function SalesIncomesContent() {
       setErrorMessage("First enter Unit Price and Quantity.");
       return;
     }
-    // ❌ AIN KALA - Discount 0 unath block wenne na
-    // if (calculatedDiscount <= 0) {
-    //   setErrorMessage("No credit balance. Paid is equal to Amount.");
-    //   return;
-    // }
     const q = new URLSearchParams({
       bill_number: formData.bill_number.trim() || "",
       product_name: formData.name.trim(),
       date: formData.date,
       total_amount: String(calculatedAmount),
       paid_amount: String(Number(formData.credit || 0)),
-      // Discount 0 unath 0 yawana, Credit Page eke user ta edit karanna puluwan
       credit_amount: String(calculatedDiscount > 0 ? calculatedDiscount : 0),
       quantity: formData.quantity,
       unit_price: formData.unit_price,
@@ -174,6 +224,8 @@ function SalesIncomesContent() {
     router.push(`/dashboard/total-incomes${queryParams.toString() ? `?${queryParams}` : ""}`);
   };
 
+  const clearFilters = () => { setFilterDate(""); setFilterName(""); };
+
   return (
     <div className="min-h-screen bg-[#070a12] text-slate-100 p-6 sm:p-10 flex flex-col items-center relative overflow-hidden font-mono text-xs">
       <div className="absolute top-0 left-1/4 w-[500px] h-[300px] bg-red-600/10 blur-[140px] pointer-events-none rounded-full" />
@@ -195,9 +247,25 @@ function SalesIncomesContent() {
           <h2 className="text-xs font-bold uppercase tracking-widest text-slate-200 mb-4 flex items-center gap-2"><Plus size={14} className="text-red-400" />Add New Sales Income Entry</h2>
           <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Receipt size={12} />Bill Number</label><input type="text" name="bill_number" value={formData.bill_number} onChange={handleInputChange} placeholder="Ex: B-001" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
-            <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><FileText size={12} />Name</label><input type="text" name="name" value={formData.name} onChange={handleInputChange} required placeholder="Enter name..." className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
+            {/* ✅ NAME DROPDOWN - Aggregate + Vegetables */}
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><FileText size={12} />Name *</label>
+              <input type="text" list="product-list" value={formData.name} onChange={(e) => handleNameChange(e.target.value)} required placeholder="Select / Type Name..." className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" />
+              <datalist id="product-list">
+                <optgroup label="Aggregate">
+                  {products.filter((p) => p.category === "aggregate").map((p) => (
+                    <option key={p.product_name} value={p.product_name}>{p.unit_price != null ? `LKR ${Number(p.unit_price).toLocaleString()}` : ""}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Vegetables - Manual Price">
+                  {products.filter((p) => p.category === "vegetable").map((p) => (
+                    <option key={p.product_name} value={p.product_name}>Manual Price</option>
+                  ))}
+                </optgroup>
+              </datalist>
+            </div>
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Calendar size={12} />Date</label><input type="date" name="date" value={formData.date} onChange={handleInputChange} required className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
-            <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Tag size={12} />Unit Price (LKR)</label><input type="number" step="0.01" min="0" name="unit_price" value={formData.unit_price} onChange={handleInputChange} required placeholder="0.00" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
+            <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Tag size={12} />Unit Price (LKR) - Auto</label><input type="number" step="0.01" min="0" name="unit_price" value={formData.unit_price} onChange={handleInputChange} required placeholder="Auto / Manual" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Hash size={12} />Quantity</label><input type="number" step="0.01" min="0.01" name="quantity" value={formData.quantity} onChange={handleInputChange} required placeholder="0" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><DollarSign size={12} />Amount (LKR) - Auto</label><div className="w-full px-3.5 py-2.5 bg-slate-900/80 border border-slate-800 rounded-xl text-emerald-400 font-black text-sm">LKR {calculatedAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><BadgePercent size={12} />Discount (LKR) - Auto</label><div className="w-full px-3.5 py-2.5 bg-slate-900/80 border border-slate-800 rounded-xl text-amber-400 font-black text-sm">LKR {calculatedDiscount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
@@ -212,7 +280,18 @@ function SalesIncomesContent() {
         <div className="p-6 rounded-2xl bg-[#0d1527]/40 border border-slate-800 shadow-2xl space-y-4">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <div><h2 className="text-xs font-bold uppercase tracking-widest text-slate-200">Registered Sales Incomes Ledger</h2><p className="text-[10px] text-slate-500 mt-1">{filteredIncomes.length} records found</p></div>
-            <div className="flex items-center gap-2"><input id="filter-date" type="date" value={filterDate} onChange={(event) => setFilterDate(event.target.value)} className="px-3 py-2 bg-slate-50/80 border border-slate-800 rounded-xl text-slate-900 focus:border-red-500/60 focus:outline-none transition-colors" />{filterDate && (<button type="button" onClick={() => setFilterDate("")} className="p-2 text-slate-400 hover:text-red-400 border border-slate-800 hover:border-red-500/50 rounded-xl transition-colors"><X size={14} /></button>)}</div>
+            {/* ✅ DATE + NAME FILTER DEKAMA */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-2">
+                <Search size={14} className="text-slate-400" />
+                <input list="filter-product-list" value={filterName} onChange={(e) => setFilterName(e.target.value)} placeholder="Filter by Name... (3/4, Tomato)" className="px-3 py-2 bg-slate-50/80 border border-slate-800 rounded-xl text-slate-900 focus:border-red-500/60 focus:outline-none transition-colors w-56" />
+                <datalist id="filter-product-list">
+                  {products.map((p) => <option key={p.product_name} value={p.product_name} />)}
+                </datalist>
+              </div>
+              <input id="filter-date" type="date" value={filterDate} onChange={(event) => setFilterDate(event.target.value)} className="px-3 py-2 bg-slate-50/80 border border-slate-800 rounded-xl text-slate-900 focus:border-red-500/60 focus:outline-none transition-colors" />
+              {(filterDate || filterName) && (<button type="button" onClick={clearFilters} className="px-3 py-2 text-slate-400 hover:text-red-400 border border-slate-800 hover:border-red-500/50 rounded-xl transition-colors text-[10px] font-bold">Clear Filter <X size={12} className="inline" /></button>)}
+            </div>
           </div>
 
           {!isLoading && filteredIncomes.length > 0 && (
@@ -223,7 +302,7 @@ function SalesIncomesContent() {
             </div>
           )}
 
-          {isLoading ? <div className="py-16 text-center flex flex-col items-center justify-center space-y-2"><Loader2 size={24} className="text-red-500 animate-spin" /><p className="text-slate-400">Loading branch entries...</p></div> : filteredIncomes.length === 0 ? <div className="py-16 text-center text-slate-500">{filterDate ? `No sales income records found for ${filterDate}.` : "No sales income records found for this branch."}</div> : (
+          {isLoading ? <div className="py-16 text-center flex flex-col items-center justify-center space-y-2"><Loader2 size={24} className="text-red-500 animate-spin" /><p className="text-slate-400">Loading branch entries...</p></div> : filteredIncomes.length === 0 ? <div className="py-16 text-center text-slate-500">{filterDate || filterName ? `No records found ${filterName ? `for "${filterName}"` : ""} ${filterDate ? `on ${filterDate}` : ""}.` : "No sales income records found for this branch."}</div> : (
             <div className="overflow-x-auto rounded-xl border border-slate-800 bg-[#090e1a]/50">
               <table className="w-full text-left border-collapse">
                 <thead><tr className="border-b border-slate-800 bg-slate-900/60 text-[10px] font-bold text-slate-400 uppercase tracking-wider"><th className="py-3 px-4">Bill No</th><th className="py-3 px-4">Name</th><th className="py-3 px-4">Date</th><th className="py-3 px-4 text-right">Unit Price</th><th className="py-3 px-4 text-right">Qty</th><th className="py-3 px-4 text-right">Amount (LKR)</th><th className="py-3 px-4 text-right">Discount (LKR)</th><th className="py-3 px-4 text-right">Paid (LKR)</th><th className="py-3 px-4 text-center">Action</th></tr></thead>
