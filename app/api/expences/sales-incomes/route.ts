@@ -35,6 +35,20 @@ function formatDate(value: unknown): string {
   return String(value ?? "").slice(0, 10);
 }
 
+// ✅ Adaala tikata witharai - DB eken price gannawa
+async function getPriceFromDB(name: string, branchId: string | null): Promise<number | null> {
+  try {
+    const [rows]: any = await db.query(
+      `SELECT unit_price, category FROM product_prices WHERE product_name = ? AND (branch_id IS NULL OR branch_id = ?) LIMIT 1`,
+      [name, branchId]
+    );
+    if (!rows || rows.length === 0) return null;
+    // Vegetable nam NULL - price enne na, Aggregate nam price eka enawa
+    if (rows[0].unit_price == null) return null;
+    return Number(rows[0].unit_price);
+  } catch { return null; }
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -42,6 +56,7 @@ export async function GET(request: Request) {
     const requestedBranchId = searchParams.get("branch_id");
     const branchId = requestedBranchId || extractBranchId(request);
     const filterDate = searchParams.get("date");
+    const filterName = searchParams.get("name"); // ✅ Aluth - Name filter
     const isSummary = searchParams.get("summary") === "true";
     const isDetailed = searchParams.get("detailed") === "true";
 
@@ -51,12 +66,12 @@ export async function GET(request: Request) {
 
     // --- SUMMARY MODE (total-incomes + view-entries) ---
     if (isSummary) {
-      // DETAILED: view-entries page eke anawa
       if (isDetailed || recordId) {
         const where: string[] = [];
         const params: any[] = [];
         if (branchId) { where.push("s.branch_id =?"); params.push(branchId); }
         if (filterDate) { where.push("DATE(s.date) =?"); params.push(filterDate); }
+        if (filterName) { where.push("s.name LIKE ?"); params.push(`%${filterName}%`); }
         if (recordId) { where.push("s.id =?"); params.push(recordId); }
 
         let q = `
@@ -97,11 +112,11 @@ export async function GET(request: Request) {
         return NextResponse.json({ success: true, grandTotal, grandCredit, grandDiscount, data }, { status: 200 });
       }
 
-      // GROUPED: total-incomes page eke anawa - FIXED: Branch + Date walin group + amount alias
       const where: string[] = [];
       const params: any[] = [];
       if (branchId) { where.push("s.branch_id =?"); params.push(branchId); }
       if (filterDate) { where.push("DATE(s.date) =?"); params.push(filterDate); }
+      if (filterName) { where.push("s.name LIKE ?"); params.push(`%${filterName}%`); }
 
       let summaryQuery = `
         SELECT s.branch_id, COALESCE(b.branch_name, CONCAT('Branch #', s.branch_id)) as branch_name,
@@ -148,6 +163,7 @@ export async function GET(request: Request) {
     const qParams: any[] = [branchId];
     if (recordId) { query += " AND id =?"; qParams.push(recordId); }
     if (filterDate) { query += " AND DATE(date) =?"; qParams.push(filterDate); }
+    if (filterName) { query += " AND name LIKE ?"; qParams.push(`%${filterName}%`); }
     query += " ORDER BY date DESC, id DESC";
     const [rows]: any = await db.query(query, qParams);
     const data = rows.map((row: any) => {
@@ -186,15 +202,22 @@ export async function POST(request: Request) {
     const date = typeof body.date === "string" ? body.date : "";
     const branchId = body.branch_id !== undefined && body.branch_id !== null ? String(body.branch_id) : extractBranchId(request);
 
-    const unit_price = Number(body.unit_price ?? 0);
+    let unit_price = Number(body.unit_price ?? 0);
     const quantity = Number(body.quantity ?? 0);
+
+    // ✅ Adaala tikata witharai - Unit Price eka ewwe nathnam DB eken gannawa
+    // Vegetable nam DB eke NULL nisa meka skip wenawa, manual price eka thamai ganna ona
+    if ((!Number.isFinite(unit_price) || unit_price <= 0) && name) {
+      const dbPrice = await getPriceFromDB(name, branchId);
+      if (dbPrice != null) unit_price = dbPrice;
+    }
+
     let amount = Number(body.amount);
     if (!Number.isFinite(amount) || amount === 0) {
       amount = unit_price * quantity;
     }
-    // FIXED: Discount wenama, Paid wenama - ekak anith eken ganne na
     const discount = Number(body.discount ?? 0);
-    const credit = Number(body.paid ?? body.credit ?? 0); // credit column eke Paid eka thiyenne
+    const credit = Number(body.paid ?? body.credit ?? 0);
 
     if (!branchId || !name || !date) {
       return NextResponse.json({ success: false, error: "Missing required fields: branch_id, name, date." }, { status: 400 });

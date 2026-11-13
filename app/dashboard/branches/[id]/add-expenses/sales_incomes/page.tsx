@@ -100,7 +100,7 @@ function SalesIncomesContent() {
     return calculatedAmount - paid;
   }, [calculatedAmount, formData.credit]);
 
-  // ✅ Date + Name dekama filter wenawa
+  
   const filteredIncomes = incomes.filter((item) => {
     const matchDate = filterDate ? item.date.slice(0, 10) === filterDate : true;
     const matchName = filterName ? item.name?.toLowerCase().includes(filterName.toLowerCase()) : true;
@@ -126,7 +126,7 @@ function SalesIncomesContent() {
     }
   };
 
-  // ✅ DB eken product prices gannawa - fail unoth FALLBACK eka thiyenawa
+  
   const fetchProducts = async () => {
     if (!branchId) return;
     try {
@@ -144,13 +144,12 @@ function SalesIncomesContent() {
     setErrorMessage("");
   };
 
-  // ✅ Name select karama Unit Price auto-fill - DB eken
+
   const handleNameChange = (value: string) => {
     const found = products.find((p) => p.product_name.toLowerCase() === value.toLowerCase());
     setFormData((prev) => ({
       ...prev,
       name: value,
-      // Aggregate nam DB price, Vegetable / aluth ekak nam his - manual type karanna
       unit_price: found && found.unit_price != null ? String(found.unit_price) : "",
     }));
     setErrorMessage("");
