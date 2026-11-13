@@ -29,13 +29,14 @@ function CreditPageContent() {
   const searchParams = useSearchParams();
   const branchId = params?.id as string;
 
-  // File 1 eken ena entry eke data
   const billNumber = searchParams.get("bill_number") || "";
   const productName = searchParams.get("product_name") || "";
   const entryDate = searchParams.get("date") || getToday();
   const totalAmount = Number(searchParams.get("total_amount") || 0);
   const paidAmount = Number(searchParams.get("paid_amount") || 0);
   const creditAmount = Number(searchParams.get("credit_amount") || 0);
+  const unitPrice = Number(searchParams.get("unit_price") || 0);
+  const quantity = Number(searchParams.get("quantity") || 0);
 
   const [records, setRecords] = useState<CreditRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -43,6 +44,7 @@ function CreditPageContent() {
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [search, setSearch] = useState("");
+  const [saleSaved, setSaleSaved] = useState(false);
 
   const [form, setForm] = useState({
     customer_name: "",
@@ -51,7 +53,7 @@ function CreditPageContent() {
     vehicle_number: "",
   });
 
-  // ✅ DB eken fetch karanawa - localStorage ain kala
+  
   const fetchCredits = async () => {
     if (!branchId) return;
     try {
@@ -84,7 +86,6 @@ function CreditPageContent() {
     setErrorMsg("");
   };
 
-  // ✅ DB ekata save karanawa
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.customer_name.trim() || !form.contact_number.trim() || !form.promise_date || !form.vehicle_number.trim()) {
@@ -94,6 +95,8 @@ function CreditPageContent() {
     try {
       setIsSaving(true);
       setErrorMsg("");
+
+      // 1️⃣ CREDIT EKA SAVE
       const res = await fetch("/api/expences/sales-credits", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -113,9 +116,34 @@ function CreditPageContent() {
       });
       const result = await res.json();
       if (!res.ok || !result.success) throw new Error(result.error || "Failed to save credit");
+
+      if (!saleSaved) {
+        const saleRes = await fetch("/api/expences/sales-incomes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            branch_id: branchId,
+            bill_number: billNumber || null,
+            name: productName,
+            date: entryDate,
+            unit_price: unitPrice,
+            quantity: quantity,
+            amount: totalAmount,
+            credit: paidAmount,
+            paid: paidAmount,
+            discount: creditAmount,
+          }),
+        });
+        const saleResult = await saleRes.json();
+        if (!saleRes.ok || !saleResult.success) {
+          throw new Error("Credit saved, but Sale failed: " + (saleResult.error || ""));
+        }
+        setSaleSaved(true);
+      }
+
       setForm({ customer_name: "", contact_number: "", promise_date: "", vehicle_number: "" });
-      setSuccessMsg(`Credit Saved: ${form.customer_name} - LKR ${creditAmount.toFixed(2)}`);
-      window.setTimeout(() => setSuccessMsg(""), 4000);
+      setSuccessMsg(`Saved Both ✅ Credit: ${form.customer_name} - LKR ${creditAmount.toFixed(2)} | Sale: ${productName} - LKR ${totalAmount.toFixed(2)} added to Sales Ledger`);
+      window.setTimeout(() => setSuccessMsg(""), 5000);
       await fetchCredits();
     } catch (err: any) {
       setErrorMsg(err.message || "Failed to save credit");
@@ -124,7 +152,7 @@ function CreditPageContent() {
     }
   };
 
-  // ✅ DB eken delete karanawa
+  
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this credit record?")) return;
     try {
