@@ -100,7 +100,7 @@ function SalesIncomesContent() {
     setErrorMessage("");
   };
 
-  // ✅ Add Credit - ALUTH PAGE EKATA YANAWa
+  // ✅ Add Credit - Discount thibbath, nathath puluwan - FIXED
   const handleOpenCreditPage = () => {
     if (!formData.name.trim()) {
       setErrorMessage("First enter Product Name, then Add Credit.");
@@ -110,17 +110,19 @@ function SalesIncomesContent() {
       setErrorMessage("First enter Unit Price and Quantity.");
       return;
     }
-    if (calculatedDiscount <= 0) {
-      setErrorMessage("No credit balance. Paid is equal to Amount.");
-      return;
-    }
+    // ❌ AIN KALA - Discount 0 unath block wenne na
+    // if (calculatedDiscount <= 0) {
+    //   setErrorMessage("No credit balance. Paid is equal to Amount.");
+    //   return;
+    // }
     const q = new URLSearchParams({
       bill_number: formData.bill_number.trim() || "",
       product_name: formData.name.trim(),
       date: formData.date,
       total_amount: String(calculatedAmount),
       paid_amount: String(Number(formData.credit || 0)),
-      credit_amount: String(calculatedDiscount),
+      // Discount 0 unath 0 yawana, Credit Page eke user ta edit karanna puluwan
+      credit_amount: String(calculatedDiscount > 0 ? calculatedDiscount : 0),
       quantity: formData.quantity,
       unit_price: formData.unit_price,
     });
