@@ -237,13 +237,13 @@ export default function ViewOtherExpensesPage({
               <option value="Agriculture">Agriculture</option>
               <option value="Water">Water</option>
               <option value="Electricity">Electricity</option>
-              <option value="Other Payments">Other Payments</option>
               <option value="Petty Cash">Petty Cash</option>
               <option value="Monthly Rental">Monthly Rental</option>
               <option value="Chemical Float">Chemical Float</option>
               <option value="Construction Repair">Construction Repair</option>
               <option value="Loading Expenses">Loading Expenses</option>
               <option value="Breker Expenses">Breker Expenses</option>
+              <option value="Other Expenses">Other Expenses</option>
             </select>
 
             <div className="relative">
