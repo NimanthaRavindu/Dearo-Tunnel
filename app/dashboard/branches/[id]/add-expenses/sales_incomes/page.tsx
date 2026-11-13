@@ -28,7 +28,7 @@ interface SalesIncomeFormData {
   unit_price: string;
   quantity: string;
   credit: string;
-  discount: string;
+  // ❌ discount input eka ain kala - type karanna ona na
 }
 
 function getToday(): string {
@@ -58,7 +58,6 @@ function SalesIncomesContent() {
     unit_price: "",
     quantity: "",
     credit: "",
-    discount: "",
   });
 
   const calculatedAmount = useMemo(() => {
@@ -67,12 +66,15 @@ function SalesIncomesContent() {
     return up * qty;
   }, [formData.unit_price, formData.quantity]);
 
-  // ❌ Balance ain kala - meke Balance calculate karanne na
+  // ✅ Discount = Amount - Paid - AUTO, type karanna ona na
+  const calculatedDiscount = useMemo(() => {
+    const paid = Number(formData.credit || 0);
+    return calculatedAmount - paid;
+  }, [calculatedAmount, formData.credit]);
 
   const filteredIncomes = filterDate ? incomes.filter((item) => item.date.slice(0, 10) === filterDate) : incomes;
   const totalAmount = filteredIncomes.reduce((total, item) => total + Number(item.amount || 0), 0);
   const totalCredit = filteredIncomes.reduce((total, item) => total + Number(item.credit ?? item.paid ?? 0), 0);
-  // ✅ Discount = DB eken ena eka witharak, Amount - Paid newei
   const totalDiscount = filteredIncomes.reduce((total, item) => total + Number(item.discount ?? 0), 0);
 
   const fetchSalesIncomes = async () => {
@@ -106,27 +108,19 @@ function SalesIncomesContent() {
     const unit_price = Number(formData.unit_price);
     const quantity = Number(formData.quantity);
     const credit = Number(formData.credit || 0);
-    const discount = Number(formData.discount || 0);
     const amount = calculatedAmount;
+    const discount = calculatedDiscount; // ✅ Auto gaththa eka
 
     if (!branchId || !name || !formData.date || !formData.unit_price || !formData.quantity) {
       setErrorMessage("Please complete Name, Date, Unit Price and Quantity.");
-      return;
-    }
-    if (discount < 0) {
-      setErrorMessage("Discount cannot be less than 0.");
-      return;
-    }
-    if (discount > amount) {
-      setErrorMessage("Discount cannot be greater than the total amount.");
       return;
     }
     if (credit < 0) {
       setErrorMessage("Paid cannot be less than 0.");
       return;
     }
-    if (credit > amount - discount) {
-      setErrorMessage("Paid cannot be greater than Amount - Discount.");
+    if (credit > amount) {
+      setErrorMessage("Paid cannot be greater than Amount.");
       return;
     }
 
@@ -140,7 +134,7 @@ function SalesIncomesContent() {
       });
       const result = await response.json();
       if (!response.ok || !result.success) throw new Error(result.error || "Failed to save sales income.");
-      setFormData({ bill_number: "", name: "", date: getToday(), unit_price: "", quantity: "", credit: "", discount: "" });
+      setFormData({ bill_number: "", name: "", date: getToday(), unit_price: "", quantity: "", credit: "" });
       setSuccessMessage(`Saved: ${quantity} x LKR ${unit_price.toFixed(2)} = LKR ${amount.toFixed(2)} | Discount LKR ${discount.toFixed(2)} | Paid LKR ${credit.toFixed(2)}`);
       window.setTimeout(() => setSuccessMessage(""), 3000);
       await fetchSalesIncomes();
@@ -184,7 +178,7 @@ function SalesIncomesContent() {
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Tag size={12} />Unit Price (LKR)</label><input type="number" step="0.01" min="0" name="unit_price" value={formData.unit_price} onChange={handleInputChange} required placeholder="0.00" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Hash size={12} />Quantity</label><input type="number" step="0.01" min="0.01" name="quantity" value={formData.quantity} onChange={handleInputChange} required placeholder="0" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><DollarSign size={12} />Amount (LKR) - Auto</label><div className="w-full px-3.5 py-2.5 bg-slate-900/80 border border-slate-800 rounded-xl text-emerald-400 font-black text-sm">LKR {calculatedAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
-            <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><BadgePercent size={12} />Discount (LKR)</label><input type="number" step="0.01" min="0" name="discount" value={formData.discount} onChange={handleInputChange} placeholder="0.00" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
+            <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><BadgePercent size={12} />Discount (LKR) - Auto</label><div className="w-full px-3.5 py-2.5 bg-slate-900/80 border border-slate-800 rounded-xl text-amber-400 font-black text-sm">LKR {calculatedDiscount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><DollarSign size={12} />Paid (LKR)</label><input type="number" step="0.01" min="0" name="credit" value={formData.credit} onChange={handleInputChange} placeholder="0.00" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
             <div className="sm:col-span-2 lg:col-span-4 flex justify-end mt-2"><button type="submit" disabled={isSubmitting} className="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-red-600/20 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">{isSubmitting ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}<span>{isSubmitting ? "Saving..." : "Save Income Entry"}</span></button></div>
           </form>
