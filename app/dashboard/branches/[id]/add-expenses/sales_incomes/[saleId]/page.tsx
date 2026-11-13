@@ -35,7 +35,11 @@ export default function SaleViewPage() {
       const jsPDF = jspdfMod.jsPDF;
       const doc = new jsPDF("p", "mm", "a4");
 
-      const balance = Number(sale.amount) - Number(sale.credit);
+      // FIXED: Discount wenama, Paid wenama
+      const amount = Number(sale.amount || 0);
+      const paid = Number(sale.paid ?? sale.credit ?? 0);
+      const discount = Number(sale.discount ?? 0);
+      const balance = amount - discount - paid;
 
       // Header
       doc.setFillColor(0, 0, 0);
@@ -56,6 +60,12 @@ export default function SaleViewPage() {
       let y = 40;
       doc.setFontSize(10);
       doc.setFont("helvetica", "bold");
+      doc.text("BILL NUMBER:", 14, y);
+      doc.setFont("helvetica", "normal");
+      doc.text(String(sale.bill_number || sale.billNumber || "-"), 50, y);
+
+      y += 8;
+      doc.setFont("helvetica", "bold");
       doc.text("PRODUCT NAME:", 14, y);
       doc.setFont("helvetica", "normal");
       doc.text(String(sale.name).toUpperCase(), 50, y);
@@ -70,7 +80,7 @@ export default function SaleViewPage() {
       doc.setFont("helvetica", "bold");
       doc.text("TOTAL AMOUNT:", 14, y);
       doc.setFont("helvetica", "normal");
-      doc.text(`LKR ${Number(sale.amount).toFixed(2)}`, 50, y);
+      doc.text(`LKR ${amount.toFixed(2)}`, 50, y);
 
       y += 15;
       doc.setFont("helvetica", "bold");
@@ -85,9 +95,10 @@ export default function SaleViewPage() {
       const rows = [
         ["Unit Price (LKR)", `LKR ${Number(sale.unit_price).toFixed(2)}`],
         ["Quantity", `${Number(sale.quantity)}`],
-        ["Amount (Unit x Qty)", `LKR ${Number(sale.amount).toFixed(2)}`],
-        ["Paid (LKR)", `LKR ${Number(sale.credit).toFixed(2)}`],
-        ["Net Balance (Amount - Credit)", `LKR ${balance.toFixed(2)}`],
+        ["Amount (Unit x Qty)", `LKR ${amount.toFixed(2)}`],
+        ["Discount (LKR)", `LKR ${discount.toFixed(2)}`],
+        ["Paid (LKR)", `LKR ${paid.toFixed(2)}`],
+        ["Net Balance (Amount - Discount - Paid)", `LKR ${balance.toFixed(2)}`],
       ];
 
       rows.forEach((row, i) => {
@@ -118,7 +129,7 @@ export default function SaleViewPage() {
       y += 5;
       doc.setFont("helvetica", "normal");
       doc.setFontSize(8);
-      doc.text(`${sale.unit_price} x ${sale.quantity} = ${sale.amount} | Net = ${sale.amount} - ${sale.credit} = ${balance}`, 14, y);
+      doc.text(`${sale.unit_price} x ${sale.quantity} = ${amount} | Net = ${amount} - ${discount} - ${paid} = ${balance}`, 14, y);
 
       y += 25;
       doc.line(14, y, 70, y);
@@ -148,7 +159,10 @@ export default function SaleViewPage() {
   if (loading) return <div className="min-h-screen bg-[#070a12] flex items-center justify-center"><Loader2 className="animate-spin text-red-500"/></div>;
   if (!sale) return <div className="min-h-screen bg-[#070a12] flex flex-col items-center justify-center text-slate-400 font-mono text-xs"><p>Record not found</p><Link href={`/dashboard/branches/${branchId}/add-expenses/sales_incomes`} className="text-red-400 mt-2 underline">Back</Link></div>;
 
-  const balance = Number(sale.amount) - Number(sale.credit);
+  const amount = Number(sale.amount || 0);
+  const paid = Number(sale.paid ?? sale.credit ?? 0);
+  const discount = Number(sale.discount ?? 0);
+  const balance = amount - discount - paid;
 
   return (
     <div className="min-h-screen bg-[#070a12] p-6 sm:p-10 flex flex-col items-center font-mono text-xs text-slate-100">
@@ -170,18 +184,23 @@ export default function SaleViewPage() {
             <div className="text-right"><p className="text-[10px] font-black uppercase border border-black px-3 py-1 rounded-full">Verified</p><p className="text-[9px] mt-2">REF: SALE/{String(sale.id).padStart(6,'0')}</p></div>
           </div>
           <div className="grid grid-cols-3 gap-3 mb-6">
+            <div className="p-4 rounded-xl bg-slate-50 border"><p className="text-[9px] text-slate-500 uppercase font-bold">Bill Number</p><p className="font-black mt-1 uppercase text-sm">{sale.bill_number || sale.billNumber || "-"}</p></div>
             <div className="p-4 rounded-xl bg-slate-50 border"><p className="text-[9px] text-slate-500 uppercase font-bold">Product Name</p><p className="font-black mt-1 uppercase text-sm">{sale.name}</p></div>
             <div className="p-4 rounded-xl bg-slate-50 border"><p className="text-[9px] text-slate-500 uppercase font-bold">Date</p><p className="font-black mt-1">{sale.date?.slice(0,10)}</p></div>
-            <div className="p-4 rounded-xl bg-slate-50 border"><p className="text-[9px] text-slate-500 uppercase font-bold">Total Amount</p><p className="font-black mt-1 text-base">LKR {Number(sale.amount).toFixed(2)}</p></div>
+            <div className="p-4 rounded-xl bg-slate-50 border"><p className="text-[9px] text-slate-500 uppercase font-bold">Total Amount</p><p className="font-black mt-1 text-base">LKR {amount.toFixed(2)}</p></div>
+            <div className="p-4 rounded-xl bg-slate-50 border"><p className="text-[9px] text-slate-500 uppercase font-bold">Discount</p><p className="font-black mt-1 text-base">LKR {discount.toFixed(2)}</p></div>
+            <div className="p-4 rounded-xl bg-slate-50 border"><p className="text-[9px] text-slate-500 uppercase font-bold">Paid</p><p className="font-black mt-1 text-base">LKR {paid.toFixed(2)}</p></div>
           </div>
           <div className="rounded-xl overflow-hidden border border-black">
             <table className="w-full text-left">
               <tbody className="divide-y divide-slate-200">
-                <tr><td className="p-4 text-slate-500 uppercase text-[10px] font-bold">Unit Price (LKR)</td><td className="p-4 text-right font-bold">LKR {Number(sale.unit_price).toFixed(2)}</td></tr>
-                <tr className="bg-slate-50"><td className="p-4 text-slate-500 uppercase text-[10px] font-bold">Quantity</td><td className="p-4 text-right font-bold">{Number(sale.quantity)}</td></tr>
-                <tr><td className="p-4 text-slate-500 uppercase text-[10px] font-bold">Amount (Unit x Qty)</td><td className="p-4 text-right font-black">LKR {Number(sale.amount).toFixed(2)}</td></tr>
-                <tr className="bg-slate-50"><td className="p-4 text-slate-500 uppercase text-[10px] font-bold">Paid(LKR)</td><td className="p-4 text-right font-black">LKR {Number(sale.credit).toFixed(2)}</td></tr>
-                <tr className="bg-black text-white"><td className="p-4 uppercase text-[10px] font-black">Net Balance</td><td className="p-4 text-right font-black text-lg text-white">LKR {balance.toFixed(2)}</td></tr>
+                <tr><td className="p-4 text-slate-500 uppercase text-[10px] font-bold">Bill Number</td><td className="p-4 text-right font-bold">{sale.bill_number || sale.billNumber || "-"}</td></tr>
+                <tr className="bg-slate-50"><td className="p-4 text-slate-500 uppercase text-[10px] font-bold">Unit Price (LKR)</td><td className="p-4 text-right font-bold">LKR {Number(sale.unit_price).toFixed(2)}</td></tr>
+                <tr><td className="p-4 text-slate-500 uppercase text-[10px] font-bold">Quantity</td><td className="p-4 text-right font-bold">{Number(sale.quantity)}</td></tr>
+                <tr className="bg-slate-50"><td className="p-4 text-slate-500 uppercase text-[10px] font-bold">Amount (Unit x Qty)</td><td className="p-4 text-right font-black">LKR {amount.toFixed(2)}</td></tr>
+                <tr><td className="p-4 text-slate-500 uppercase text-[10px] font-bold">Discount (LKR)</td><td className="p-4 text-right font-black">LKR {discount.toFixed(2)}</td></tr>
+                <tr className="bg-slate-50"><td className="p-4 text-slate-500 uppercase text-[10px] font-bold">Paid (LKR)</td><td className="p-4 text-right font-black">LKR {paid.toFixed(2)}</td></tr>
+                <tr className="bg-black text-white"><td className="p-4 uppercase text-[10px] font-black">Net Balance (Amount - Discount - Paid)</td><td className="p-4 text-right font-black text-lg text-white">LKR {balance.toFixed(2)}</td></tr>
               </tbody>
             </table>
           </div>
