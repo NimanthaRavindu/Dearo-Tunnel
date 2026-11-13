@@ -3,14 +3,18 @@
 import React, { Suspense, useEffect, useState, useMemo } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Calendar, CheckCircle2, DollarSign, FileText, Loader2, Plus, X, Hash, Tag, Eye } from "lucide-react";
+import { ArrowLeft, Calendar, CheckCircle2, DollarSign, FileText, Loader2, Plus, X, Hash, Tag, Eye, Receipt, BadgePercent } from "lucide-react";
 
 interface SalesIncomeItem {
   id: string;
+  bill_number?: string;
+  billNumber?: string;
   name: string;
   date: string;
   amount: number;
   credit: number;
+  paid?: number;
+  discount?: number;
   unit_price?: number;
   quantity?: number;
   branch_id?: string;
@@ -18,11 +22,13 @@ interface SalesIncomeItem {
 }
 
 interface SalesIncomeFormData {
+  bill_number: string;
   name: string;
   date: string;
   unit_price: string;
   quantity: string;
   credit: string;
+  discount: string;
 }
 
 function getToday(): string {
@@ -46,11 +52,13 @@ function SalesIncomesContent() {
   const [filterDate, setFilterDate] = useState("");
 
   const [formData, setFormData] = useState<SalesIncomeFormData>({
+    bill_number: "",
     name: "",
     date: getToday(),
     unit_price: "",
     quantity: "",
     credit: "",
+    discount: "",
   });
 
   const calculatedAmount = useMemo(() => {
@@ -59,9 +67,17 @@ function SalesIncomesContent() {
     return up * qty;
   }, [formData.unit_price, formData.quantity]);
 
+  // Balance = Amount - Discount - Paid (pennanna witharak)
+  const calculatedBalance = useMemo(() => {
+    const discount = Number(formData.discount || 0);
+    const paid = Number(formData.credit || 0);
+    return calculatedAmount - discount - paid;
+  }, [calculatedAmount, formData.discount, formData.credit]);
+
   const filteredIncomes = filterDate ? incomes.filter((item) => item.date.slice(0, 10) === filterDate) : incomes;
   const totalAmount = filteredIncomes.reduce((total, item) => total + Number(item.amount || 0), 0);
-  const totalCredit = filteredIncomes.reduce((total, item) => total + Number(item.credit || 0), 0);
+  const totalCredit = filteredIncomes.reduce((total, item) => total + Number(item.credit ?? item.paid ?? 0), 0);
+  const totalDiscount = filteredIncomes.reduce((total, item) => total + Number(item.discount ?? 0), 0);
 
   const fetchSalesIncomes = async () => {
     if (!branchId) return;
@@ -89,18 +105,32 @@ function SalesIncomesContent() {
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const bill_number = formData.bill_number.trim();
     const name = formData.name.trim();
     const unit_price = Number(formData.unit_price);
     const quantity = Number(formData.quantity);
     const credit = Number(formData.credit || 0);
+    const discount = Number(formData.discount || 0);
     const amount = calculatedAmount;
 
     if (!branchId || !name || !formData.date || !formData.unit_price || !formData.quantity) {
       setErrorMessage("Please complete Name, Date, Unit Price and Quantity.");
       return;
     }
-    if (credit > amount) {
-      setErrorMessage("Credit cannot be greater than the total amount.");
+    if (discount < 0) {
+      setErrorMessage("Discount cannot be less than 0.");
+      return;
+    }
+    if (discount > amount) {
+      setErrorMessage("Discount cannot be greater than the total amount.");
+      return;
+    }
+    if (credit < 0) {
+      setErrorMessage("Paid cannot be less than 0.");
+      return;
+    }
+    if (credit > amount - discount) {
+      setErrorMessage("Paid cannot be greater than Amount - Discount.");
       return;
     }
 
@@ -110,12 +140,12 @@ function SalesIncomesContent() {
       const response = await fetch("/api/expences/sales-incomes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ branch_id: branchId, name, date: formData.date, unit_price, quantity, amount, credit }),
+        body: JSON.stringify({ branch_id: branchId, bill_number: bill_number || null, name, date: formData.date, unit_price, quantity, amount, credit, paid: credit, discount }),
       });
       const result = await response.json();
       if (!response.ok || !result.success) throw new Error(result.error || "Failed to save sales income.");
-      setFormData({ name: "", date: getToday(), unit_price: "", quantity: "", credit: "" });
-      setSuccessMessage(`Saved: ${quantity} x LKR ${unit_price.toFixed(2)} = LKR ${amount.toFixed(2)}`);
+      setFormData({ bill_number: "", name: "", date: getToday(), unit_price: "", quantity: "", credit: "", discount: "" });
+      setSuccessMessage(`Saved: ${quantity} x LKR ${unit_price.toFixed(2)} = LKR ${amount.toFixed(2)} | Discount LKR ${discount.toFixed(2)} | Paid LKR ${credit.toFixed(2)}`);
       window.setTimeout(() => setSuccessMessage(""), 3000);
       await fetchSalesIncomes();
     } catch (error) {
@@ -151,14 +181,17 @@ function SalesIncomesContent() {
 
         <div className="p-6 rounded-2xl bg-[#0d1527]/60 border border-slate-800 shadow-2xl">
           <h2 className="text-xs font-bold uppercase tracking-widest text-slate-200 mb-4 flex items-center gap-2"><Plus size={14} className="text-red-400" />Add New Sales Income Entry</h2>
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
-            <div className="space-y-1.5 lg:col-span-2"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><FileText size={12} />Name</label><input type="text" name="name" value={formData.name} onChange={handleInputChange} required placeholder="Enter name..." className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Receipt size={12} />Bill Number</label><input type="text" name="bill_number" value={formData.bill_number} onChange={handleInputChange} placeholder="Ex: B-001" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
+            <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><FileText size={12} />Name</label><input type="text" name="name" value={formData.name} onChange={handleInputChange} required placeholder="Enter name..." className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Calendar size={12} />Date</label><input type="date" name="date" value={formData.date} onChange={handleInputChange} required className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Tag size={12} />Unit Price (LKR)</label><input type="number" step="0.01" min="0" name="unit_price" value={formData.unit_price} onChange={handleInputChange} required placeholder="0.00" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Hash size={12} />Quantity</label><input type="number" step="0.01" min="0.01" name="quantity" value={formData.quantity} onChange={handleInputChange} required placeholder="0" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><DollarSign size={12} />Amount (LKR) - Auto</label><div className="w-full px-3.5 py-2.5 bg-slate-900/80 border border-slate-800 rounded-xl text-emerald-400 font-black text-sm">LKR {calculatedAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
+            <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><BadgePercent size={12} />Discount (LKR)</label><input type="number" step="0.01" min="0" name="discount" value={formData.discount} onChange={handleInputChange} placeholder="0.00" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><DollarSign size={12} />Paid (LKR)</label><input type="number" step="0.01" min="0" name="credit" value={formData.credit} onChange={handleInputChange} placeholder="0.00" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
-            <div className="sm:col-span-2 lg:col-span-6 flex justify-end mt-2"><button type="submit" disabled={isSubmitting} className="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-red-600/20 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">{isSubmitting ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}<span>{isSubmitting ? "Saving..." : "Save Income Entry"}</span></button></div>
+            <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><DollarSign size={12} />Balance (Amount - Discount - Paid)</label><div className="w-full px-3.5 py-2.5 bg-slate-900/80 border border-slate-800 rounded-xl text-amber-400 font-black text-sm">LKR {calculatedBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
+            <div className="sm:col-span-2 lg:col-span-4 flex justify-end mt-2"><button type="submit" disabled={isSubmitting} className="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-red-600/20 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">{isSubmitting ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}<span>{isSubmitting ? "Saving..." : "Save Income Entry"}</span></button></div>
           </form>
         </div>
 
@@ -169,25 +202,28 @@ function SalesIncomesContent() {
           </div>
 
           {!isLoading && filteredIncomes.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Amount</p><p className="mt-1 text-lg font-black text-red-400">LKR {totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
-              <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Credit</p><p className="mt-1 text-lg font-black text-amber-400">LKR {totalCredit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
+              <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Discount</p><p className="mt-1 text-lg font-black text-emerald-400">LKR {totalDiscount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
+              <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Paid</p><p className="mt-1 text-lg font-black text-amber-400">LKR {totalCredit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
             </div>
           )}
 
           {isLoading ? <div className="py-16 text-center flex flex-col items-center justify-center space-y-2"><Loader2 size={24} className="text-red-500 animate-spin" /><p className="text-slate-400">Loading branch entries...</p></div> : filteredIncomes.length === 0 ? <div className="py-16 text-center text-slate-500">{filterDate ? `No sales income records found for ${filterDate}.` : "No sales income records found for this branch."}</div> : (
             <div className="overflow-x-auto rounded-xl border border-slate-800 bg-[#090e1a]/50">
               <table className="w-full text-left border-collapse">
-                <thead><tr className="border-b border-slate-800 bg-slate-900/60 text-[10px] font-bold text-slate-400 uppercase tracking-wider"><th className="py-3 px-4">Name</th><th className="py-3 px-4">Date</th><th className="py-3 px-4 text-right">Unit Price</th><th className="py-3 px-4 text-right">Qty</th><th className="py-3 px-4 text-right">Amount (LKR)</th><th className="py-3 px-4 text-right">Paid(LKR)</th><th className="py-3 px-4 text-center">Action</th></tr></thead>
+                <thead><tr className="border-b border-slate-800 bg-slate-900/60 text-[10px] font-bold text-slate-400 uppercase tracking-wider"><th className="py-3 px-4">Bill No</th><th className="py-3 px-4">Name</th><th className="py-3 px-4">Date</th><th className="py-3 px-4 text-right">Unit Price</th><th className="py-3 px-4 text-right">Qty</th><th className="py-3 px-4 text-right">Amount (LKR)</th><th className="py-3 px-4 text-right">Discount (LKR)</th><th className="py-3 px-4 text-right">Paid (LKR)</th><th className="py-3 px-4 text-center">Action</th></tr></thead>
                 <tbody className="divide-y divide-slate-800/50 text-xs">
                   {filteredIncomes.map((item) => (
                     <tr key={item.id} className="hover:bg-slate-900/70 transition-colors">
+                      <td className="py-3 px-4 font-bold text-slate-200">{item.bill_number || item.billNumber || "-"}</td>
                       <td className="py-3 px-4 font-bold text-slate-200">{item.name}</td>
                       <td className="py-3 px-4 text-slate-400">{item.date?.slice(0,10)}</td>
                       <td className="py-3 px-4 text-right text-slate-300">LKR {Number(item.unit_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                       <td className="py-3 px-4 text-right text-slate-300">{Number(item.quantity || 0)}</td>
                       <td className="py-3 px-4 text-right font-black text-red-400">LKR {Number(item.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                      <td className="py-3 px-4 text-right font-black text-amber-400">LKR {Number(item.credit || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                      <td className="py-3 px-4 text-right font-black text-emerald-400">LKR {Number(item.discount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                      <td className="py-3 px-4 text-right font-black text-amber-400">LKR {Number(item.credit ?? item.paid ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                       <td className="py-3 px-4 text-center">
                         <Link href={`/dashboard/branches/${branchId}/add-expenses/sales_incomes/${item.id}`} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 border border-slate-700 text-slate-300 rounded-lg text-[10px] font-black uppercase hover:bg-white hover:text-black transition-all">
                           <Eye size={12}/> View Summary
