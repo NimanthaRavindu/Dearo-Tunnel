@@ -67,16 +67,12 @@ function SalesIncomesContent() {
     return up * qty;
   }, [formData.unit_price, formData.quantity]);
 
-  // Balance = Amount - Discount - Paid (pennanna witharak)
-  const calculatedBalance = useMemo(() => {
-    const discount = Number(formData.discount || 0);
-    const paid = Number(formData.credit || 0);
-    return calculatedAmount - discount - paid;
-  }, [calculatedAmount, formData.discount, formData.credit]);
+  // ❌ Balance ain kala - meke Balance calculate karanne na
 
   const filteredIncomes = filterDate ? incomes.filter((item) => item.date.slice(0, 10) === filterDate) : incomes;
   const totalAmount = filteredIncomes.reduce((total, item) => total + Number(item.amount || 0), 0);
   const totalCredit = filteredIncomes.reduce((total, item) => total + Number(item.credit ?? item.paid ?? 0), 0);
+  // ✅ Discount = DB eken ena eka witharak, Amount - Paid newei
   const totalDiscount = filteredIncomes.reduce((total, item) => total + Number(item.discount ?? 0), 0);
 
   const fetchSalesIncomes = async () => {
@@ -190,7 +186,6 @@ function SalesIncomesContent() {
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><DollarSign size={12} />Amount (LKR) - Auto</label><div className="w-full px-3.5 py-2.5 bg-slate-900/80 border border-slate-800 rounded-xl text-emerald-400 font-black text-sm">LKR {calculatedAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><BadgePercent size={12} />Discount (LKR)</label><input type="number" step="0.01" min="0" name="discount" value={formData.discount} onChange={handleInputChange} placeholder="0.00" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><DollarSign size={12} />Paid (LKR)</label><input type="number" step="0.01" min="0" name="credit" value={formData.credit} onChange={handleInputChange} placeholder="0.00" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
-            <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><DollarSign size={12} />Balance (Amount - Discount - Paid)</label><div className="w-full px-3.5 py-2.5 bg-slate-900/80 border border-slate-800 rounded-xl text-amber-400 font-black text-sm">LKR {calculatedBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
             <div className="sm:col-span-2 lg:col-span-4 flex justify-end mt-2"><button type="submit" disabled={isSubmitting} className="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-red-600/20 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">{isSubmitting ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}<span>{isSubmitting ? "Saving..." : "Save Income Entry"}</span></button></div>
           </form>
         </div>
