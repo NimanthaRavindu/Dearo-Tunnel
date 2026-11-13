@@ -242,6 +242,8 @@ export default function ViewOtherExpensesPage({
               <option value="Monthly Rental">Monthly Rental</option>
               <option value="Chemical Float">Chemical Float</option>
               <option value="Construction Repair">Construction Repair</option>
+              <option value="Loading Expenses">Loading Expenses</option>
+              <option value="Breker Expenses">Breker Expenses</option>
             </select>
 
             <div className="relative">
