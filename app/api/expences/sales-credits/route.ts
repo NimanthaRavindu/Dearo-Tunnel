@@ -6,7 +6,6 @@ export async function GET(req: NextRequest) {
     const branch_id = req.nextUrl.searchParams.get("branch_id");
     if (!branch_id) return NextResponse.json({ success: false, error: "branch_id required" }, { status: 400 });
 
-    // ✅ MySQL: TO_CHAR -> DATE_FORMAT, $1 -> ?
     const result: any = await db.query(
       `SELECT id, branch_id, bill_number, product_name, customer_name, contact_number,
               DATE_FORMAT(promise_date, '%Y-%m-%d') as promise_date,
@@ -17,7 +16,6 @@ export async function GET(req: NextRequest) {
        ORDER BY created_at DESC`,
       [branch_id]
     );
-    // mysql2 returns [rows, fields] - rows ganna
     const rows = Array.isArray(result) ? result[0] : (result?.rows ?? result ?? []);
     return NextResponse.json({ success: true, data: rows });
   } catch (e: any) {
@@ -39,9 +37,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Missing required credit fields" }, { status: 400 });
     }
 
+    // ✅ NEW: Credit Amount validation - 0 nam save wenne na
+    if (!credit_amount || Number(credit_amount) <= 0) {
+      return NextResponse.json({ success: false, error: "Credit Amount is required and must be > 0" }, { status: 400 });
+    }
+
     const id = `CR-${Date.now()}`;
 
-    // ✅ MySQL: $1 -> ?, RETURNING * ain kala
+    // ✅ FIX: created_date null nam ada date eka danawa
+    const finalCreatedDate = created_date || new Date().toISOString().split("T")[0];
+
     await db.query(
       `INSERT INTO sales_credits
        (id, branch_id, bill_number, product_name, customer_name, contact_number, promise_date, vehicle_number, credit_amount, total_amount, paid_amount, created_date)
@@ -55,14 +60,13 @@ export async function POST(req: NextRequest) {
         contact_number,
         promise_date,
         vehicle_number.toUpperCase(),
-        Number(credit_amount || 0),
+        Number(credit_amount), // ✅ Credit Page eke form eken ena Credit Amount eka
         Number(total_amount || 0),
         Number(paid_amount || 0),
-        created_date || null,
+        finalCreatedDate,
       ]
     );
 
-    // ✅ Insert karapu eka aye gannawa - RETURNING wenawata
     const inserted: any = await db.query(
       `SELECT id, branch_id, bill_number, product_name, customer_name, contact_number,
               DATE_FORMAT(promise_date, '%Y-%m-%d') as promise_date,
@@ -83,7 +87,6 @@ export async function DELETE(req: NextRequest) {
   try {
     const id = req.nextUrl.searchParams.get("id");
     if (!id) return NextResponse.json({ success: false, error: "id required" }, { status: 400 });
-    // ✅ MySQL: $1 -> ?
     await db.query(`DELETE FROM sales_credits WHERE id = ?`, [id]);
     return NextResponse.json({ success: true });
   } catch (e: any) {

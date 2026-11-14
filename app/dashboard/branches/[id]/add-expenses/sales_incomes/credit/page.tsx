@@ -32,7 +32,7 @@ function CreditPageContent() {
   const billNumber = searchParams.get("bill_number") || "";
   const productName = searchParams.get("product_name") || "";
   const entryDate = searchParams.get("date") || getToday();
-  const totalAmount = Number(searchParams.get("total_amount") || 0);
+  const totalAmountFromURL = Number(searchParams.get("total_amount") || 0);
   const paidAmount = Number(searchParams.get("paid_amount") || 0);
   const creditAmountFromURL = Number(searchParams.get("credit_amount") || 0);
   const unitPrice = Number(searchParams.get("unit_price") || 0);
@@ -52,21 +52,21 @@ function CreditPageContent() {
     contact_number: "",
     promise_date: "",
     vehicle_number: "",
-    // ✅ NEW: Credit Amount - form eke enna ona field eka
     credit_amount: creditAmountFromURL > 0 ? String(creditAmountFromURL) : "",
   });
 
-  // ✅ URL eken ena Credit Amount eka form ekata daanawa - page eka open unama
   useEffect(() => {
     if (creditAmountFromURL > 0) {
       setForm((p) => ({ ...p, credit_amount: String(creditAmountFromURL) }));
     }
   }, [creditAmountFromURL]);
 
-  // ✅ Form eke Credit Amount eka thama dan use karanne - URL eke eka nemei
   const creditAmount = Number(form.credit_amount || 0);
-  // ✅ Total = Paid + Credit - Auto penna
+  // ✅ FIX: Total = Paid + Credit - Form eke Credit Amount eka wenas unama Total ekath wenas wenawa
+  // Kalin: totalAmountFromURL eka witharak use kala - Credit wenas kalath Total wenas une na
   const calcTotal = paidAmount + creditAmount;
+  // ✅ Summary eke penna Total eka - dan hamawelawema Paid + Credit
+  const displayTotal = calcTotal > 0 ? calcTotal : totalAmountFromURL;
 
   const fetchCredits = async () => {
     if (!branchId) return;
@@ -115,7 +115,6 @@ function CreditPageContent() {
       setErrorMsg("Please complete Customer Name, Contact, Promise Date and Vehicle Number.");
       return;
     }
-    // ✅ NEW: Credit Amount validation
     if (!form.credit_amount || creditAmount <= 0) {
       setErrorMsg("Please enter Credit Amount.");
       return;
@@ -124,7 +123,9 @@ function CreditPageContent() {
       setIsSaving(true);
       setErrorMsg("");
 
-      // 1️⃣ CREDIT EKA SAVE - Form eke Credit Amount eken
+      // ✅ FIX: total_amount = calcTotal (Paid + Form eke Credit) - URL eke kalin gaanama nemei
+      const finalTotal = calcTotal;
+
       const res = await fetch("/api/expences/sales-credits", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -137,7 +138,7 @@ function CreditPageContent() {
           promise_date: form.promise_date,
           vehicle_number: form.vehicle_number.trim().toUpperCase(),
           credit_amount: creditAmount,
-          total_amount: totalAmount || calcTotal,
+          total_amount: finalTotal,
           paid_amount: paidAmount,
           created_date: entryDate,
         }),
@@ -156,10 +157,10 @@ function CreditPageContent() {
             date: entryDate,
             unit_price: unitPrice,
             quantity: quantity,
-            amount: totalAmount || calcTotal,
+            amount: finalTotal, // ✅ FIX: Sales eketh finalTotal
             credit: paidAmount,
             paid: paidAmount,
-            discount: creditAmount,
+            discount: creditAmount, // ✅ Discount = Credit Amount
           }),
         });
         const saleResult = await saleRes.json();
@@ -170,7 +171,7 @@ function CreditPageContent() {
       }
 
       setForm({ customer_name: "", contact_number: "", promise_date: "", vehicle_number: "", credit_amount: "" });
-      setSuccessMsg(`Saved Both ✅ Credit: ${form.customer_name} - LKR ${creditAmount.toFixed(2)} | Sale: ${productName} - LKR ${(totalAmount || calcTotal).toFixed(2)} added to Sales Ledger`);
+      setSuccessMsg(`Saved Both ✅ Credit: ${form.customer_name} - LKR ${creditAmount.toFixed(2)} | Sale: ${productName} - LKR ${finalTotal.toFixed(2)} added to Sales Ledger`);
       window.setTimeout(() => setSuccessMsg(""), 5000);
       await fetchCredits();
     } catch (err: any) {
@@ -233,20 +234,19 @@ function CreditPageContent() {
         {successMsg && <div className="flex items-center gap-2 bg-emerald-950/40 border border-emerald-500/40 px-4 py-3 rounded-xl text-emerald-400"><CheckCircle2 size={16} /><span>{successMsg}</span></div>}
         {errorMsg && <div className="flex items-center justify-between bg-red-950/40 border border-red-500/40 px-4 py-3 rounded-xl text-red-400"><span>{errorMsg}</span><button onClick={() => setErrorMsg("")}><X size={15} /></button></div>}
 
-        {/* ENTRY SUMMARY - Form eke Credit Amount eka wenas unama meka th wenas wenawa */}
         <div className="p-6 rounded-2xl bg-[#0d1527]/60 border border-slate-800">
           <h2 className="text-xs font-bold uppercase tracking-widest flex items-center gap-2 mb-4"><Receipt size={14} className="text-amber-400" /> Sales Entry Summary</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <div className="rounded-xl bg-slate-950/60 border border-slate-800 p-3"><p className="text-[10px] text-slate-500 uppercase">Bill No</p><p className="font-bold mt-1">{billNumber || "-"}</p></div>
             <div className="rounded-xl bg-slate-950/60 border border-slate-800 p-3"><p className="text-[10px] text-slate-500 uppercase">Product</p><p className="font-bold mt-1">{productName || "-"}</p></div>
             <div className="rounded-xl bg-slate-950/60 border border-slate-800 p-3"><p className="text-[10px] text-slate-500 uppercase">Date</p><p className="font-bold mt-1">{entryDate}</p></div>
-            <div className="rounded-xl bg-slate-950/60 border border-slate-800 p-3"><p className="text-[10px] text-slate-500 uppercase">Total Amount</p><p className="font-black text-emerald-400 mt-1">LKR {totalAmount > 0 ? totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 }) : calcTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
+            {/* ✅ FIX: Total eka dan Paid + Credit walin - form eka wenas unama meka th wenas wenawa */}
+            <div className="rounded-xl bg-slate-950/60 border border-slate-800 p-3"><p className="text-[10px] text-slate-500 uppercase">Total Amount</p><p className="font-black text-emerald-400 mt-1">LKR {displayTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
             <div className="rounded-xl bg-slate-950/60 border border-slate-800 p-3"><p className="text-[10px] text-slate-500 uppercase">Paid</p><p className="font-black text-slate-200 mt-1">LKR {paidAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
             <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 p-3"><p className="text-[10px] text-amber-400 uppercase">Credit Amount</p><p className="font-black text-amber-400 mt-1">LKR {creditAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
           </div>
         </div>
 
-        {/* CREDIT FORM - ✅ Credit Amount field eka meke */}
         <div className="p-6 rounded-2xl bg-[#0d1527]/60 border border-slate-800">
           <h2 className="text-xs font-bold uppercase tracking-widest flex items-center gap-2 mb-4"><Plus size={14} className="text-amber-400" /> Customer Credit Details</h2>
           <form onSubmit={handleSave} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -255,7 +255,6 @@ function CreditPageContent() {
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1.5"><Calendar size={12} /> Promise Date *</label><input type="date" name="promise_date" value={form.promise_date} onChange={handleChange} required className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl focus:border-amber-500/60 focus:outline-none" /></div>
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1.5"><Car size={12} /> Vehicle Number *</label><input name="vehicle_number" value={form.vehicle_number} onChange={handleChange} required placeholder="Ex: WP ABC-1234" className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl focus:border-amber-500/60 focus:outline-none uppercase" /></div>
 
-            {/* ✅ NEW: Credit Amount - meka thama oya illapu field eka */}
             <div className="space-y-1.5 sm:col-span-2">
               <label className="text-[10px] font-bold text-amber-400 uppercase flex items-center gap-1.5"><DollarSign size={12} /> Credit Amount (LKR) *</label>
               <input
@@ -273,7 +272,7 @@ function CreditPageContent() {
                 {creditAmountFromURL > 0
                   ? `Sales page eken auto awa: LKR ${creditAmountFromURL.toLocaleString(undefined, { minimumFractionDigits: 2 })} - ona nam wenas karanna puluwan.`
                   : `Sales page eken Credit Amount ekak awe nathnam, meke type karanna.`}
-                {` | Paid: LKR ${paidAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} + Credit: LKR ${creditAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} = Total: LKR ${calcTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+                {` | Paid: LKR ${paidAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} + Credit: LKR ${creditAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} = Total: LKR ${displayTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
               </p>
             </div>
 
@@ -284,7 +283,6 @@ function CreditPageContent() {
           </form>
         </div>
 
-        {/* CREDIT TABLE */}
         <div className="p-6 rounded-2xl bg-[#0d1527]/40 border border-slate-800 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
@@ -319,8 +317,9 @@ function CreditPageContent() {
           ) : (
             <div className="overflow-x-auto rounded-xl border border-slate-800 bg-[#090e1a]/50">
               <table className="w-full text-left border-collapse">
+                {/* ✅ FIX: Total / Paid columns add kala - Sales page eka wage */}
                 <thead><tr className="border-b border-slate-800 bg-slate-900/60 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  <th className="py-3 px-4">Bill No</th><th className="py-3 px-4">Customer</th><th className="py-3 px-4">Contact</th><th className="py-3 px-4">Vehicle No</th><th className="py-3 px-4">Created Date</th><th className="py-3 px-4">Promise Date</th><th className="py-3 px-4">Status</th><th className="py-3 px-4 text-right">Credit Amount</th><th className="py-3 px-4 text-center">Action</th>
+                  <th className="py-3 px-4">Bill No</th><th className="py-3 px-4">Customer</th><th className="py-3 px-4">Contact</th><th className="py-3 px-4">Vehicle No</th><th className="py-3 px-4">Created Date</th><th className="py-3 px-4">Promise Date</th><th className="py-3 px-4">Status</th><th className="py-3 px-4 text-right">Credit Amount</th><th className="py-3 px-4 text-right">Total / Paid</th><th className="py-3 px-4 text-center">Action</th>
                 </tr></thead>
                 <tbody className="divide-y divide-slate-800/50 text-xs">
                   {filtered.map((r) => {
@@ -335,6 +334,7 @@ function CreditPageContent() {
                         <td className="py-3 px-4">{r.promise_date?.slice(0, 10)}</td>
                         <td className="py-3 px-4"><span className={`px-2 py-1 rounded-full border text-[10px] font-bold ${st.cls}`}>{st.label}</span></td>
                         <td className="py-3 px-4 text-right font-black text-amber-400">LKR {Number(r.credit_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                        <td className="py-3 px-4 text-right"><p className="text-slate-300">LKR {Number(r.total_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p><p className="text-[10px] text-emerald-400">Paid LKR {Number(r.paid_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></td>
                         <td className="py-3 px-4 text-center"><button onClick={() => handleDelete(r.id)} className="p-2 text-slate-400 hover:text-red-400 border border-slate-800 rounded-lg"><X size={13} /></button></td>
                       </tr>
                     );
@@ -342,7 +342,7 @@ function CreditPageContent() {
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-amber-500/20 font-black">
-                    <td colSpan={7} className="py-3 px-4 text-right uppercase text-slate-300">Total Credit ({filtered.length})</td>
+                    <td colSpan={8} className="py-3 px-4 text-right uppercase text-slate-300">Total Credit ({filtered.length})</td>
                     <td className="py-3 px-4 text-right text-amber-400">LKR {totalCredit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                     <td />
                   </tr>
