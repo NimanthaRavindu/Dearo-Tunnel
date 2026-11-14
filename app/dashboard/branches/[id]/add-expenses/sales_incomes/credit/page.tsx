@@ -2,7 +2,7 @@
 
 import React, { Suspense, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Calendar, Car, CheckCircle2, CreditCard, Loader2, Phone, Plus, Save, User, X, Receipt } from "lucide-react";
+import { ArrowLeft, Calendar, Car, CheckCircle2, CreditCard, Loader2, Phone, Plus, Save, User, X, Receipt, Search, Download } from "lucide-react";
 
 interface CreditRecord {
   id: string;
@@ -45,6 +45,8 @@ function CreditPageContent() {
   const [errorMsg, setErrorMsg] = useState("");
   const [search, setSearch] = useState("");
   const [saleSaved, setSaleSaved] = useState(false);
+  // ✅ NEW: Ekama Date Filter - Total Expenses page eke wage
+  const [filterDate, setFilterDate] = useState("");
 
   const [form, setForm] = useState({
     customer_name: "",
@@ -53,7 +55,6 @@ function CreditPageContent() {
     vehicle_number: "",
   });
 
-  
   const fetchCredits = async () => {
     if (!branchId) return;
     try {
@@ -71,14 +72,24 @@ function CreditPageContent() {
 
   useEffect(() => { if (branchId) fetchCredits(); }, [branchId]);
 
-  const totalCredit = useMemo(() => records.reduce((t, r) => t + Number(r.credit_amount || 0), 0), [records]);
-  const overdueCount = useMemo(() => records.filter((r) => r.promise_date && r.promise_date.slice(0, 10) < getToday()).length, [records]);
+  // ✅ Date filter eken passe records
+  const dateFiltered = useMemo(() => {
+    if (!filterDate) return records;
+    return records.filter((r) => (r.created_date || "").slice(0, 10) === filterDate);
+  }, [records, filterDate]);
+
+  const totalCredit = useMemo(() => dateFiltered.reduce((t, r) => t + Number(r.credit_amount || 0), 0), [dateFiltered]);
+  const totalPaid = useMemo(() => dateFiltered.reduce((t, r) => t + Number(r.paid_amount || 0), 0), [dateFiltered]);
+  const totalAmountSum = useMemo(() => dateFiltered.reduce((t, r) => t + Number(r.total_amount || 0), 0), [dateFiltered]);
+  const overdueCount = useMemo(() => dateFiltered.filter((r) => r.promise_date && r.promise_date.slice(0, 10) < getToday()).length, [dateFiltered]);
+  const dueTodayCount = useMemo(() => dateFiltered.filter((r) => r.promise_date && r.promise_date.slice(0, 10) === getToday()).length, [dateFiltered]);
+  const overdueAmount = useMemo(() => dateFiltered.filter((r) => r.promise_date && r.promise_date.slice(0, 10) < getToday()).reduce((t, r) => t + Number(r.credit_amount || 0), 0), [dateFiltered]);
 
   const filtered = search
-    ? records.filter((r) =>
-        (r.customer_name + r.contact_number + r.vehicle_number + r.bill_number).toLowerCase().includes(search.toLowerCase())
+    ? dateFiltered.filter((r) =>
+        (r.customer_name + r.contact_number + r.vehicle_number + r.bill_number + r.product_name).toLowerCase().includes(search.toLowerCase())
       )
-    : records;
+    : dateFiltered;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -152,7 +163,6 @@ function CreditPageContent() {
     }
   };
 
-  
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this credit record?")) return;
     try {
@@ -167,6 +177,19 @@ function CreditPageContent() {
 
   const handleBack = () => {
     router.push(`/dashboard/branches/${branchId}/add-expenses/sales_incomes`);
+  };
+
+  const exportCreditCSV = () => {
+    const head = "Bill No,Product,Customer,Contact,Vehicle,Promise Date,Status,Credit Amount,Total,Paid";
+    const body = filtered.map((r) => {
+      const st = getStatus(r.promise_date);
+      return [r.bill_number, `"${r.product_name}"`, `"${r.customer_name}"`, r.contact_number, r.vehicle_number, (r.promise_date || "").slice(0, 10), st.label, r.credit_amount, r.total_amount, r.paid_amount].join(",");
+    }).join("\n");
+    const blob = new Blob([head + "\n" + body], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `credits-branch-${branchId}.csv`;
+    a.click();
   };
 
   const getStatus = (promiseDate: string) => {
@@ -221,25 +244,44 @@ function CreditPageContent() {
           </form>
         </div>
 
-        {/* CREDIT TABLE - DB eken */}
+        {/* CREDIT TABLE - DB eken + Date Filter + Summary */}
         <div className="p-6 rounded-2xl bg-[#0d1527]/40 border border-slate-800 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h2 className="text-xs font-bold uppercase tracking-widest flex items-center gap-2"><CreditCard size={14} className="text-amber-400" /> All Credit Records</h2>
-              <p className="text-[10px] text-slate-500 mt-1">{records.length} records • Total Credit LKR {totalCredit.toLocaleString(undefined, { minimumFractionDigits: 2 })} • <span className="text-red-400">{overdueCount} Overdue</span></p>
+              <p className="text-[10px] text-slate-500 mt-1">{filtered.length} records • Total Credit LKR {totalCredit.toLocaleString(undefined, { minimumFractionDigits: 2 })} • <span className="text-red-400">{overdueCount} Overdue</span> • <span className="text-amber-400">{dueTodayCount} Due Today</span></p>
             </div>
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search customer / vehicle / bill..." className="px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl w-full sm:w-72 focus:border-amber-500/60 focus:outline-none" />
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2">
+                <Calendar size={13} className="text-slate-500" />
+                <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="px-2 py-2 bg-slate-950 border border-slate-800 rounded-xl focus:border-amber-500/60 focus:outline-none" />
+                {filterDate && <button onClick={() => setFilterDate("")} className="px-2 py-2 bg-slate-900 border border-slate-800 rounded-xl text-[10px] font-bold">Clear</button>}
+              </div>
+              <div className="relative">
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search customer / vehicle / bill..." className="pl-7 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-xl w-full sm:w-64 focus:border-amber-500/60 focus:outline-none" />
+              </div>
+              <button onClick={exportCreditCSV} className="px-3 py-2 bg-amber-500 text-black font-bold rounded-xl flex items-center gap-1.5"><Download size={13} /> Export</button>
+            </div>
+          </div>
+
+          {/* ✅ NEW: Summary Cards - Sales page eke wage */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3"><p className="text-[10px] uppercase text-slate-500">Total Amount</p><p className="mt-1 font-black text-slate-100">LKR {totalAmountSum.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
+            <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3"><p className="text-[10px] uppercase text-slate-500">Total Paid</p><p className="mt-1 font-black text-emerald-400">LKR {totalPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3"><p className="text-[10px] uppercase text-amber-400">Total Credit</p><p className="mt-1 font-black text-amber-400">LKR {totalCredit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
+            <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-3"><p className="text-[10px] uppercase text-red-400">Overdue Credit</p><p className="mt-1 font-black text-red-400">LKR {overdueAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
           </div>
 
           {isLoading ? (
             <div className="py-12 text-center flex justify-center gap-2 text-slate-400"><Loader2 className="animate-spin" size={18} /> Loading credits from database...</div>
           ) : filtered.length === 0 ? (
-            <div className="py-12 text-center text-slate-500">No credit records yet. Add customer details above.</div>
+            <div className="py-12 text-center text-slate-500">No credit records yet. {filterDate ? `Date: ${filterDate} - Credit nathi dawasak.` : "Add customer details above."}</div>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-slate-800 bg-[#090e1a]/50">
               <table className="w-full text-left border-collapse">
                 <thead><tr className="border-b border-slate-800 bg-slate-900/60 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  <th className="py-3 px-4">Bill No</th><th className="py-3 px-4">Customer</th><th className="py-3 px-4">Contact</th><th className="py-3 px-4">Vehicle No</th><th className="py-3 px-4">Promise Date</th><th className="py-3 px-4">Status</th><th className="py-3 px-4 text-right">Credit Amount</th><th className="py-3 px-4 text-center">Action</th>
+                  <th className="py-3 px-4">Bill No</th><th className="py-3 px-4">Customer</th><th className="py-3 px-4">Contact</th><th className="py-3 px-4">Vehicle No</th><th className="py-3 px-4">Created Date</th><th className="py-3 px-4">Promise Date</th><th className="py-3 px-4">Status</th><th className="py-3 px-4 text-right">Credit Amount</th><th className="py-3 px-4 text-center">Action</th>
                 </tr></thead>
                 <tbody className="divide-y divide-slate-800/50 text-xs">
                   {filtered.map((r) => {
@@ -250,6 +292,7 @@ function CreditPageContent() {
                         <td className="py-3 px-4 font-bold flex items-center gap-2"><span className="w-7 h-7 rounded-full bg-amber-500/15 text-amber-400 flex items-center justify-center font-black">{r.customer_name.charAt(0).toUpperCase()}</span>{r.customer_name}</td>
                         <td className="py-3 px-4">{r.contact_number}</td>
                         <td className="py-3 px-4"><span className="px-2 py-1 bg-slate-900 border border-slate-700 rounded-lg font-bold">{r.vehicle_number}</span></td>
+                        <td className="py-3 px-4">{r.created_date?.slice(0, 10)}</td>
                         <td className="py-3 px-4">{r.promise_date?.slice(0, 10)}</td>
                         <td className="py-3 px-4"><span className={`px-2 py-1 rounded-full border text-[10px] font-bold ${st.cls}`}>{st.label}</span></td>
                         <td className="py-3 px-4 text-right font-black text-amber-400">LKR {Number(r.credit_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
@@ -258,6 +301,13 @@ function CreditPageContent() {
                     );
                   })}
                 </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-amber-500/20 font-black">
+                    <td colSpan={7} className="py-3 px-4 text-right uppercase text-slate-300">Total Credit ({filtered.length})</td>
+                    <td className="py-3 px-4 text-right text-amber-400">LKR {totalCredit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                    <td />
+                  </tr>
+                </tfoot>
               </table>
             </div>
           )}

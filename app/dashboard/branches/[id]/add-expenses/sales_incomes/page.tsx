@@ -3,7 +3,7 @@
 import React, { Suspense, useEffect, useState, useMemo } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Calendar, CheckCircle2, DollarSign, FileText, Loader2, Plus, X, Hash, Tag, Eye, Receipt, BadgePercent, CreditCard, Search } from "lucide-react";
+import { ArrowLeft, Calendar, CheckCircle2, DollarSign, FileText, Loader2, Plus, X, Hash, Tag, Eye, Receipt, BadgePercent, CreditCard, Search, Download } from "lucide-react";
 
 interface SalesIncomeItem {
   id: string;
@@ -36,7 +36,20 @@ interface ProductPrice {
   category: string;
 }
 
-// ✅ Fallback - DB eke data nathnam me prices weda karanawa
+interface CreditRecord {
+  id: string;
+  bill_number: string;
+  product_name: string;
+  customer_name: string;
+  contact_number: string;
+  promise_date: string;
+  vehicle_number: string;
+  credit_amount: number;
+  total_amount: number;
+  paid_amount: number;
+  created_date: string;
+}
+
 const FALLBACK_PRICES: ProductPrice[] = [
   { product_name: "6*9", unit_price: 9000, category: "aggregate" },
   { product_name: "3/4", unit_price: 13000, category: "aggregate" },
@@ -79,6 +92,11 @@ function SalesIncomesContent() {
   const [filterDate, setFilterDate] = useState("");
   const [filterName, setFilterName] = useState("");
 
+  // ✅ NEW: Credits - credits/page.tsx eke data ma me page eke penna
+  const [credits, setCredits] = useState<CreditRecord[]>([]);
+  const [creditSearch, setCreditSearch] = useState("");
+  const [showCredits, setShowCredits] = useState(true);
+
   const [formData, setFormData] = useState<SalesIncomeFormData>({
     bill_number: "",
     name: "",
@@ -94,21 +112,22 @@ function SalesIncomesContent() {
     return up * qty;
   }, [formData.unit_price, formData.quantity]);
 
-  // ✅ Discount = Amount - Paid - AUTO
+  // ✅ Discount = Amount - Paid - AUTO = Credit Amount
   const calculatedDiscount = useMemo(() => {
     const paid = Number(formData.credit || 0);
     return calculatedAmount - paid;
   }, [calculatedAmount, formData.credit]);
 
-  
   const filteredIncomes = incomes.filter((item) => {
     const matchDate = filterDate ? item.date.slice(0, 10) === filterDate : true;
     const matchName = filterName ? item.name?.toLowerCase().includes(filterName.toLowerCase()) : true;
     return matchDate && matchName;
   });
   const totalAmount = filteredIncomes.reduce((total, item) => total + Number(item.amount || 0), 0);
-  const totalCredit = filteredIncomes.reduce((total, item) => total + Number(item.credit ?? item.paid ?? 0), 0);
+  const totalPaid = filteredIncomes.reduce((total, item) => total + Number(item.credit ?? item.paid ?? 0), 0);
   const totalDiscount = filteredIncomes.reduce((total, item) => total + Number(item.discount ?? 0), 0);
+  // ✅ Credit = Discount - meka thama Customer ta dunna Credit eka
+  const totalCredit = totalDiscount;
 
   const fetchSalesIncomes = async () => {
     if (!branchId) return;
@@ -126,7 +145,16 @@ function SalesIncomesContent() {
     }
   };
 
-  
+  // ✅ NEW: Credits gannawa
+  const fetchCredits = async () => {
+    if (!branchId) return;
+    try {
+      const res = await fetch(`/api/expences/sales-credits?branch_id=${encodeURIComponent(branchId)}`, { cache: "no-store" });
+      const result = await res.json();
+      if (result.success) setCredits(result.data || []);
+    } catch { /* credits nathnam ignore */ }
+  };
+
   const fetchProducts = async () => {
     if (!branchId) return;
     try {
@@ -136,14 +164,36 @@ function SalesIncomesContent() {
     } catch { /* fallback thiyenawa */ }
   };
 
-  useEffect(() => { if (branchId) { fetchSalesIncomes(); fetchProducts(); } }, [branchId]);
+  useEffect(() => { if (branchId) { fetchSalesIncomes(); fetchProducts(); fetchCredits(); } }, [branchId]);
+
+  // ✅ Credits - Date filter ekata anuwa + Search
+  const filteredCredits = useMemo(() => {
+    let list = credits;
+    if (filterDate) list = list.filter((r) => (r.created_date || "").slice(0, 10) === filterDate);
+    if (creditSearch) {
+      const s = creditSearch.toLowerCase();
+      list = list.filter((r) => (r.customer_name + r.contact_number + r.vehicle_number + r.bill_number).toLowerCase().includes(s));
+    }
+    return list;
+  }, [credits, filterDate, creditSearch]);
+
+  const creditTotal = useMemo(() => filteredCredits.reduce((t, r) => t + Number(r.credit_amount || 0), 0), [filteredCredits]);
+  const creditOverdueCount = useMemo(() => filteredCredits.filter((r) => (r.promise_date || "").slice(0, 10) < getToday()).length, [filteredCredits]);
+  const creditOverdueAmount = useMemo(() => filteredCredits.filter((r) => (r.promise_date || "").slice(0, 10) < getToday()).reduce((t, r) => t + Number(r.credit_amount || 0), 0), [filteredCredits]);
+
+  const getCreditStatus = (promiseDate: string) => {
+    const d = (promiseDate || "").slice(0, 10);
+    const today = getToday();
+    if (d < today) return { label: "Overdue", cls: "bg-red-500/15 text-red-400 border-red-500/30" };
+    if (d === today) return { label: "Due Today", cls: "bg-amber-500/15 text-amber-400 border-amber-500/30" };
+    return { label: "Pending", cls: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" };
+  };
 
   const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = event.target;
     setFormData((previous) => ({ ...previous, [name]: value }));
     setErrorMessage("");
   };
-
 
   const handleNameChange = (value: string) => {
     const found = products.find((p) => p.product_name.toLowerCase() === value.toLowerCase());
@@ -155,7 +205,6 @@ function SalesIncomesContent() {
     setErrorMessage("");
   };
 
-  // ✅ Add Credit - Discount thibbath, nathath puluwan - FIXED
   const handleOpenCreditPage = () => {
     if (!formData.name.trim()) {
       setErrorMessage("First enter Product Name, then Add Credit.");
@@ -209,10 +258,23 @@ function SalesIncomesContent() {
       setSuccessMessage(`Saved: ${quantity} x LKR ${unit_price.toFixed(2)} = LKR ${amount.toFixed(2)} | Discount LKR ${discount.toFixed(2)} | Paid LKR ${credit.toFixed(2)}`);
       window.setTimeout(() => setSuccessMessage(""), 3000);
       await fetchSalesIncomes();
+      await fetchCredits();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Failed to save sales income.");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteCredit = async (id: string) => {
+    if (!confirm("Delete this credit record?")) return;
+    try {
+      const res = await fetch(`/api/expences/sales-credits?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      const result = await res.json();
+      if (!res.ok || !result.success) throw new Error(result.error || "Failed to delete");
+      await fetchCredits();
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to delete credit");
     }
   };
 
@@ -223,7 +285,7 @@ function SalesIncomesContent() {
     router.push(`/dashboard/total-incomes${queryParams.toString() ? `?${queryParams}` : ""}`);
   };
 
-  const clearFilters = () => { setFilterDate(""); setFilterName(""); };
+  const clearFilters = () => { setFilterDate(""); setFilterName(""); setCreditSearch(""); };
 
   return (
     <div className="min-h-screen bg-[#070a12] text-slate-100 p-6 sm:p-10 flex flex-col items-center relative overflow-hidden font-mono text-xs">
@@ -246,7 +308,6 @@ function SalesIncomesContent() {
           <h2 className="text-xs font-bold uppercase tracking-widest text-slate-200 mb-4 flex items-center gap-2"><Plus size={14} className="text-red-400" />Add New Sales Income Entry</h2>
           <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Receipt size={12} />Bill Number</label><input type="text" name="bill_number" value={formData.bill_number} onChange={handleInputChange} placeholder="Ex: B-001" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
-            {/* ✅ NAME DROPDOWN - Aggregate + Vegetables */}
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><FileText size={12} />Name *</label>
               <input type="text" list="product-list" value={formData.name} onChange={(e) => handleNameChange(e.target.value)} required placeholder="Select / Type Name..." className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" />
@@ -267,7 +328,7 @@ function SalesIncomesContent() {
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Tag size={12} />Unit Price (LKR) - Auto</label><input type="number" step="0.01" min="0" name="unit_price" value={formData.unit_price} onChange={handleInputChange} required placeholder="Auto / Manual" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Hash size={12} />Quantity</label><input type="number" step="0.01" min="0.01" name="quantity" value={formData.quantity} onChange={handleInputChange} required placeholder="0" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><DollarSign size={12} />Amount (LKR) - Auto</label><div className="w-full px-3.5 py-2.5 bg-slate-900/80 border border-slate-800 rounded-xl text-emerald-400 font-black text-sm">LKR {calculatedAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
-            <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><BadgePercent size={12} />Discount (LKR) - Auto</label><div className="w-full px-3.5 py-2.5 bg-slate-900/80 border border-slate-800 rounded-xl text-amber-400 font-black text-sm">LKR {calculatedDiscount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
+            <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><BadgePercent size={12} />Discount / Credit (LKR) - Auto</label><div className="w-full px-3.5 py-2.5 bg-slate-900/80 border border-amber-500/30 rounded-xl text-amber-400 font-black text-sm">LKR {calculatedDiscount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><DollarSign size={12} />Paid (LKR)</label><input type="number" step="0.01" min="0" name="credit" value={formData.credit} onChange={handleInputChange} placeholder="0.00" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
             <div className="sm:col-span-2 lg:col-span-4 flex justify-end gap-2 mt-2">
               <button type="button" onClick={handleOpenCreditPage} className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-amber-500/20 active:scale-95"><CreditCard size={14} /><span>Add Credit</span></button>
@@ -279,7 +340,6 @@ function SalesIncomesContent() {
         <div className="p-6 rounded-2xl bg-[#0d1527]/40 border border-slate-800 shadow-2xl space-y-4">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <div><h2 className="text-xs font-bold uppercase tracking-widest text-slate-200">Registered Sales Incomes Ledger</h2><p className="text-[10px] text-slate-500 mt-1">{filteredIncomes.length} records found</p></div>
-            {/* ✅ DATE + NAME FILTER DEKAMA */}
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-2">
                 <Search size={14} className="text-slate-400" />
@@ -294,17 +354,18 @@ function SalesIncomesContent() {
           </div>
 
           {!isLoading && filteredIncomes.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Amount</p><p className="mt-1 text-lg font-black text-red-400">LKR {totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
-              <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Discount</p><p className="mt-1 text-lg font-black text-emerald-400">LKR {totalDiscount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
-              <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Paid</p><p className="mt-1 text-lg font-black text-amber-400">LKR {totalCredit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4"><p className="text-[10px] uppercase tracking-wider text-amber-400">Total Credit / Discount</p><p className="mt-1 text-lg font-black text-amber-400">LKR {totalCredit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
+              <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Paid</p><p className="mt-1 text-lg font-black text-emerald-400">LKR {totalPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
+              <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Credit Records</p><p className="mt-1 text-lg font-black text-slate-100">{filteredCredits.length} • <span className="text-red-400 text-sm">{creditOverdueCount} Overdue</span></p></div>
             </div>
           )}
 
           {isLoading ? <div className="py-16 text-center flex flex-col items-center justify-center space-y-2"><Loader2 size={24} className="text-red-500 animate-spin" /><p className="text-slate-400">Loading branch entries...</p></div> : filteredIncomes.length === 0 ? <div className="py-16 text-center text-slate-500">{filterDate || filterName ? `No records found ${filterName ? `for "${filterName}"` : ""} ${filterDate ? `on ${filterDate}` : ""}.` : "No sales income records found for this branch."}</div> : (
             <div className="overflow-x-auto rounded-xl border border-slate-800 bg-[#090e1a]/50">
               <table className="w-full text-left border-collapse">
-                <thead><tr className="border-b border-slate-800 bg-slate-900/60 text-[10px] font-bold text-slate-400 uppercase tracking-wider"><th className="py-3 px-4">Bill No</th><th className="py-3 px-4">Name</th><th className="py-3 px-4">Date</th><th className="py-3 px-4 text-right">Unit Price</th><th className="py-3 px-4 text-right">Qty</th><th className="py-3 px-4 text-right">Amount (LKR)</th><th className="py-3 px-4 text-right">Discount (LKR)</th><th className="py-3 px-4 text-right">Paid (LKR)</th><th className="py-3 px-4 text-center">Action</th></tr></thead>
+                <thead><tr className="border-b border-slate-800 bg-slate-900/60 text-[10px] font-bold text-slate-400 uppercase tracking-wider"><th className="py-3 px-4">Bill No</th><th className="py-3 px-4">Name</th><th className="py-3 px-4">Date</th><th className="py-3 px-4 text-right">Unit Price</th><th className="py-3 px-4 text-right">Qty</th><th className="py-3 px-4 text-right">Amount (LKR)</th><th className="py-3 px-4 text-right">Discount / Credit (LKR)</th><th className="py-3 px-4 text-right">Paid (LKR)</th><th className="py-3 px-4 text-center">Action</th></tr></thead>
                 <tbody className="divide-y divide-slate-800/50 text-xs">
                   {filteredIncomes.map((item) => (
                     <tr key={item.id} className="hover:bg-slate-900/70 transition-colors">
@@ -314,8 +375,8 @@ function SalesIncomesContent() {
                       <td className="py-3 px-4 text-right text-slate-300">LKR {Number(item.unit_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                       <td className="py-3 px-4 text-right text-slate-300">{Number(item.quantity || 0)}</td>
                       <td className="py-3 px-4 text-right font-black text-red-400">LKR {Number(item.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                      <td className="py-3 px-4 text-right font-black text-emerald-400">LKR {Number(item.discount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                      <td className="py-3 px-4 text-right font-black text-amber-400">LKR {Number(item.credit ?? item.paid ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                      <td className="py-3 px-4 text-right font-black text-amber-400">LKR {Number(item.discount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                      <td className="py-3 px-4 text-right font-black text-emerald-400">LKR {Number(item.credit ?? item.paid ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                       <td className="py-3 px-4 text-center">
                         <Link href={`/dashboard/branches/${branchId}/add-expenses/sales_incomes/${item.id}`} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 border border-slate-700 text-slate-300 rounded-lg text-[10px] font-black uppercase hover:bg-white hover:text-black transition-all">
                           <Eye size={12}/> View Summary
@@ -326,6 +387,57 @@ function SalesIncomesContent() {
                 </tbody>
               </table>
             </div>
+          )}
+        </div>
+
+        {/* ✅ NEW: All Credit Records - me branch eke credits, credits page eke wage */}
+        <div className="p-6 rounded-2xl bg-[#0d1527]/40 border border-amber-500/20 shadow-2xl space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xs font-bold uppercase tracking-widest flex items-center gap-2"><CreditCard size={14} className="text-amber-400" /> All Credit Records - This Branch</h2>
+              <p className="text-[10px] text-slate-500 mt-1">{filteredCredits.length} records • Total Credit LKR {creditTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })} • <span className="text-red-400">{creditOverdueCount} Overdue</span> • <span className="text-red-400">Overdue LKR {creditOverdueAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setShowCredits(!showCredits)} className="px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-[10px] font-bold">{showCredits ? "Hide" : "Show"}</button>
+              <input value={creditSearch} onChange={(e) => setCreditSearch(e.target.value)} placeholder="Search customer / vehicle / bill..." className="px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl focus:border-amber-500/60 focus:outline-none w-56" />
+              <button onClick={handleOpenCreditPage} className="px-3 py-2 bg-amber-500 text-black font-bold rounded-xl flex items-center gap-1.5"><Plus size={13} /> Add Credit</button>
+            </div>
+          </div>
+
+          {showCredits && (
+            filteredCredits.length === 0 ? (
+              <div className="py-10 text-center text-slate-500">No credit records yet. {filterDate ? `Date: ${filterDate}` : "Use Add Credit button above."}</div>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-slate-800 bg-[#090e1a]/50">
+                <table className="w-full text-left border-collapse">
+                  <thead><tr className="border-b border-slate-800 bg-slate-900/60 text-[10px] font-bold text-slate-400 uppercase tracking-wider"><th className="py-3 px-4">Bill No</th><th className="py-3 px-4">Customer</th><th className="py-3 px-4">Contact</th><th className="py-3 px-4">Vehicle</th><th className="py-3 px-4">Promise Date</th><th className="py-3 px-4">Status</th><th className="py-3 px-4 text-right">Credit Amount</th><th className="py-3 px-4 text-center">Action</th></tr></thead>
+                  <tbody className="divide-y divide-slate-800/50 text-xs">
+                    {filteredCredits.map((r) => {
+                      const st = getCreditStatus(r.promise_date);
+                      return (
+                        <tr key={r.id} className="hover:bg-slate-900/70">
+                          <td className="py-3 px-4"><p className="font-bold">{r.bill_number || "-"}</p><p className="text-[10px] text-slate-500">{r.product_name}</p></td>
+                          <td className="py-3 px-4 font-bold flex items-center gap-2"><span className="w-7 h-7 rounded-full bg-amber-500/15 text-amber-400 flex items-center justify-center font-black">{(r.customer_name || "?").charAt(0).toUpperCase()}</span>{r.customer_name}</td>
+                          <td className="py-3 px-4">{r.contact_number}</td>
+                          <td className="py-3 px-4"><span className="px-2 py-1 bg-slate-900 border border-slate-700 rounded-lg font-bold">{r.vehicle_number}</span></td>
+                          <td className="py-3 px-4">{(r.promise_date || "").slice(0, 10)}</td>
+                          <td className="py-3 px-4"><span className={`px-2 py-1 rounded-full border text-[10px] font-bold ${st.cls}`}>{st.label}</span></td>
+                          <td className="py-3 px-4 text-right font-black text-amber-400">LKR {Number(r.credit_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                          <td className="py-3 px-4 text-center"><button onClick={() => handleDeleteCredit(r.id)} className="p-2 text-slate-400 hover:text-red-400 border border-slate-800 rounded-lg"><X size={13} /></button></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-amber-500/20 font-black">
+                      <td colSpan={6} className="py-3 px-4 text-right uppercase text-slate-300">Total Credit ({filteredCredits.length})</td>
+                      <td className="py-3 px-4 text-right text-amber-400">LKR {creditTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                      <td />
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )
           )}
         </div>
       </div>
