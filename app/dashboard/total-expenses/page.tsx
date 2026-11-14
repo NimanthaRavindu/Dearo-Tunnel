@@ -27,7 +27,6 @@ interface FilterItem {
   balance?: number;
 }
 
-// ✅ NEW: Detail table ekata
 interface DetailRow {
   id: number | string;
   branch_id: number | string;
@@ -79,13 +78,18 @@ function TotalExpensesContent() {
   const [refreshing, setRefreshing] = useState(false);
   const [searchText, setSearchText] = useState("");
 
-  // ✅ NEW: Detail table states
+  // ✅ Detail table states
   const [detailRows, setDetailRows] = useState<DetailRow[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailCategory, setDetailCategory] = useState<string>("All");
   const [detailSearch, setDetailSearch] = useState("");
-  const [detailFrom, setDetailFrom] = useState("");
-  const [detailTo, setDetailTo] = useState("");
+
+  // ✅ NEW: Ekama Date Filter - Summary + Detail dekata
+  const [globalDate, setGlobalDate] = useState(""); // Single date - 2026-11-14
+  const [globalFrom, setGlobalFrom] = useState("");
+  const [globalTo, setGlobalTo] = useState("");
+
+  const hasDateFilter = !!(globalDate || globalFrom || globalTo);
 
   const fetchExpenseBreakdown = useCallback(async () => {
     try {
@@ -119,12 +123,16 @@ function TotalExpensesContent() {
 
   useEffect(() => { fetchExpenseBreakdown(); }, [fetchExpenseBreakdown]);
 
-  // ✅ NEW: Detail rows ganna - /api/expences/all eken
+  // ✅ Detail rows ganna - Date eka API ekata th yawanawa
   const fetchDetailRows = useCallback(async () => {
     setDetailLoading(true);
     try {
       const branchParam = selectedBranchId ? selectedBranchId : "all";
-      const res = await fetch(`/api/expences/all?branchId=${branchParam}`, { cache: "no-store" });
+      const p = new URLSearchParams({ branchId: branchParam });
+      if (globalDate) p.set("date", globalDate);
+      if (globalFrom) p.set("from", globalFrom);
+      if (globalTo) p.set("to", globalTo);
+      const res = await fetch(`/api/expences/all?${p.toString()}`, { cache: "no-store" });
       if (!res.ok) throw new Error("detail fetch failed");
       const data = await res.json();
       setDetailRows(Array.isArray(data) ? data : []);
@@ -133,7 +141,7 @@ function TotalExpensesContent() {
     } finally {
       setDetailLoading(false);
     }
-  }, [selectedBranchId]);
+  }, [selectedBranchId, globalDate, globalFrom, globalTo]);
 
   useEffect(() => { fetchDetailRows(); }, [fetchDetailRows]);
 
@@ -145,9 +153,57 @@ function TotalExpensesContent() {
     router.push(`/dashboard/total-expenses${query ? `?${query}` : ""}`);
   };
 
-  // === Branch filter logic ===
+  // ✅ NEW: Date eken filter karapu Detail rows - API eka filter kale nathnam th meken filter wenawa
+  const dateFilteredDetail = useMemo(() => {
+    if (!hasDateFilter) return detailRows;
+    return detailRows.filter((r) => {
+      const d = (r.expense_date || "").slice(0, 10);
+      if (!d) return false;
+      if (globalDate) return d === globalDate;
+      if (globalFrom && d < globalFrom) return false;
+      if (globalTo && d > globalTo) return false;
+      return true;
+    });
+  }, [detailRows, globalDate, globalFrom, globalTo, hasDateFilter]);
+
+  // ✅ NEW: Date filter thiyenawanam Summary eka Detail rows walin hadanawa
+  const summaryFromDetail = useMemo(() => {
+    if (!hasDateFilter) return null;
+    const map = new Map<string, BranchExpense>();
+    dateFilteredDetail.forEach((r) => {
+      const key = String(r.branch_id);
+      if (!map.has(key)) {
+        map.set(key, {
+          id: r.branch_id,
+          branch_name: r.branchName,
+          branch_code: r.branchCode,
+          salary_expenses: 0,
+          sales_expenses: 0,
+          capital_expenses: 0,
+          other_expenses: 0,
+          diesel_expenses: 0,
+        });
+      }
+      const item = map.get(key)!;
+      const val = Number(r.total_payable) || 0;
+      if (r.category === "Salary") item.salary_expenses = Number(item.salary_expenses || 0) + val;
+      if (r.category === "Sales") item.sales_expenses = Number(item.sales_expenses || 0) + val;
+      if (r.category === "Capital") item.capital_expenses = Number(item.capital_expenses || 0) + val;
+      if (r.category === "Other") item.other_expenses = Number(item.other_expenses || 0) + val;
+      if (r.category === "Diesel") item.diesel_expenses = Number(item.diesel_expenses || 0) + val;
+    });
+    // Expense nathi branches th 0.00 walin pennanna
+    branches.forEach((b) => {
+      if (!map.has(String(b.id))) {
+        map.set(String(b.id), { ...b, salary_expenses: 0, sales_expenses: 0, capital_expenses: 0, other_expenses: 0, diesel_expenses: 0 });
+      }
+    });
+    return Array.from(map.values());
+  }, [dateFilteredDetail, branches, hasDateFilter]);
+
+  // === Branch filter logic - Date filter thiyenawanam summaryFromDetail gannawa ===
   const filteredBranches = useMemo(() => {
-    let result = branches;
+    let result = summaryFromDetail ?? branches;
     if (selectedBranchId) {
       result = result.filter((b) => String(b.id) === String(selectedBranchId));
     }
@@ -158,7 +214,7 @@ function TotalExpensesContent() {
       );
     }
     return result;
-  }, [branches, selectedBranchId, searchText]);
+  }, [branches, summaryFromDetail, selectedBranchId, searchText]);
 
   const total = filteredBranches.reduce(
     (sum, branch) =>
@@ -171,12 +227,10 @@ function TotalExpensesContent() {
     0,
   );
 
-  // ✅ NEW: Detail filter
+  // ✅ Detail filter - Date eka methana ayeth filter karanne na, dateFilteredDetail ekenma enawa
   const filteredDetail = useMemo(() => {
-    return detailRows.filter((r) => {
+    return dateFilteredDetail.filter((r) => {
       if (detailCategory !== "All" && r.category !== detailCategory) return false;
-      if (detailFrom && r.expense_date < detailFrom) return false;
-      if (detailTo && r.expense_date > detailTo) return false;
       if (detailSearch) {
         const s = detailSearch.toLowerCase();
         if (
@@ -187,7 +241,7 @@ function TotalExpensesContent() {
       }
       return true;
     });
-  }, [detailRows, detailCategory, detailFrom, detailTo, detailSearch]);
+  }, [dateFilteredDetail, detailCategory, detailSearch]);
 
   const detailTotals = useMemo(() => filteredDetail.reduce((a, r) => ({
     payable: a.payable + (Number(r.total_payable) || 0),
@@ -204,6 +258,12 @@ function TotalExpensesContent() {
     a.href = URL.createObjectURL(blob);
     a.download = "total-expenses-detail.csv";
     a.click();
+  };
+
+  const clearDateFilter = () => {
+    setGlobalDate("");
+    setGlobalFrom("");
+    setGlobalTo("");
   };
 
   const handleRefreshAll = () => {
@@ -319,10 +379,61 @@ function TotalExpensesContent() {
           </div>
         </header>
 
-        {/* ===== 1. Uda Summary Matrix - Oya thibba eka wenasak na ===== */}
+        {/* ===== ✅ Ekama Date Filter - Summary + Detail Dekata ===== */}
+        <div className="flex flex-col md:flex-row md:items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <Calendar size={14} className="text-emerald-400" />
+            <span className="text-[11px] font-bold text-slate-200">Filter by Date</span>
+            {hasDateFilter && (
+              <span className="px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/30 rounded-full text-[10px] font-bold text-emerald-400">
+                {globalDate ? `Date: ${globalDate}` : `${globalFrom || "..."} → ${globalTo || "..."}`}
+              </span>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 flex-1 md:justify-end">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] text-slate-500">Date:</span>
+              <input
+                type="date"
+                value={globalDate}
+                onChange={(e) => { setGlobalDate(e.target.value); setGlobalFrom(""); setGlobalTo(""); }}
+                className="px-2 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-[11px] text-slate-200 outline-none focus:border-emerald-500/40"
+              />
+            </div>
+
+            <span className="text-[10px] text-slate-600">OR</span>
+
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] text-slate-500">From:</span>
+              <input
+                type="date"
+                value={globalFrom}
+                onChange={(e) => { setGlobalFrom(e.target.value); setGlobalDate(""); }}
+                className="px-2 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-[11px] text-slate-200 outline-none focus:border-emerald-500/40"
+              />
+              <span className="text-[10px] text-slate-500">To:</span>
+              <input
+                type="date"
+                value={globalTo}
+                onChange={(e) => { setGlobalTo(e.target.value); setGlobalDate(""); }}
+                className="px-2 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-[11px] text-slate-200 outline-none focus:border-emerald-500/40"
+              />
+            </div>
+
+            <button
+              onClick={clearDateFilter}
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-[11px] font-bold text-slate-300 transition"
+            >
+              Clear Date
+            </button>
+          </div>
+        </div>
+
+        {/* ===== 1. Uda Summary Matrix ===== */}
         <section className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/70">
           <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3 text-xs font-semibold">
-            <div className="flex items-center gap-2"><FileSpreadsheet size={14} className="text-emerald-400" /> Infrastructure Financial Auditing Matrix</div>
+            <div className="flex items-center gap-2"><FileSpreadsheet size={14} className="text-emerald-400" /> Infrastructure Financial Auditing Matrix {hasDateFilter && <span className="text-[10px] font-bold text-emerald-400">(Filtered by Date)</span>}</div>
             <span className="text-[10px] text-slate-500">{filteredBranches.length} Branches Shown</span>
           </div>
 
@@ -368,9 +479,8 @@ function TotalExpensesContent() {
           </div>
         </section>
 
-        {/* ===== 2. NEW: Detail Table - Siyalu Records Wenama ===== */}
+        {/* ===== 2. Detail Table ===== */}
         <section className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/70">
-          {/* Header */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">
             <div className="flex items-center gap-2.5">
               <div className="p-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-md text-emerald-400"><FileText size={15} /></div>
@@ -385,7 +495,6 @@ function TotalExpensesContent() {
             </div>
           </div>
 
-          {/* Summary Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4">
             {[
               { label: "Total Payable", value: detailTotals.payable, cls: "text-white", suffix: "LKR " },
@@ -400,24 +509,24 @@ function TotalExpensesContent() {
             ))}
           </div>
 
-          {/* Filters */}
+          {/* Filters - Date eka methana na, uda global date ekenma */}
           <div className="px-4 pb-4 flex flex-col lg:flex-row gap-3">
             <div className="flex flex-wrap gap-1.5">
               {DETAIL_CATEGORIES.map((c) => (
                 <button key={c} onClick={() => setDetailCategory(c)} className={`px-3 py-1.5 rounded-full text-[11px] font-bold border transition ${detailCategory === c ? "bg-emerald-600 border-emerald-500 text-white" : "bg-slate-950 border-slate-800 text-slate-400 hover:text-white"}`}>{c}</button>
               ))}
             </div>
-            <div className="flex flex-1 gap-2 lg:justify-end">
+            <div className="flex flex-1 gap-2 lg:justify-end items-center">
+              <span className="text-[10px] text-slate-500 hidden lg:block">
+                {hasDateFilter ? `Showing: ${globalDate || `${globalFrom || "..."} → ${globalTo || "..."}`}` : "Showing: All Dates"}
+              </span>
               <div className="relative flex-1 lg:max-w-[240px]">
                 <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
                 <input value={detailSearch} onChange={(e) => setDetailSearch(e.target.value)} placeholder="Search reason / branch / date..." className="w-full pl-7 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-[11px] outline-none focus:border-emerald-500/40" />
               </div>
-              <input type="date" value={detailFrom} onChange={(e) => setDetailFrom(e.target.value)} className="px-2 py-2 bg-slate-950 border border-slate-800 rounded-lg text-[11px] text-slate-300" />
-              <input type="date" value={detailTo} onChange={(e) => setDetailTo(e.target.value)} className="px-2 py-2 bg-slate-950 border border-slate-800 rounded-lg text-[11px] text-slate-300" />
             </div>
           </div>
 
-          {/* Table */}
           <div className="overflow-x-auto px-4 pb-4">
             <table className="w-full min-w-[950px] border-collapse text-xs">
               <thead>
