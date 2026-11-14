@@ -78,18 +78,14 @@ function TotalExpensesContent() {
   const [refreshing, setRefreshing] = useState(false);
   const [searchText, setSearchText] = useState("");
 
-  // ✅ Detail table states
   const [detailRows, setDetailRows] = useState<DetailRow[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailCategory, setDetailCategory] = useState<string>("All");
   const [detailSearch, setDetailSearch] = useState("");
 
-  // ✅ NEW: Ekama Date Filter - Summary + Detail dekata
-  const [globalDate, setGlobalDate] = useState(""); // Single date - 2026-11-14
-  const [globalFrom, setGlobalFrom] = useState("");
-  const [globalTo, setGlobalTo] = useState("");
-
-  const hasDateFilter = !!(globalDate || globalFrom || globalTo);
+  // ✅ Ekama Date Filter - Single Date witharai, From/To na
+  const [globalDate, setGlobalDate] = useState("");
+  const hasDateFilter = !!globalDate;
 
   const fetchExpenseBreakdown = useCallback(async () => {
     try {
@@ -123,15 +119,12 @@ function TotalExpensesContent() {
 
   useEffect(() => { fetchExpenseBreakdown(); }, [fetchExpenseBreakdown]);
 
-  // ✅ Detail rows ganna - Date eka API ekata th yawanawa
   const fetchDetailRows = useCallback(async () => {
     setDetailLoading(true);
     try {
       const branchParam = selectedBranchId ? selectedBranchId : "all";
       const p = new URLSearchParams({ branchId: branchParam });
       if (globalDate) p.set("date", globalDate);
-      if (globalFrom) p.set("from", globalFrom);
-      if (globalTo) p.set("to", globalTo);
       const res = await fetch(`/api/expences/all?${p.toString()}`, { cache: "no-store" });
       if (!res.ok) throw new Error("detail fetch failed");
       const data = await res.json();
@@ -141,7 +134,7 @@ function TotalExpensesContent() {
     } finally {
       setDetailLoading(false);
     }
-  }, [selectedBranchId, globalDate, globalFrom, globalTo]);
+  }, [selectedBranchId, globalDate]);
 
   useEffect(() => { fetchDetailRows(); }, [fetchDetailRows]);
 
@@ -153,20 +146,13 @@ function TotalExpensesContent() {
     router.push(`/dashboard/total-expenses${query ? `?${query}` : ""}`);
   };
 
-  // ✅ NEW: Date eken filter karapu Detail rows - API eka filter kale nathnam th meken filter wenawa
+  // ✅ Date eken filter karapu Detail rows
   const dateFilteredDetail = useMemo(() => {
     if (!hasDateFilter) return detailRows;
-    return detailRows.filter((r) => {
-      const d = (r.expense_date || "").slice(0, 10);
-      if (!d) return false;
-      if (globalDate) return d === globalDate;
-      if (globalFrom && d < globalFrom) return false;
-      if (globalTo && d > globalTo) return false;
-      return true;
-    });
-  }, [detailRows, globalDate, globalFrom, globalTo, hasDateFilter]);
+    return detailRows.filter((r) => (r.expense_date || "").slice(0, 10) === globalDate);
+  }, [detailRows, globalDate, hasDateFilter]);
 
-  // ✅ NEW: Date filter thiyenawanam Summary eka Detail rows walin hadanawa
+  // ✅ Date filter thiyenawanam Summary eka Detail rows walin hadanawa
   const summaryFromDetail = useMemo(() => {
     if (!hasDateFilter) return null;
     const map = new Map<string, BranchExpense>();
@@ -192,7 +178,6 @@ function TotalExpensesContent() {
       if (r.category === "Other") item.other_expenses = Number(item.other_expenses || 0) + val;
       if (r.category === "Diesel") item.diesel_expenses = Number(item.diesel_expenses || 0) + val;
     });
-    // Expense nathi branches th 0.00 walin pennanna
     branches.forEach((b) => {
       if (!map.has(String(b.id))) {
         map.set(String(b.id), { ...b, salary_expenses: 0, sales_expenses: 0, capital_expenses: 0, other_expenses: 0, diesel_expenses: 0 });
@@ -201,7 +186,6 @@ function TotalExpensesContent() {
     return Array.from(map.values());
   }, [dateFilteredDetail, branches, hasDateFilter]);
 
-  // === Branch filter logic - Date filter thiyenawanam summaryFromDetail gannawa ===
   const filteredBranches = useMemo(() => {
     let result = summaryFromDetail ?? branches;
     if (selectedBranchId) {
@@ -227,7 +211,6 @@ function TotalExpensesContent() {
     0,
   );
 
-  // ✅ Detail filter - Date eka methana ayeth filter karanne na, dateFilteredDetail ekenma enawa
   const filteredDetail = useMemo(() => {
     return dateFilteredDetail.filter((r) => {
       if (detailCategory !== "All" && r.category !== detailCategory) return false;
@@ -260,11 +243,7 @@ function TotalExpensesContent() {
     a.click();
   };
 
-  const clearDateFilter = () => {
-    setGlobalDate("");
-    setGlobalFrom("");
-    setGlobalTo("");
-  };
+  const clearDateFilter = () => setGlobalDate("");
 
   const handleRefreshAll = () => {
     setRefreshing(true);
@@ -297,7 +276,6 @@ function TotalExpensesContent() {
                 Gross Expense Breakdown Sub-Ledger
               </h1>
 
-              {/* Branch Dropdown Filter */}
               <div className="relative flex items-center">
                 <MapPin size={12} className="absolute left-2 text-slate-500 pointer-events-none" />
                 <select
@@ -379,48 +357,26 @@ function TotalExpensesContent() {
           </div>
         </header>
 
-        {/* ===== ✅ Ekama Date Filter - Summary + Detail Dekata ===== */}
-        <div className="flex flex-col md:flex-row md:items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3">
+        {/* ===== ✅ Ekama Date Filter - Date witharai ===== */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3">
           <div className="flex items-center gap-2">
             <Calendar size={14} className="text-emerald-400" />
             <span className="text-[11px] font-bold text-slate-200">Filter by Date</span>
             {hasDateFilter && (
               <span className="px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/30 rounded-full text-[10px] font-bold text-emerald-400">
-                {globalDate ? `Date: ${globalDate}` : `${globalFrom || "..."} → ${globalTo || "..."}`}
+                Date: {globalDate}
               </span>
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 flex-1 md:justify-end">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] text-slate-500">Date:</span>
-              <input
-                type="date"
-                value={globalDate}
-                onChange={(e) => { setGlobalDate(e.target.value); setGlobalFrom(""); setGlobalTo(""); }}
-                className="px-2 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-[11px] text-slate-200 outline-none focus:border-emerald-500/40"
-              />
-            </div>
-
-            <span className="text-[10px] text-slate-600">OR</span>
-
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] text-slate-500">From:</span>
-              <input
-                type="date"
-                value={globalFrom}
-                onChange={(e) => { setGlobalFrom(e.target.value); setGlobalDate(""); }}
-                className="px-2 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-[11px] text-slate-200 outline-none focus:border-emerald-500/40"
-              />
-              <span className="text-[10px] text-slate-500">To:</span>
-              <input
-                type="date"
-                value={globalTo}
-                onChange={(e) => { setGlobalTo(e.target.value); setGlobalDate(""); }}
-                className="px-2 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-[11px] text-slate-200 outline-none focus:border-emerald-500/40"
-              />
-            </div>
-
+          <div className="flex flex-wrap items-center gap-2 flex-1 sm:justify-end">
+            <span className="text-[10px] text-slate-500">Date:</span>
+            <input
+              type="date"
+              value={globalDate}
+              onChange={(e) => setGlobalDate(e.target.value)}
+              className="px-2 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-[11px] text-slate-200 outline-none focus:border-emerald-500/40"
+            />
             <button
               onClick={clearDateFilter}
               className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-[11px] font-bold text-slate-300 transition"
@@ -433,7 +389,7 @@ function TotalExpensesContent() {
         {/* ===== 1. Uda Summary Matrix ===== */}
         <section className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/70">
           <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3 text-xs font-semibold">
-            <div className="flex items-center gap-2"><FileSpreadsheet size={14} className="text-emerald-400" /> Infrastructure Financial Auditing Matrix {hasDateFilter && <span className="text-[10px] font-bold text-emerald-400">(Filtered by Date)</span>}</div>
+            <div className="flex items-center gap-2"><FileSpreadsheet size={14} className="text-emerald-400" /> Infrastructure Financial Auditing Matrix {hasDateFilter && <span className="text-[10px] font-bold text-emerald-400">(Filtered: {globalDate})</span>}</div>
             <span className="text-[10px] text-slate-500">{filteredBranches.length} Branches Shown</span>
           </div>
 
@@ -509,7 +465,6 @@ function TotalExpensesContent() {
             ))}
           </div>
 
-          {/* Filters - Date eka methana na, uda global date ekenma */}
           <div className="px-4 pb-4 flex flex-col lg:flex-row gap-3">
             <div className="flex flex-wrap gap-1.5">
               {DETAIL_CATEGORIES.map((c) => (
@@ -518,7 +473,7 @@ function TotalExpensesContent() {
             </div>
             <div className="flex flex-1 gap-2 lg:justify-end items-center">
               <span className="text-[10px] text-slate-500 hidden lg:block">
-                {hasDateFilter ? `Showing: ${globalDate || `${globalFrom || "..."} → ${globalTo || "..."}`}` : "Showing: All Dates"}
+                {hasDateFilter ? `Showing: ${globalDate}` : "Showing: All Dates"}
               </span>
               <div className="relative flex-1 lg:max-w-[240px]">
                 <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
