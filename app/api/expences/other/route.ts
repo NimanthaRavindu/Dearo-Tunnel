@@ -14,13 +14,42 @@ export async function POST(req: NextRequest) {
       balance 
     } = body;
 
-    // Basic Validation
     if (!branchId || !expenseType || !expenseDate) {
       return NextResponse.json(
         { message: "CRITICAL_VALIDATION_FAULT: Missing key metrics for ledger ingestion." },
         { status: 400 }
       );
     }
+
+    const crusherLoadQuantity: number | null =
+      body.crusher_load_quantity ?? body.crusherLoadQuantity ?? null;
+    const outsideLoadQuantity: number | null =
+      body.outside_load_quantity ?? body.outsideLoadQuantity ?? null;
+    const totalCubeQuantity: number | null =
+      body.total_cube_quantity ?? body.totalCubeQuantity ?? null;
+    const unitCubeQuantity: number | null =
+      body.unit_cube_quantity ??
+      body.unitCubeQuantity ??
+      body.unit_cube_price ??
+      body.unitCubePrice ??
+      null;
+
+    const isCubeExpense = ["Loading Expenses", "Breker Expenses", "Breaker Expenses"].includes(String(expenseType));
+
+  
+    const crusherVal: number | null = isCubeExpense ? Number(crusherLoadQuantity) || 0 : null;
+    const outsideVal: number | null = isCubeExpense ? Number(outsideLoadQuantity) || 0 : null;
+
+  
+    const totalCubeVal: number | null = isCubeExpense
+      ? (totalCubeQuantity != null ? Number(totalCubeQuantity) || 0 : (crusherVal ?? 0) + (outsideVal ?? 0))
+      : null;
+
+    const unitCubeVal: number | null = isCubeExpense ? Number(unitCubeQuantity) || 0 : null;
+
+    const finalPayable = isCubeExpense && (!totalPayable || Number(totalPayable) === 0) && totalCubeVal != null
+      ? (totalCubeVal ?? 0) * (unitCubeVal ?? 0)
+      : Number(totalPayable) || 0;
 
     const insertQuery = `
       INSERT INTO other_expenses (
@@ -29,17 +58,25 @@ export async function POST(req: NextRequest) {
         expense_date, 
         total_payable, 
         total_paid, 
-        balance
-      ) VALUES (?, ?, ?, ?, ?, ?)
+        balance,
+        crusher_load_quantity,
+        outside_load_quantity,
+        total_cube_quantity,
+        unit_cube_quantity
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const values = [
       Number(branchId),
       String(expenseType),
       String(expenseDate),
-      Number(totalPayable) || 0,
+      finalPayable,
       Number(totalPaid) || 0,
       Number(balance) || 0,
+      crusherVal,
+      outsideVal,
+      totalCubeVal,
+      unitCubeVal,
     ];
 
     await db.query(insertQuery, values);
@@ -68,7 +105,17 @@ export async function GET(request: Request) {
     }
 
     const [rows]: any = await db.query(
-      `SELECT id, reason, total_payable, total_paid, balance, DATE_FORMAT(expense_date, '%Y-%m-%d') AS expense_date 
+      `SELECT 
+        id, 
+        reason, 
+        total_payable, 
+        total_paid, 
+        balance, 
+        DATE_FORMAT(expense_date, '%Y-%m-%d') AS expense_date,
+        crusher_load_quantity,
+        outside_load_quantity,
+        total_cube_quantity,
+        unit_cube_quantity
        FROM other_expenses 
        WHERE branch_id = ? 
        ORDER BY id DESC`,
