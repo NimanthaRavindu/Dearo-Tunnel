@@ -1,7 +1,7 @@
 "use client";
 import React, { Suspense, useCallback, useEffect, useState, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Coins, FileSpreadsheet, Fuel, RefreshCw, MapPin, X, Search } from "lucide-react";
+import { ArrowLeft, Coins, FileSpreadsheet, Fuel, RefreshCw, MapPin, X, Search, Download, Boxes, Calendar, Building2, FileText } from "lucide-react";
 import { ExpenseFilters } from "@/components/ExpenseFilters";
 
 interface BranchExpense {
@@ -27,6 +27,34 @@ interface FilterItem {
   balance?: number;
 }
 
+// ✅ NEW: Detail table ekata
+interface DetailRow {
+  id: number | string;
+  branch_id: number | string;
+  branchName: string;
+  branchCode: string;
+  category: "Salary" | "Sales" | "Capital" | "Other" | "Diesel";
+  reason: string;
+  expense_date: string;
+  total_payable: number;
+  total_paid: number;
+  balance: number;
+  crusher_load_quantity?: number | null;
+  outside_load_quantity?: number | null;
+  total_cube_quantity?: number | null;
+  unit_cube_quantity?: number | null;
+}
+
+const DETAIL_CATEGORIES = ["All", "Salary", "Sales", "Capital", "Other", "Diesel"] as const;
+
+const CAT_STYLE: Record<string, string> = {
+  Salary: "bg-slate-500/10 text-slate-300 border-slate-500/30",
+  Sales: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30",
+  Capital: "bg-amber-500/10 text-amber-400 border-amber-500/30",
+  Other: "bg-purple-500/10 text-purple-400 border-purple-500/30",
+  Diesel: "bg-cyan-500/10 text-cyan-400 border-cyan-500/30",
+};
+
 const formatCurrency = (value: unknown) =>
   Number(value || 0).toLocaleString("en-US", {
     minimumFractionDigits: 2,
@@ -50,6 +78,14 @@ function TotalExpensesContent() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchText, setSearchText] = useState("");
+
+  // ✅ NEW: Detail table states
+  const [detailRows, setDetailRows] = useState<DetailRow[]>([]);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailCategory, setDetailCategory] = useState<string>("All");
+  const [detailSearch, setDetailSearch] = useState("");
+  const [detailFrom, setDetailFrom] = useState("");
+  const [detailTo, setDetailTo] = useState("");
 
   const fetchExpenseBreakdown = useCallback(async () => {
     try {
@@ -83,6 +119,24 @@ function TotalExpensesContent() {
 
   useEffect(() => { fetchExpenseBreakdown(); }, [fetchExpenseBreakdown]);
 
+  // ✅ NEW: Detail rows ganna - /api/expences/all eken
+  const fetchDetailRows = useCallback(async () => {
+    setDetailLoading(true);
+    try {
+      const branchParam = selectedBranchId ? selectedBranchId : "all";
+      const res = await fetch(`/api/expences/all?branchId=${branchParam}`, { cache: "no-store" });
+      if (!res.ok) throw new Error("detail fetch failed");
+      const data = await res.json();
+      setDetailRows(Array.isArray(data) ? data : []);
+    } catch {
+      setDetailRows([]);
+    } finally {
+      setDetailLoading(false);
+    }
+  }, [selectedBranchId]);
+
+  useEffect(() => { fetchDetailRows(); }, [fetchDetailRows]);
+
   const updateFilter = (key: string, value?: string) => {
     const params = new URLSearchParams(searchParams.toString());
     if (value) params.set(key, value);
@@ -91,7 +145,7 @@ function TotalExpensesContent() {
     router.push(`/dashboard/total-expenses${query ? `?${query}` : ""}`);
   };
 
-  // === NEW: Branch filter logic ===
+  // === Branch filter logic ===
   const filteredBranches = useMemo(() => {
     let result = branches;
     if (selectedBranchId) {
@@ -116,6 +170,47 @@ function TotalExpensesContent() {
       Number(branch.diesel_expenses || 0),
     0,
   );
+
+  // ✅ NEW: Detail filter
+  const filteredDetail = useMemo(() => {
+    return detailRows.filter((r) => {
+      if (detailCategory !== "All" && r.category !== detailCategory) return false;
+      if (detailFrom && r.expense_date < detailFrom) return false;
+      if (detailTo && r.expense_date > detailTo) return false;
+      if (detailSearch) {
+        const s = detailSearch.toLowerCase();
+        if (
+          !String(r.reason || "").toLowerCase().includes(s) &&
+          !String(r.branchName || "").toLowerCase().includes(s) &&
+          !String(r.expense_date || "").includes(s)
+        ) return false;
+      }
+      return true;
+    });
+  }, [detailRows, detailCategory, detailFrom, detailTo, detailSearch]);
+
+  const detailTotals = useMemo(() => filteredDetail.reduce((a, r) => ({
+    payable: a.payable + (Number(r.total_payable) || 0),
+    paid: a.paid + (Number(r.total_paid) || 0),
+    balance: a.balance + (Number(r.balance) || 0),
+    cubes: a.cubes + (Number(r.total_cube_quantity) || 0),
+  }), { payable: 0, paid: 0, balance: 0, cubes: 0 }), [filteredDetail]);
+
+  const exportCSV = () => {
+    const head = "Date,Branch,Category,Reason,Crusher,Outside,Total Cube,Unit Cube,Payable,Paid,Balance";
+    const body = filteredDetail.map((r) => [r.expense_date, `"${r.branchName}"`, r.category, `"${r.reason}"`, r.crusher_load_quantity ?? "", r.outside_load_quantity ?? "", r.total_cube_quantity ?? "", r.unit_cube_quantity ?? "", r.total_payable, r.total_paid, r.balance].join(",")).join("\n");
+    const blob = new Blob([head + "\n" + body], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "total-expenses-detail.csv";
+    a.click();
+  };
+
+  const handleRefreshAll = () => {
+    setRefreshing(true);
+    fetchExpenseBreakdown();
+    fetchDetailRows();
+  };
 
   if (loading) return <Loading text="Compiling Expense Ledger Sheets..." />;
 
@@ -206,7 +301,7 @@ function TotalExpensesContent() {
 
             <button
               type="button"
-              onClick={() => { setRefreshing(true); fetchExpenseBreakdown(); }}
+              onClick={handleRefreshAll}
               disabled={refreshing}
               className="rounded-lg border border-slate-800 bg-slate-900 p-2 text-slate-400 hover:text-white"
             >
@@ -224,6 +319,7 @@ function TotalExpensesContent() {
           </div>
         </header>
 
+        {/* ===== 1. Uda Summary Matrix - Oya thibba eka wenasak na ===== */}
         <section className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/70">
           <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3 text-xs font-semibold">
             <div className="flex items-center gap-2"><FileSpreadsheet size={14} className="text-emerald-400" /> Infrastructure Financial Auditing Matrix</div>
@@ -268,6 +364,119 @@ function TotalExpensesContent() {
                   })
                 )}
               </tbody>
+            </table>
+          </div>
+        </section>
+
+        {/* ===== 2. NEW: Detail Table - Siyalu Records Wenama ===== */}
+        <section className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/70">
+          {/* Header */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-md text-emerald-400"><FileText size={15} /></div>
+              <div>
+                <h2 className="text-xs font-bold tracking-wide text-slate-100 uppercase">Total Expenses - All Records</h2>
+                <p className="text-[10px] text-slate-500">Salary • Sales • Capital • Other • Diesel - siyalu records ekama table ekaka</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-mono text-slate-500">{filteredDetail.length} Records</span>
+              <button onClick={exportCSV} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-[11px] font-bold text-white transition"><Download size={12} /> Export CSV</button>
+            </div>
+          </div>
+
+          {/* Summary Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4">
+            {[
+              { label: "Total Payable", value: detailTotals.payable, cls: "text-white", suffix: "LKR " },
+              { label: "Total Paid", value: detailTotals.paid, cls: "text-emerald-400", suffix: "LKR " },
+              { label: "Total Balance", value: detailTotals.balance, cls: "text-amber-400", suffix: "LKR " },
+              { label: "Total Cubes", value: detailTotals.cubes, cls: "text-cyan-400", suffix: "" },
+            ].map((c) => (
+              <div key={c.label} className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl">
+                <p className="text-[9px] font-bold tracking-widest text-slate-500 uppercase">{c.label}</p>
+                <p className={`text-[14px] font-black font-mono mt-1 ${c.cls}`}>{c.suffix}{formatCurrency(c.value)}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Filters */}
+          <div className="px-4 pb-4 flex flex-col lg:flex-row gap-3">
+            <div className="flex flex-wrap gap-1.5">
+              {DETAIL_CATEGORIES.map((c) => (
+                <button key={c} onClick={() => setDetailCategory(c)} className={`px-3 py-1.5 rounded-full text-[11px] font-bold border transition ${detailCategory === c ? "bg-emerald-600 border-emerald-500 text-white" : "bg-slate-950 border-slate-800 text-slate-400 hover:text-white"}`}>{c}</button>
+              ))}
+            </div>
+            <div className="flex flex-1 gap-2 lg:justify-end">
+              <div className="relative flex-1 lg:max-w-[240px]">
+                <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                <input value={detailSearch} onChange={(e) => setDetailSearch(e.target.value)} placeholder="Search reason / branch / date..." className="w-full pl-7 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-[11px] outline-none focus:border-emerald-500/40" />
+              </div>
+              <input type="date" value={detailFrom} onChange={(e) => setDetailFrom(e.target.value)} className="px-2 py-2 bg-slate-950 border border-slate-800 rounded-lg text-[11px] text-slate-300" />
+              <input type="date" value={detailTo} onChange={(e) => setDetailTo(e.target.value)} className="px-2 py-2 bg-slate-950 border border-slate-800 rounded-lg text-[11px] text-slate-300" />
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="overflow-x-auto px-4 pb-4">
+            <table className="w-full min-w-[950px] border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-slate-800 text-[9px] uppercase text-slate-400">
+                  <th className="px-3 py-2 text-left"><span className="inline-flex items-center gap-1"><Calendar size={11} /> Date</span></th>
+                  <th className="px-3 py-2 text-left"><span className="inline-flex items-center gap-1"><Building2 size={11} /> Branch</span></th>
+                  <th className="px-3 py-2 text-left">Category</th>
+                  <th className="px-3 py-2 text-left">Reason</th>
+                  <th className="px-3 py-2 text-left"><span className="inline-flex items-center gap-1"><Boxes size={11} /> Cube Details</span></th>
+                  <th className="px-3 py-2 text-right">Payable</th>
+                  <th className="px-3 py-2 text-right">Paid</th>
+                  <th className="px-3 py-2 text-right">Balance</th>
+                  <th className="px-3 py-2 text-right">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/50">
+                {detailLoading ? (
+                  <tr><td colSpan={9} className="py-8 text-center text-slate-500">Loading records...</td></tr>
+                ) : filteredDetail.length === 0 ? (
+                  <tr><td colSpan={9} className="py-8 text-center text-slate-500">No expense records found. <span className="text-slate-600">/api/expences/all API eka hadala thiyenawada balanna.</span></td></tr>
+                ) : filteredDetail.map((r) => {
+                  const isCube = r.total_cube_quantity != null;
+                  const paidFull = Number(r.balance) <= 0;
+                  return (
+                    <tr key={`${r.category}-${r.id}`} className="hover:bg-slate-800/40 transition">
+                      <td className="px-3 py-2.5 font-mono text-[11px] text-slate-300 whitespace-nowrap">{r.expense_date}</td>
+                      <td className="px-3 py-2.5">
+                        <p className="text-[11px] font-semibold text-slate-200">{r.branchName}</p>
+                        {r.branchCode && <p className="text-[10px] font-mono text-slate-500">({r.branchCode})</p>}
+                      </td>
+                      <td className="px-3 py-2.5"><span className={`px-2 py-1 rounded-full text-[10px] font-bold border ${CAT_STYLE[r.category] || ""}`}>{r.category}</span></td>
+                      <td className="px-3 py-2.5 text-slate-200">{r.reason}</td>
+                      <td className="px-3 py-2.5">
+                        {isCube ? (
+                          <div className="text-[11px] font-mono leading-4">
+                            <p className="text-slate-300">Crusher: <span className="text-white">{Number(r.crusher_load_quantity || 0).toFixed(2)}</span> • Outside: <span className="text-white">{Number(r.outside_load_quantity || 0).toFixed(2)}</span></p>
+                            <p className="text-emerald-400 font-bold">Total: {Number(r.total_cube_quantity).toFixed(2)} × {Number(r.unit_cube_quantity || 0).toFixed(2)}</p>
+                          </div>
+                        ) : <span className="text-slate-600">—</span>}
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-mono text-[11px] font-semibold text-slate-200">{formatCurrency(r.total_payable)}</td>
+                      <td className="px-3 py-2.5 text-right font-mono text-[11px] text-emerald-400">{formatCurrency(r.total_paid)}</td>
+                      <td className="px-3 py-2.5 text-right font-mono text-[11px] font-bold text-amber-400">{formatCurrency(r.balance)}</td>
+                      <td className="px-3 py-2.5 text-right"><span className={`px-2 py-1 rounded-full text-[10px] font-bold ${paidFull ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-400"}`}>{paidFull ? "PAID" : "PENDING"}</span></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              {filteredDetail.length > 0 && (
+                <tfoot>
+                  <tr className="border-t-2 border-slate-700 font-mono text-[11px] font-black">
+                    <td colSpan={5} className="px-3 py-2.5 text-right text-slate-300 uppercase">Grand Total ({filteredDetail.length} Records)</td>
+                    <td className="px-3 py-2.5 text-right text-white">LKR {formatCurrency(detailTotals.payable)}</td>
+                    <td className="px-3 py-2.5 text-right text-emerald-400">LKR {formatCurrency(detailTotals.paid)}</td>
+                    <td className="px-3 py-2.5 text-right text-amber-400">LKR {formatCurrency(detailTotals.balance)}</td>
+                    <td />
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
         </section>
