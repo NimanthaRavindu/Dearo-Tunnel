@@ -27,18 +27,26 @@ export async function GET(request: NextRequest) {
        FROM diesel_expenses WHERE branch_id =?`, [branchId]
     );
 
-    const [stockRows] = await connection.execute(
-      `SELECT COALESCE(total_diesel,0) AS totalDiesel, COALESCE(total_amount,0) AS totalAmount
-       FROM diesel_stock WHERE branch_id =? LIMIT 1`, [branchId]
-    );
+    // ✅ FIX - diesel_stock table eka nathnam / fail unath okkoma fail wenne na
+    let stock = { totalDiesel: 0, totalAmount: 0 };
+    try {
+      const [stockRows] = await connection.execute(
+        `SELECT COALESCE(total_diesel,0) AS totalDiesel, COALESCE(total_amount,0) AS totalAmount
+         FROM diesel_stock WHERE branch_id =? LIMIT 1`, [branchId]
+      );
+      stock = (stockRows as any[])[0] || { totalDiesel: 0, totalAmount: 0 };
+    } catch (stockError) {
+      console.error("DIESEL STOCK QUERY FAILED - table nathnam meka thamai hethuwa:", stockError);
+      // Stock na kiyala expenses fail karanne na - 0 kiyala danawa
+      stock = { totalDiesel: 0, totalAmount: 0 };
+    }
 
     const expense = (expenseRows as any[])[0] || {};
-    const stock = (stockRows as any[])[0] || {};
 
     const dieselUsed = Number(expense.dieselUsed || 0);
     const amountUsed = Number(expense.amountUsed || 0);
-    const totalDiesel = Number(stock.totalDiesel || 0);
-    const totalAmount = Number(stock.totalAmount || 0);
+    const totalDiesel = Number((stock as any).totalDiesel || 0);
+    const totalAmount = Number((stock as any).totalAmount || 0);
 
     const remainingDiesel = Math.max(0, totalDiesel - dieselUsed);
     const remainingBalance = Math.max(0, totalAmount - amountUsed);
@@ -48,18 +56,19 @@ export async function GET(request: NextRequest) {
       summary: {
         dieselUsed,
         amountUsed,
-        totalDiesel, // Initial Add kalama Diesel Used card ekata add wenawa
-        totalAmount, // Initial Add kalama Total Amount card ekata add wenawa
-        remainingDiesel, // Submit kalama adu wenawa
+        totalDiesel,
+        totalAmount,
+        remainingDiesel,
         remainingBalance,
         initialDieselStock: totalDiesel,
         initialTotalAmount: totalAmount,
         isInitialSet: totalDiesel > 0,
       },
     });
-  } catch (error) {
-    console.error("GET DIESEL ERROR:", error);
-    return NextResponse.json({ error: "Failed to fetch diesel expenses" }, { status: 500 });
+  } catch (error: any) {
+    // ✅ Asal error eka log eke pennanawa + frontend ekatauth pennanawa
+    console.error("GET DIESEL ERROR:", error?.message || error, error);
+    return NextResponse.json({ error: "Failed to fetch diesel expenses", detail: String(error?.message || error) }, { status: 500 });
   } finally { if (connection) await connection.end(); }
 }
 
