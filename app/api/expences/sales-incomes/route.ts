@@ -35,7 +35,6 @@ function formatDate(value: unknown): string {
   return String(value ?? "").slice(0, 10);
 }
 
-// ✅ Adaala tikata witharai - DB eken price gannawa
 async function getPriceFromDB(name: string, branchId: string | null): Promise<number | null> {
   try {
     const [rows]: any = await db.query(
@@ -43,7 +42,6 @@ async function getPriceFromDB(name: string, branchId: string | null): Promise<nu
       [name, branchId]
     );
     if (!rows || rows.length === 0) return null;
-    // Vegetable nam NULL - price enne na, Aggregate nam price eka enawa
     if (rows[0].unit_price == null) return null;
     return Number(rows[0].unit_price);
   } catch { return null; }
@@ -56,7 +54,7 @@ export async function GET(request: Request) {
     const requestedBranchId = searchParams.get("branch_id");
     const branchId = requestedBranchId || extractBranchId(request);
     const filterDate = searchParams.get("date");
-    const filterName = searchParams.get("name"); // ✅ Aluth - Name filter
+    const filterName = searchParams.get("name");
     const isSummary = searchParams.get("summary") === "true";
     const isDetailed = searchParams.get("detailed") === "true";
 
@@ -64,7 +62,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: false, error: "Invalid date format. Use YYYY-MM-DD." }, { status: 400 });
     }
 
-    // --- SUMMARY MODE (total-incomes + view-entries) ---
+    // --- SUMMARY MODE ---
     if (isSummary) {
       if (isDetailed || recordId) {
         const where: string[] = [];
@@ -75,31 +73,33 @@ export async function GET(request: Request) {
         if (recordId) { where.push("s.id =?"); params.push(recordId); }
 
         let q = `
-          SELECT s.id, s.bill_number, s.name, s.amount, s.credit, s.discount, s.unit_price, s.quantity, s.date, s.branch_id, s.created_at, b.branch_name
+          SELECT s.id, s.bill_number, s.name, s.amount, s.credit, s.paid, s.discount, s.unit_price, s.quantity, s.date, s.branch_id, s.created_at, b.branch_name
           FROM sales_incomes s LEFT JOIN branch b ON s.branch_id = b.id
         `;
         if (where.length) q += ` WHERE ${where.join(" AND ")}`;
         q += ` ORDER BY s.date DESC, s.id DESC`;
 
         const [rows]: any = await db.query(q, params);
-        let grandTotal = 0; let grandCredit = 0; let grandDiscount = 0;
+        let grandTotal = 0; let grandCredit = 0; let grandDiscount = 0; let grandPaid = 0;
         const data = rows.map((r: any) => {
           const amount = Number(r.amount || 0);
           const discount = Number(r.discount ?? 0);
-          const paid = Number(r.credit || 0);
+          const paid = Number(r.paid ?? 0);
+          const credit = Number(r.credit ?? 0);
           grandTotal += amount;
-          grandCredit += paid;
+          grandCredit += credit;
           grandDiscount += discount;
+          grandPaid += paid;
           return {
             id: String(r.id),
             bill_number: r.bill_number || "",
             billNumber: r.bill_number || "",
             name: r.name || "",
             amount,
-            credit: paid,
-            paid,
-            discount,
-            balance: amount - discount - paid,
+            credit, // ✅ Wenama - Ithuru gana
+            paid,   // ✅ Wenama - Gewapu gana
+            discount, // ✅ Wenama - Adu kirima
+            balance: credit,
             unit_price: Number(r.unit_price || 0),
             quantity: Number(r.quantity || 0),
             date: formatDate(r.date),
@@ -109,7 +109,7 @@ export async function GET(request: Request) {
             description: r.name || `Income #${r.id}`,
           };
         });
-        return NextResponse.json({ success: true, grandTotal, grandCredit, grandDiscount, data }, { status: 200 });
+        return NextResponse.json({ success: true, grandTotal, grandCredit, grandDiscount, grandPaid, data }, { status: 200 });
       }
 
       const where: string[] = [];
@@ -121,7 +121,7 @@ export async function GET(request: Request) {
       let summaryQuery = `
         SELECT s.branch_id, COALESCE(b.branch_name, CONCAT('Branch #', s.branch_id)) as branch_name,
                DATE(s.date) as date,
-               SUM(s.amount) as total_amount, SUM(s.credit) as total_credit, SUM(s.discount) as total_discount,
+               SUM(s.amount) as total_amount, SUM(s.credit) as total_credit, SUM(s.paid) as total_paid, SUM(s.discount) as total_discount,
                COUNT(s.id) as entries_count, MAX(s.date) as last_date
         FROM sales_incomes s LEFT JOIN branch b ON s.branch_id = b.id
       `;
@@ -129,11 +129,12 @@ export async function GET(request: Request) {
       summaryQuery += ` GROUP BY s.branch_id, b.branch_name, DATE(s.date) ORDER BY DATE(s.date) DESC, total_amount DESC`;
 
       const [rows]: any = await db.query(summaryQuery, params);
-      let grandTotal = 0; let grandCredit = 0; let grandDiscount = 0;
+      let grandTotal = 0; let grandCredit = 0; let grandDiscount = 0; let grandPaid = 0;
       const data = rows.map((row: any) => {
         grandTotal += Number(row.total_amount || 0);
         grandCredit += Number(row.total_credit || 0);
         grandDiscount += Number(row.total_discount || 0);
+        grandPaid += Number(row.total_paid || 0);
         return {
           branchId: String(row.branch_id),
           branchName: row.branch_name,
@@ -143,6 +144,8 @@ export async function GET(request: Request) {
           total_amount: Number(row.total_amount || 0),
           totalCredit: Number(row.total_credit || 0),
           total_credit: Number(row.total_credit || 0),
+          totalPaid: Number(row.total_paid || 0),
+          total_paid: Number(row.total_paid || 0),
           totalDiscount: Number(row.total_discount || 0),
           total_discount: Number(row.total_discount || 0),
           entriesCount: Number(row.entries_count || 0),
@@ -151,7 +154,7 @@ export async function GET(request: Request) {
           date: formatDate(row.date || row.last_date),
         };
       });
-      return NextResponse.json({ success: true, grandTotal, grandCredit, grandDiscount, data }, { status: 200 });
+      return NextResponse.json({ success: true, grandTotal, grandCredit, grandDiscount, grandPaid, data }, { status: 200 });
     }
 
     // --- NORMAL BRANCH FETCH ---
@@ -159,7 +162,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: false, error: "Branch ID is missing." }, { status: 400 });
     }
 
-    let query = `SELECT id, bill_number, name, amount, credit, discount, unit_price, quantity, date, branch_id, created_at FROM sales_incomes WHERE branch_id =?`;
+    let query = `SELECT id, bill_number, name, amount, credit, paid, discount, unit_price, quantity, date, branch_id, created_at FROM sales_incomes WHERE branch_id =?`;
     const qParams: any[] = [branchId];
     if (recordId) { query += " AND id =?"; qParams.push(recordId); }
     if (filterDate) { query += " AND DATE(date) =?"; qParams.push(filterDate); }
@@ -169,17 +172,18 @@ export async function GET(request: Request) {
     const data = rows.map((row: any) => {
       const amount = Number(row.amount || 0);
       const discount = Number(row.discount ?? 0);
-      const paid = Number(row.credit || 0);
+      const paid = Number(row.paid ?? 0);
+      const credit = Number(row.credit ?? 0);
       return {
         id: String(row.id),
         bill_number: row.bill_number || "",
         billNumber: row.bill_number || "",
         name: row.name || "",
         amount,
-        credit: paid,
-        paid,
-        discount,
-        balance: amount - discount - paid,
+        credit, // ✅ Ithuru gana
+        paid,   // ✅ Gewapu gana
+        discount, // ✅ Adu kirima
+        balance: credit,
         unit_price: Number(row.unit_price || 0),
         quantity: Number(row.quantity || 0),
         date: formatDate(row.date),
@@ -205,8 +209,6 @@ export async function POST(request: Request) {
     let unit_price = Number(body.unit_price ?? 0);
     const quantity = Number(body.quantity ?? 0);
 
-    // ✅ Adaala tikata witharai - Unit Price eka ewwe nathnam DB eken gannawa
-    // Vegetable nam DB eke NULL nisa meka skip wenawa, manual price eka thamai ganna ona
     if ((!Number.isFinite(unit_price) || unit_price <= 0) && name) {
       const dbPrice = await getPriceFromDB(name, branchId);
       if (dbPrice != null) unit_price = dbPrice;
@@ -216,8 +218,15 @@ export async function POST(request: Request) {
     if (!Number.isFinite(amount) || amount === 0) {
       amount = unit_price * quantity;
     }
+
+    // ✅ Wen wenama - 3ma
     const discount = Number(body.discount ?? 0);
-    const credit = Number(body.paid ?? body.credit ?? 0);
+    const paid = Number(body.paid ?? 0);
+    // ✅ Credit = Amount - Discount - Paid - Frontend eken awoth eka gannawa, nathnam hadanawa
+    let credit = Number(body.credit);
+    if (!Number.isFinite(credit)) {
+      credit = Math.max(0, amount - discount - paid);
+    }
 
     if (!branchId || !name || !date) {
       return NextResponse.json({ success: false, error: "Missing required fields: branch_id, name, date." }, { status: 400 });
@@ -233,11 +242,13 @@ export async function POST(request: Request) {
     if (!Number.isFinite(amount) || amount < 0) return NextResponse.json({ success: false, error: "Amount must be valid." }, { status: 400 });
     if (!Number.isFinite(discount) || discount < 0) return NextResponse.json({ success: false, error: "Discount must be valid." }, { status: 400 });
     if (discount > amount) return NextResponse.json({ success: false, error: "Discount cannot be greater than the total amount." }, { status: 400 });
+    if (!Number.isFinite(paid) || paid < 0) return NextResponse.json({ success: false, error: "Paid must be valid." }, { status: 400 });
+    if (paid > amount - discount) return NextResponse.json({ success: false, error: "Paid cannot be greater than Amount - Discount." }, { status: 400 });
     if (!Number.isFinite(credit) || credit < 0) return NextResponse.json({ success: false, error: "Credit must be valid." }, { status: 400 });
-    if (credit > amount - discount) return NextResponse.json({ success: false, error: "Paid cannot be greater than Amount - Discount." }, { status: 400 });
 
-    const insertQuery = `INSERT INTO sales_incomes (branch_id, bill_number, name, unit_price, quantity, amount, credit, discount, date) VALUES (?,?,?,?,?,?,?,?,?)`;
-    const [result]: any = await db.query(insertQuery, [branchId, bill_number || null, name, unit_price, quantity, amount, credit, discount, date]);
+    // ✅ paid column ekath ekka save karanawa
+    const insertQuery = `INSERT INTO sales_incomes (branch_id, bill_number, name, unit_price, quantity, amount, credit, paid, discount, date) VALUES (?,?,?,?,?,?,?,?,?,?)`;
+    const [result]: any = await db.query(insertQuery, [branchId, bill_number || null, name, unit_price, quantity, amount, credit, paid, discount, date]);
     return NextResponse.json({ success: true, insertId: result.insertId, message: "Sales income added successfully." }, { status: 201 });
   } catch (error) {
     console.error("Database insert error:", error);
