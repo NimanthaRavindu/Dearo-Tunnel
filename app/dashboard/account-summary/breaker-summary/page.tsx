@@ -1,12 +1,21 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
-import {Calendar, Fuel, Wallet, Receipt, Building2, Scale,Loader2, Search, Download, Users, ArrowDownRight, ArrowUpRight, Banknote, UserRound} from "lucide-react";
+import {
+  Calendar, Fuel, Wallet, Receipt, Building2, Scale,
+  Loader2, Search, Download, Users, Banknote, UserRound,
+} from "lucide-react";
 
 const fmt = (n: number) => `LKR ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
 const numeric = (v: any) => Number(v ?? 0) || 0;
 const isBreker = (s: any) => {
   const t = String(s || "").toLowerCase();
   return t.includes("breker") || t.includes("breaker");
+};
+// ✅ SALARY WALATA - Employee Name eken balanawa - Reason eken newei
+// Salary API eken enne: employee_name, reason="Monthly structural salary payout", total_payable
+// Reason eka hamotama ekai - e nisa employee_name == "Breker operator" kiyala balanna ona
+const isBrekerSalary = (r: any) => {
+  return isBreker(r.employee_name) || isBreker(r.employeeName) || isBreker(r.name) || isBreker(r.reason);
 };
 
 const fetchJSON = async (url: string) => {
@@ -79,27 +88,27 @@ export default function BreakerSummaryPage() {
   const getBranchKey = (r: any) => String(r._branchId || r.branch_id || "");
   const getDateStr = (r: any) => String(r.expense_date || r.date || "").slice(0, 10);
   const isBranch = (r: any) => branchFilter === "all" || getBranchKey(r) === branchFilter;
-
   const branchOptions = useMemo(() => branches.map((b: any) => ({ id: String(b.id), name: b.branch_name || `Branch ${b.id}` })), [branches]);
 
-  // ✅ CARDS WALATA - DATE NATHUWA, OKKOMA TOTAL - Branch filter witharak
+  // ✅ CARDS - OKKOMA TOTAL - DATE NATHUWA
   const breakerIncomeAll = useMemo(() => (otherExpenses || []).filter(r => {
     if (!r) return false;
-    if (!isBreker(r.reason)) return false;
+    if (!isBreker(r.reason)) return false; // Other eke reason = Breker Expenses
     const ok = !search || String(r.reason || "").toLowerCase().includes(search.toLowerCase()) || getBranchName(r).toLowerCase().includes(search.toLowerCase());
-    return ok && isBranch(r); // Date filter NA - okkoma
+    return ok && isBranch(r);
   }), [otherExpenses, branchFilter, search]);
 
   const breakerDieselAll = useMemo(() => (dieselRows || []).filter(r => {
     if (!r) return false;
-    if (!isBreker(r.machine)) return false;
-    return isBranch(r); // Date filter NA
+    if (!isBreker(r.machine)) return false; // Diesel eke machine = Breker
+    return isBranch(r);
   }), [dieselRows, branchFilter]);
 
+  // ✅ SALARY - Employee Name = Breker operator - Reason eken newei
   const breakerSalaryAll = useMemo(() => (salaryRows || []).filter(r => {
     if (!r) return false;
-    if (!isBreker(r.reason)) return false;
-    return isBranch(r); // Date filter NA
+    if (!isBrekerSalary(r)) return false;
+    return isBranch(r);
   }), [salaryRows, branchFilter]);
 
   const breakerIncomeTotal = useMemo(() => breakerIncomeAll.reduce((t, r) => t + numeric(r.total_payable), 0), [breakerIncomeAll]);
@@ -110,7 +119,7 @@ export default function BreakerSummaryPage() {
   const balance = breakerIncomeTotal - totalUsed;
   const balancePositive = balance >= 0;
 
-  // ✅ TABLES WALATA WITHARAK - DATE WISE - Date picker eken thorapu date eka
+  // ✅ TABLES WITHARAK - DATE WISE
   const breakerIncomeRows = useMemo(() => breakerIncomeAll.filter(r => getDateStr(r) === date), [breakerIncomeAll, date]);
   const breakerDieselRows = useMemo(() => breakerDieselAll.filter(r => getDateStr(r) === date), [breakerDieselAll, date]);
   const breakerSalaryRows = useMemo(() => breakerSalaryAll.filter(r => getDateStr(r) === date), [breakerSalaryAll, date]);
@@ -147,7 +156,7 @@ export default function BreakerSummaryPage() {
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/30"><Banknote size={18} /></span>
               Breaker Summary
             </h1>
-            <p className="mt-1 text-slate-400">Cards - Okkoma Total (All Dates) • Tables - Date Wise ({date})</p>
+            <p className="mt-1 text-slate-400">Cards - Okkoma Total (All Dates) • Tables - Date Wise ({date}) • Salary - Employee Name = Breker operator</p>
           </div>
           <div className="flex gap-2">
             <button onClick={fetchAll} className="rounded-xl bg-amber-500 px-4 py-2.5 font-bold text-black hover:bg-amber-400">Refresh</button>
@@ -168,16 +177,15 @@ export default function BreakerSummaryPage() {
 
         {isLoading ? <div className="flex justify-center py-16 text-slate-400"><Loader2 className="animate-spin" /> Loading...</div> : (
           <>
-            {/* ✅ CARDS - OKKOMA TOTAL - DATE NATHUWA */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.05] p-5">
                 <div className="flex items-center justify-between"><p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase">Breker Income</p><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400"><Wallet size={15} /></span></div>
                 <p className="mt-3 text-2xl font-black text-emerald-400">{fmt(breakerIncomeTotal)}</p>
-                <p className="mt-1 text-[10px] text-slate-500">{breakerIncomeAll.length} records • Breker Expenses - Total Payable • All Dates</p>
+                <p className="mt-1 text-[10px] text-slate-500">{breakerIncomeAll.length} records • All Dates</p>
                 <div className="mt-3 border-t border-white/[0.06] pt-3 space-y-1 text-[11px]">
-                  <p className="flex justify-between text-slate-400"><span>Other - Breker (All Dates)</span><span className="font-black text-white">{fmt(breakerIncomeTotal)}</span></p>
-                  <p className="flex justify-between text-slate-400"><span>Diesel (All Dates)</span><span className="font-bold text-blue-400">- {fmt(dieselTotal)}</span></p>
-                  <p className="flex justify-between text-slate-400"><span>Operator Salary (All Dates)</span><span className="font-bold text-violet-400">- {fmt(salaryTotal)}</span></p>
+                  <p className="flex justify-between text-slate-400"><span>Other - Breker (All)</span><span className="font-black text-white">{fmt(breakerIncomeTotal)}</span></p>
+                  <p className="flex justify-between text-slate-400"><span>Diesel (All)</span><span className="font-bold text-blue-400">- {fmt(dieselTotal)}</span></p>
+                  <p className="flex justify-between text-slate-400"><span>Operator Salary (All)</span><span className="font-bold text-violet-400">- {fmt(salaryTotal)}</span></p>
                 </div>
               </div>
               <div className="rounded-2xl border border-white/[0.06] bg-[#0B1226] p-5">
@@ -188,7 +196,7 @@ export default function BreakerSummaryPage() {
               <div className="rounded-2xl border border-white/[0.06] bg-[#0B1226] p-5">
                 <div className="flex items-center justify-between"><p className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">Operator Salary</p><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/15 text-violet-400"><Users size={15} /></span></div>
                 <p className="mt-3 text-2xl font-black text-violet-400">{fmt(salaryTotal)}</p>
-                <p className="mt-1 text-[10px] text-slate-500">{breakerSalaryAll.length} operators • All Dates</p>
+                <p className="mt-1 text-[10px] text-slate-500">{breakerSalaryAll.length} records • Employee Name = Breker operator • All Dates</p>
               </div>
               <div className={`rounded-2xl border p-5 ${balancePositive ? "border-emerald-500/30 bg-emerald-500/[0.07]" : "border-red-500/30 bg-red-500/[0.07]"}`}>
                 <div className="flex items-center justify-between"><p className="text-[10px] font-bold tracking-widest uppercase text-slate-400">Balance</p><span className={`flex h-8 w-8 items-center justify-center rounded-lg ${balancePositive ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"}`}><Scale size={15} /></span></div>
@@ -206,13 +214,12 @@ export default function BreakerSummaryPage() {
               </div>
             </div>
 
-            {/* ✅ TABLES - DATE WISE WITHARAK */}
             <div className="rounded-2xl border border-emerald-500/20 bg-[#0B1226] p-5">
               <h3 className="flex items-center gap-2 font-bold uppercase tracking-wider"><Receipt size={14} className="text-emerald-400" /> Breker Income - Branch Wise • {date}</h3>
-              <p className="text-[10px] text-slate-500 mt-1">Date Wise - Other Expenses - Breker Expenses - Total Payable</p>
+              <p className="text-[10px] text-slate-500 mt-1">Date Wise</p>
               {branchWiseIncome.length === 0 ? <p className="py-8 text-center text-slate-500">Me date ekata Breker Expenses na.</p> : (
                 <table className="mt-4 w-full text-left">
-                  <thead><tr className="border-b border-white/[0.06] text-[10px] uppercase text-slate-500"><th className="py-3">Date</th><th className="py-3">Branch</th><th className="py-3 text-center">Records</th><th className="py-3 text-right">Breker Income (Total Payable)</th></tr></thead>
+                  <thead><tr className="border-b border-white/[0.06] text-[10px] uppercase text-slate-500"><th className="py-3">Date</th><th className="py-3">Branch</th><th className="py-3 text-center">Records</th><th className="py-3 text-right">Breker Income</th></tr></thead>
                   <tbody>{branchWiseIncome.map(r => (
                     <tr key={r.branchId} className="border-b border-white/[0.04]"><td className="py-3 font-bold">{r.date}</td><td className="py-3"><p className="font-bold flex items-center gap-2"><Building2 size={13} className="text-cyan-400" /> {r.branchName}</p></td><td className="py-3 text-center text-slate-400">{r.count}</td><td className="py-3 text-right font-black text-emerald-400">{fmt(r.total)}</td></tr>
                   ))}</tbody>
@@ -227,13 +234,13 @@ export default function BreakerSummaryPage() {
                 <p className="text-[10px] text-slate-500 mt-1">Date Wise • {date}</p>
                 {breakerIncomeRows.length === 0 ? <p className="py-8 text-center text-slate-500">No data for {date}.</p> : (
                   <table className="mt-4 w-full text-left"><thead><tr className="border-b border-white/[0.06] text-[10px] uppercase text-slate-500"><th className="py-2">Branch / Reason</th><th className="py-2 text-right">Amount</th></tr></thead>
-                    <tbody>{breakerIncomeRows.map((r: any) => <tr key={r.id} className="border-b border-white/[0.04]"><td className="py-2.5"><p className="font-bold">{getBranchName(r)}</p><p className="text-[10px] text-slate-500">{r.reason}</p><p className="text-[10px] text-slate-600">{getDateStr(r)}</p></td><td className="py-2.5 text-right font-black text-emerald-400">{fmt(numeric(r.total_payable))}</td></tr>)}
+                    <tbody>{breakerIncomeRows.map((r: any) => <tr key={r.id} className="border-b border-white/[0.04]"><td className="py-2.5"><p className="font-bold">{getBranchName(r)}</p><p className="text-[10px] text-slate-500">{r.reason}</p></td><td className="py-2.5 text-right font-black text-emerald-400">{fmt(numeric(r.total_payable))}</td></tr>)}
                     </tbody><tfoot><tr className="font-black"><td className="py-3">Total • {date}</td><td className="py-3 text-right text-emerald-400">{fmt(incomeTotalDate)}</td></tr></tfoot></table>
                 )}
               </div>
               <div className="rounded-2xl border border-white/[0.06] bg-[#0B1226] p-5">
                 <h3 className="flex items-center gap-2 font-bold uppercase tracking-wider"><Fuel size={14} className="text-blue-400" /> Breker Diesel</h3>
-                <p className="text-[10px] text-slate-500 mt-1">Date Wise • Machine = Breker • {date}</p>
+                <p className="text-[10px] text-slate-500 mt-1">Date Wise • {date}</p>
                 {breakerDieselRows.length === 0 ? <p className="py-8 text-center text-slate-500">No Breker diesel for {date}.</p> : (
                   <table className="mt-4 w-full text-left"><thead><tr className="border-b border-white/[0.06] text-[10px] uppercase text-slate-500"><th className="py-2">Branch / Machine</th><th className="py-2 text-right">Qty</th><th className="py-2 text-right">Amount</th></tr></thead>
                     <tbody>{breakerDieselRows.map((r: any) => <tr key={r.id} className="border-b border-white/[0.04]"><td className="py-2.5"><p className="font-bold">{getBranchName(r)}</p><p className="text-[10px] text-slate-500">{r.machine}</p></td><td className="py-2.5 text-right">{numeric(r.diesel).toLocaleString()} L</td><td className="py-2.5 text-right font-black text-blue-400">{fmt(numeric(r.payable))}</td></tr>)}
@@ -242,7 +249,7 @@ export default function BreakerSummaryPage() {
               </div>
               <div className="rounded-2xl border border-white/[0.06] bg-[#0B1226] p-5">
                 <h3 className="flex items-center gap-2 font-bold uppercase tracking-wider"><UserRound size={14} className="text-violet-400" /> Operator Salary</h3>
-                <p className="text-[10px] text-slate-500 mt-1">Date Wise • Reason = Breker • {date}</p>
+                <p className="text-[10px] text-slate-500 mt-1">Date Wise • Employee Name = Breker operator • {date}</p>
                 {breakerSalaryRows.length === 0 ? <p className="py-8 text-center text-slate-500">No Breker operator salary for {date}.</p> : (
                   <table className="mt-4 w-full text-left"><thead><tr className="border-b border-white/[0.06] text-[10px] uppercase text-slate-500"><th className="py-2">Branch / Operator</th><th className="py-2 text-right">Amount</th></tr></thead>
                     <tbody>{breakerSalaryRows.map((r: any) => <tr key={r.id} className="border-b border-white/[0.04]"><td className="py-2.5"><p className="font-bold">{getBranchName(r)}</p><p className="text-[10px] text-slate-500">{r.employee_name || "-"} • {r.reason || ""}</p></td><td className="py-2.5 text-right font-black text-violet-400">{fmt(numeric(r.total_payable))}</td></tr>)}
