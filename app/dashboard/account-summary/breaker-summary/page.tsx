@@ -1,9 +1,6 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  Calendar, Fuel, Wallet, Receipt, Building2, Scale,
-  Loader2, Search, Download, Users, Banknote, UserRound, ListChecks, Filter,
-} from "lucide-react";
+import { Calendar, Fuel, Wallet, Receipt, Building2, Scale,Loader2, Search, Download, Users, Banknote, UserRound,} from "lucide-react";
 
 const fmt = (n: number) => `LKR ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
 const numeric = (v: any) => Number(v ?? 0) || 0;
@@ -28,7 +25,7 @@ const fetchJSON = async (url: string) => {
 };
 
 export default function BreakerSummaryPage() {
-  const [date, setDate] = useState("2026-11-14");
+  const [date, setDate] = useState("2026-11-02");
   const [branchFilter, setBranchFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -36,11 +33,6 @@ export default function BreakerSummaryPage() {
   const [dieselRows, setDieselRows] = useState<any[]>([]);
   const [salaryRows, setSalaryRows] = useState<any[]>([]);
   const [branches, setBranches] = useState<any[]>([]);
-
-  // ✅ ALL ENTRIES walata wenama filter - Default okkoma "all" - e nisa okkoma penawa
-  const [allDate, setAllDate] = useState("all");
-  const [allBranch, setAllBranch] = useState("all");
-  const [allType, setAllType] = useState("all");
 
   const fetchAll = async () => {
     setIsLoading(true);
@@ -61,6 +53,7 @@ export default function BreakerSummaryPage() {
       otherResults.forEach((res: any) => { if (res.status === "fulfilled") allOther.push(...res.value); });
       setOtherExpenses(allOther);
 
+      // ✅ Diesel route eka branch_id witharai gannawa
       const dieselResults = await Promise.allSettled(
         ids.map((id: any) =>
           fetchJSON(`/api/expences/diesel?branch_id=${encodeURIComponent(id)}`).then((rows: any[]) =>
@@ -93,7 +86,7 @@ export default function BreakerSummaryPage() {
   const isDate = (r: any) => getDateStr(r) === date;
   const branchOptions = useMemo(() => branches.map((b: any) => ({ id: String(b.id), name: b.branch_name || `Branch ${b.id}` })), [branches]);
 
-  // ✅ CARDS - DATE FILTER NA
+  // ✅ CARDS - DATE FILTER NA - TOTAL ONLY
   const breakerIncomeAll = useMemo(() => (otherExpenses || []).filter(r => {
     if (!r) return false;
     if (!isBreker(r.reason)) return false;
@@ -102,6 +95,8 @@ export default function BreakerSummaryPage() {
     return true;
   }), [otherExpenses, branchFilter, search]);
 
+  // ✅ DIESEL - MACHINE FILTER NA - Branch eke diesel okkoma Breker diesel
+  // Diesel table eke machine = Excavator / Crusher wage - Breker kiyala na, e nisa filter karanne na
   const breakerDieselAll = useMemo(() => (dieselRows || []).filter(r => {
     if (!r) return false;
     return isBranch(r);
@@ -121,13 +116,14 @@ export default function BreakerSummaryPage() {
   const balance = breakerIncomeTotal - totalUsed;
   const balancePositive = balance >= 0;
 
-  // ✅ SUMMARY TABLE - DATE + BRANCH FILTER
+  // ✅ TABLE - DATE + BRANCH FILTER
   const breakerIncomeDate = useMemo(() => breakerIncomeAll.filter(r => isDate(r)), [breakerIncomeAll, date]);
   const breakerDieselDate = useMemo(() => breakerDieselAll.filter(r => isDate(r)), [breakerDieselAll, date]);
   const breakerSalaryDate = useMemo(() => breakerSalaryAll.filter(r => isDate(r)), [breakerSalaryAll, date]);
 
   const incomeDateTotal = useMemo(() => breakerIncomeDate.reduce((t, r) => t + numeric(r.total_payable ?? r.amount), 0), [breakerIncomeDate]);
   const dieselDateTotal = useMemo(() => breakerDieselDate.reduce((t, r) => t + numeric(r.payable ?? r.total_payable ?? r.amount), 0), [breakerDieselDate]);
+  const dieselDateQty = useMemo(() => breakerDieselDate.reduce((t, r) => t + numeric(r.diesel ?? r.qty ?? r.quantity), 0), [breakerDieselDate]);
   const salaryDateTotal = useMemo(() => breakerSalaryDate.reduce((t, r) => t + numeric(r.total_payable ?? r.amount ?? r.salary), 0), [breakerSalaryDate]);
   const balanceDateTotal = incomeDateTotal - dieselDateTotal - salaryDateTotal;
   const balanceDatePositive = balanceDateTotal >= 0;
@@ -145,46 +141,6 @@ export default function BreakerSummaryPage() {
     return Array.from(map.values()).map(r => ({ ...r, balance: r.income - r.diesel - r.salary })).sort((a, b) => b.income - a.income);
   }, [breakerIncomeDate, breakerDieselDate, breakerSalaryDate, date]);
 
-  // ✅ ALL ENTRIES - RAW LIST
-  const allEntriesRaw = useMemo(() => {
-    const list: any[] = [];
-    (otherExpenses || []).forEach(r => {
-      if (!r || !isBreker(r.reason)) return;
-      list.push({ _key: `inc-${r.id}-${r._branchId}`, _date: getDateStr(r), _branchId: String(r._branchId || ""), _branchName: getBranchName(r), _type: "Income", _detail: r.reason || "-", _sub: `Other Expense • ID ${r.id}`, _amount: numeric(r.total_payable ?? r.amount), _isPlus: true });
-    });
-    (dieselRows || []).forEach(r => {
-      if (!r) return;
-      list.push({ _key: `diesel-${r.id}-${r._branchId}`, _date: getDateStr(r), _branchId: String(r._branchId || ""), _branchName: getBranchName(r), _type: "Diesel", _detail: r.machine || "-", _sub: `${numeric(r.diesel ?? r.qty ?? 0).toLocaleString()} L • ID ${r.id}`, _amount: numeric(r.payable ?? r.total_payable ?? r.amount), _isPlus: false });
-    });
-    (salaryRows || []).forEach(r => {
-      if (!r || !isBrekerSalary(r)) return;
-      list.push({ _key: `sal-${r.id}-${r._branchId}`, _date: getDateStr(r), _branchId: String(r._branchId || ""), _branchName: getBranchName(r), _type: "Salary", _detail: r.employee_name || r.employeeName || r.name || "-", _sub: `${r.reason || ""} • ID ${r.id}`, _amount: numeric(r.total_payable ?? r.amount ?? r.salary), _isPlus: false });
-    });
-    list.sort((a, b) => String(b._date || "").localeCompare(String(a._date || "")));
-    return list;
-  }, [otherExpenses, dieselRows, salaryRows]);
-
-  // ✅ ALL ENTRIES - FILTERED - Default All = Okkoma penawa
-  const allEntries = useMemo(() => {
-    let list = [...allEntriesRaw];
-    if (allDate !== "all") list = list.filter(r => r._date === allDate);
-    if (allBranch !== "all") list = list.filter(r => r._branchId === allBranch);
-    if (allType !== "all") list = list.filter(r => r._type === allType);
-    if (search) {
-      const s = search.toLowerCase();
-      list = list.filter(r => String(r._detail || "").toLowerCase().includes(s) || String(r._branchName || "").toLowerCase().includes(s) || String(r._type || "").toLowerCase().includes(s));
-    }
-    return list;
-  }, [allEntriesRaw, allDate, allBranch, allType, search]);
-
-  // Date dropdown ekata thiyena dates tika
-  const allDates = useMemo(() => {
-    const set = new Set(allEntriesRaw.map(r => r._date).filter(Boolean));
-    return Array.from(set).sort((a, b) => String(b).localeCompare(String(a)));
-  }, [allEntriesRaw]);
-
-  const resetAllFilter = () => { setAllDate("all"); setAllBranch("all"); setAllType("all"); };
-
   const exportCSV = () => {
     const head = "Date,Branch,Income,Diesel,Operator Salary,Balance";
     const body = [
@@ -193,13 +149,6 @@ export default function BreakerSummaryPage() {
     ].join("\n");
     const blob = new Blob([head + "\n" + body], { type: "text/csv" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `breaker-summary-${date}.csv`; a.click();
-  };
-
-  const exportAllCSV = () => {
-    const head = "Date,Branch,Type,Detail,Amount";
-    const body = allEntries.map(r => [r._date, `"${r._branchName}"`, r._type, `"${String(r._detail || "").replace(/"/g, "")}"`, r._amount].join(",")).join("\n");
-    const blob = new Blob([head + "\n" + body], { type: "text/csv" });
-    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `breaker-all-entries.csv`; a.click();
   };
 
   return (
@@ -211,7 +160,7 @@ export default function BreakerSummaryPage() {
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/30"><Banknote size={18} /></span>
               Breaker Summary
             </h1>
-            <p className="mt-1 text-slate-400">Cards - Total (All Dates) • Summary Table - Date + Branch Filter • {date} • All Entries - Filter karanna puluwan / Nethnam okkoma penawa</p>
+            <p className="mt-1 text-slate-400">Cards - Total (All Dates) • Table - Date + Branch Filter • {date} • Salary - Employee Name = Breker operator</p>
           </div>
           <div className="flex gap-2">
             <button onClick={fetchAll} className="rounded-xl bg-amber-500 px-4 py-2.5 font-bold text-black hover:bg-amber-400">Refresh</button>
@@ -307,71 +256,6 @@ export default function BreakerSummaryPage() {
                       <td className={`py-4 text-right ${balanceDatePositive ? "text-emerald-400" : "text-red-400"}`}>{fmt(balanceDateTotal)}</td>
                     </tr>
                   </tfoot>
-                </table>
-                </div>
-              )}
-            </div>
-
-            {/* ✅ ALL ENTRIES - FILTER KARANNATH PULUWAN / NETHNAM OKKOMA */}
-            <div className="rounded-2xl border border-white/[0.06] bg-[#0B1226] p-5">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h3 className="flex items-center gap-2 font-bold uppercase tracking-wider"><ListChecks size={14} className="text-amber-400" /> All Entries</h3>
-                  <p className="text-[10px] text-slate-500 mt-1">Default - Okkoma penawa ({allEntriesRaw.length} entries) • Filter thoruwoth eka witharak penawa • Showing {allEntries.length}</p>
-                </div>
-                <div className="flex gap-2">
-                  <button onClick={resetAllFilter} className="rounded-xl bg-slate-800 px-3 py-2 font-bold text-white ring-1 ring-white/10 hover:bg-slate-700">Clear Filter</button>
-                  <button onClick={exportAllCSV} className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 font-bold text-black hover:bg-slate-200"><Download size={14} /> Export All</button>
-                </div>
-              </div>
-
-              {/* Filter Row - All Entries ekata witharak */}
-              <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-white/[0.06] bg-slate-950/60 p-3">
-                <span className="flex items-center gap-1.5 text-[10px] font-black tracking-widest text-slate-400 uppercase"><Filter size={13} /> Filter:</span>
-                <select value={allDate} onChange={e => setAllDate(e.target.value)} className="rounded-xl bg-slate-950 px-3 py-2.5 text-slate-200 ring-1 ring-white/10 focus:outline-none">
-                  <option value="all">All Dates</option>
-                  {allDates.map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
-                <select value={allBranch} onChange={e => setAllBranch(e.target.value)} className="rounded-xl bg-slate-950 px-3 py-2.5 text-slate-200 ring-1 ring-white/10 focus:outline-none">
-                  <option value="all">All Branches</option>
-                  {branchOptions.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                </select>
-                <select value={allType} onChange={e => setAllType(e.target.value)} className="rounded-xl bg-slate-950 px-3 py-2.5 text-slate-200 ring-1 ring-white/10 focus:outline-none">
-                  <option value="all">All Types</option>
-                  <option value="Income">Income Only</option>
-                  <option value="Diesel">Diesel Only</option>
-                  <option value="Salary">Salary Only</option>
-                </select>
-                {(allDate !== "all" || allBranch !== "all" || allType !== "all") && (
-                  <span className="rounded-full bg-amber-500/15 px-2.5 py-1 text-[10px] font-black text-amber-400 ring-1 ring-amber-500/30">Filter On • {allEntries.length} / {allEntriesRaw.length}</span>
-                )}
-              </div>
-
-              {allEntries.length === 0 ? <p className="py-8 text-center text-slate-500">Me filter ekata entries na. Clear Filter karanna.</p> : (
-                <div className="overflow-x-auto">
-                <table className="mt-4 w-full text-left min-w-[720px]">
-                  <thead>
-                    <tr className="border-b border-white/[0.06] text-[10px] uppercase text-slate-500">
-                      <th className="py-3">Date</th>
-                      <th className="py-3">Branch</th>
-                      <th className="py-3">Type</th>
-                      <th className="py-3">Detail</th>
-                      <th className="py-3 text-right">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {allEntries.map(r => (
-                      <tr key={r._key} className="border-b border-white/[0.04]">
-                        <td className="py-3 font-bold whitespace-nowrap">{r._date}</td>
-                        <td className="py-3"><p className="font-bold flex items-center gap-2"><Building2 size={13} className="text-cyan-400" /> {r._branchName}</p></td>
-                        <td className="py-3">
-                          <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${r._type === "Income" ? "bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30" : r._type === "Diesel" ? "bg-blue-500/15 text-blue-400 ring-1 ring-blue-500/30" : "bg-violet-500/15 text-violet-400 ring-1 ring-violet-500/30"}`}>{r._type}</span>
-                        </td>
-                        <td className="py-3"><p className="font-bold">{r._detail}</p><p className="text-[10px] text-slate-500">{r._sub}</p></td>
-                        <td className={`py-3 text-right font-black ${r._isPlus ? "text-emerald-400" : r._type === "Diesel" ? "text-blue-400" : "text-violet-400"}`}>{r._isPlus ? "+ " : "- "}{fmt(r._amount)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
                 </table>
                 </div>
               )}
