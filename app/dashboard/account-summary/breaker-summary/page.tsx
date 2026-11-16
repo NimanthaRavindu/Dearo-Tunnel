@@ -39,7 +39,7 @@ export default function BreakerSummaryPage() {
     setIsLoading(true);
     try {
       // ✅ FIX 1 - Branch API eka oya Other Expenses page eke wage /api/branch
-      const branchList: any[] = await fetchJSON(`/api/branch`);
+      const branchList: any[] = await fetchJSON(`/api/branches`);
       setBranches(branchList);
 
       // ✅ FIX 2 - Other Expenses API eka oya page eke wage /api/expences/other?branchId=...
