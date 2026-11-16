@@ -3,8 +3,7 @@
 import React, { Suspense, useEffect, useState, useMemo } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-// ✅ FIX 1: User, Phone, Car icons add kala - Credit Customer penna
-import { ArrowLeft, Calendar, CheckCircle2, DollarSign, FileText, Loader2, Plus, X, Hash, Tag, Eye, Receipt, BadgePercent, CreditCard, Search, Download, User, Phone, Car } from "lucide-react";
+import { ArrowLeft, Calendar, CheckCircle2, DollarSign, FileText, Loader2, Plus, X, Hash, Tag, Eye, Receipt, BadgePercent, CreditCard, Search, User, Phone, Car } from "lucide-react";
 
 interface SalesIncomeItem {
   id: string;
@@ -13,9 +12,9 @@ interface SalesIncomeItem {
   name: string;
   date: string;
   amount: number;
+  discount: number;
+  paid: number;
   credit: number;
-  paid?: number;
-  discount?: number;
   unit_price?: number;
   quantity?: number;
   branch_id?: string;
@@ -28,7 +27,8 @@ interface SalesIncomeFormData {
   date: string;
   unit_price: string;
   quantity: string;
-  credit: string;
+  discount: string;
+  paid: string;
 }
 
 interface ProductPrice {
@@ -103,29 +103,48 @@ function SalesIncomesContent() {
     date: getToday(),
     unit_price: "",
     quantity: "",
-    credit: "",
+    discount: "",
+    paid: "",
   });
 
+  // ✅ Amount = Unit Price x Quantity
   const calculatedAmount = useMemo(() => {
     const up = Number(formData.unit_price) || 0;
     const qty = Number(formData.quantity) || 0;
     return up * qty;
   }, [formData.unit_price, formData.quantity]);
 
+  // ✅ Discount - User type karana eka - Wenama column ekak
   const calculatedDiscount = useMemo(() => {
-    const paid = Number(formData.credit || 0);
-    return calculatedAmount - paid;
-  }, [calculatedAmount, formData.credit]);
+    return Number(formData.discount || 0);
+  }, [formData.discount]);
+
+  // ✅ Payable = Amount - Discount
+  const calculatedPayable = useMemo(() => {
+    return Math.max(0, calculatedAmount - calculatedDiscount);
+  }, [calculatedAmount, calculatedDiscount]);
+
+  // ✅ Paid - User type karana eka - Wenama column ekak
+  const calculatedPaid = useMemo(() => {
+    return Number(formData.paid || 0);
+  }, [formData.paid]);
+
+  // ✅ Credit = Payable - Paid - Wenama column ekak - Ithuru gana
+  const calculatedCredit = useMemo(() => {
+    return Math.max(0, calculatedPayable - calculatedPaid);
+  }, [calculatedPayable, calculatedPaid]);
 
   const filteredIncomes = incomes.filter((item) => {
     const matchDate = filterDate ? item.date.slice(0, 10) === filterDate : true;
     const matchName = filterName ? item.name?.toLowerCase().includes(filterName.toLowerCase()) : true;
     return matchDate && matchName;
   });
+
+  // ✅ Total tika - Okkoma wen wenama
   const totalAmount = filteredIncomes.reduce((total, item) => total + Number(item.amount || 0), 0);
-  const totalPaid = filteredIncomes.reduce((total, item) => total + Number(item.credit ?? item.paid ?? 0), 0);
   const totalDiscount = filteredIncomes.reduce((total, item) => total + Number(item.discount ?? 0), 0);
-  const totalCredit = totalDiscount;
+  const totalPaid = filteredIncomes.reduce((total, item) => total + Number(item.paid ?? 0), 0);
+  const totalCredit = filteredIncomes.reduce((total, item) => total + Number(item.credit ?? 0), 0);
 
   const fetchSalesIncomes = async () => {
     if (!branchId) return;
@@ -163,7 +182,6 @@ function SalesIncomesContent() {
 
   useEffect(() => { if (branchId) { fetchSalesIncomes(); fetchProducts(); fetchCredits(); } }, [branchId]);
 
-  // ✅ FIX 2: Bill Number eken Credit eka hoyanawa - Sales Ledger eke penna
   const getCreditByBill = (billNo?: string) => {
     if (!billNo || billNo === "-") return undefined;
     return credits.find((c) => String(c.bill_number || "").trim().toLowerCase() === String(billNo).trim().toLowerCase());
@@ -220,11 +238,12 @@ function SalesIncomesContent() {
       bill_number: formData.bill_number.trim() || "",
       product_name: formData.name.trim(),
       date: formData.date,
-      total_amount: String(calculatedAmount),
-      paid_amount: String(Number(formData.credit || 0)),
-      credit_amount: String(calculatedDiscount > 0 ? calculatedDiscount : 0),
+      total_amount: String(calculatedPayable),
+      paid_amount: String(calculatedPaid),
+      credit_amount: String(calculatedCredit),
       quantity: formData.quantity,
       unit_price: formData.unit_price,
+      discount: String(calculatedDiscount),
     });
     router.push(`/dashboard/branches/${branchId}/add-expenses/sales_incomes/credit?${q.toString()}`);
   };
@@ -235,16 +254,19 @@ function SalesIncomesContent() {
     const name = formData.name.trim();
     const unit_price = Number(formData.unit_price);
     const quantity = Number(formData.quantity);
-    const credit = Number(formData.credit || 0);
-    const amount = calculatedAmount;
     const discount = calculatedDiscount;
+    const paid = calculatedPaid;
+    const amount = calculatedAmount;
+    const credit = calculatedCredit;
 
     if (!branchId || !name || !formData.date || !formData.unit_price || !formData.quantity) {
       setErrorMessage("Please complete Name, Date, Unit Price and Quantity.");
       return;
     }
-    if (credit < 0) { setErrorMessage("Paid cannot be less than 0."); return; }
-    if (credit > amount) { setErrorMessage("Paid cannot be greater than Amount."); return; }
+    if (discount < 0) { setErrorMessage("Discount cannot be less than 0."); return; }
+    if (discount > amount) { setErrorMessage("Discount cannot be greater than Amount."); return; }
+    if (paid < 0) { setErrorMessage("Paid cannot be less than 0."); return; }
+    if (paid > calculatedPayable) { setErrorMessage("Paid cannot be greater than Payable (Amount - Discount)."); return; }
 
     try {
       setIsSubmitting(true);
@@ -252,13 +274,13 @@ function SalesIncomesContent() {
       const response = await fetch("/api/expences/sales-incomes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ branch_id: branchId, bill_number: bill_number || null, name, date: formData.date, unit_price, quantity, amount, credit, paid: credit, discount }),
+        body: JSON.stringify({ branch_id: branchId, bill_number: bill_number || null, name, date: formData.date, unit_price, quantity, amount, discount, paid, credit }),
       });
       const result = await response.json();
       if (!response.ok || !result.success) throw new Error(result.error || "Failed to save sales income.");
-      setFormData({ bill_number: "", name: "", date: getToday(), unit_price: "", quantity: "", credit: "" });
-      setSuccessMessage(`Saved: ${quantity} x LKR ${unit_price.toFixed(2)} = LKR ${amount.toFixed(2)} | Discount LKR ${discount.toFixed(2)} | Paid LKR ${credit.toFixed(2)}`);
-      window.setTimeout(() => setSuccessMessage(""), 3000);
+      setFormData({ bill_number: "", name: "", date: getToday(), unit_price: "", quantity: "", discount: "", paid: "" });
+      setSuccessMessage(`Saved: Amount LKR ${amount.toFixed(2)} | Discount LKR ${discount.toFixed(2)} | Payable LKR ${calculatedPayable.toFixed(2)} | Paid LKR ${paid.toFixed(2)} | Credit LKR ${credit.toFixed(2)}`);
+      window.setTimeout(() => setSuccessMessage(""), 4000);
       await fetchSalesIncomes();
       await fetchCredits();
     } catch (error) {
@@ -330,8 +352,10 @@ function SalesIncomesContent() {
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Tag size={12} />Unit Price (LKR) - Auto</label><input type="number" step="0.01" min="0" name="unit_price" value={formData.unit_price} onChange={handleInputChange} required placeholder="Auto / Manual" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Hash size={12} />Quantity</label><input type="number" step="0.01" min="0.01" name="quantity" value={formData.quantity} onChange={handleInputChange} required placeholder="0" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><DollarSign size={12} />Amount (LKR) - Auto</label><div className="w-full px-3.5 py-2.5 bg-slate-900/80 border border-slate-800 rounded-xl text-emerald-400 font-black text-sm">LKR {calculatedAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
-            <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><BadgePercent size={12} />Discount / Credit (LKR) - Auto</label><div className="w-full px-3.5 py-2.5 bg-slate-900/80 border border-amber-500/30 rounded-xl text-amber-400 font-black text-sm">LKR {calculatedDiscount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
-            <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><DollarSign size={12} />Paid (LKR)</label><input type="number" step="0.01" min="0" name="credit" value={formData.credit} onChange={handleInputChange} placeholder="0.00" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
+            <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><BadgePercent size={12} />Discount (LKR)</label><input type="number" step="0.01" min="0" name="discount" value={formData.discount} onChange={handleInputChange} placeholder="0.00" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
+            <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><DollarSign size={12} />Payable (LKR) - Auto</label><div className="w-full px-3.5 py-2.5 bg-slate-900/80 border border-slate-800 rounded-xl text-slate-200 font-black text-sm">LKR {calculatedPayable.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
+            <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><DollarSign size={12} />Paid (LKR)</label><input type="number" step="0.01" min="0" name="paid" value={formData.paid} onChange={handleInputChange} placeholder="0.00" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
+            <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><CreditCard size={12} />Credit (LKR) - Auto</label><div className="w-full px-3.5 py-2.5 bg-slate-900/80 border border-amber-500/30 rounded-xl text-amber-400 font-black text-sm">LKR {calculatedCredit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
             <div className="sm:col-span-2 lg:col-span-4 flex justify-end gap-2 mt-2">
               <button type="button" onClick={handleOpenCreditPage} className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-amber-500/20 active:scale-95"><CreditCard size={14} /><span>Add Credit</span></button>
               <button type="submit" disabled={isSubmitting} className="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-red-600/20 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">{isSubmitting ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}<span>{isSubmitting ? "Saving..." : "Save Income Entry"}</span></button>
@@ -358,21 +382,20 @@ function SalesIncomesContent() {
           {!isLoading && filteredIncomes.length > 0 && (
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Amount</p><p className="mt-1 text-lg font-black text-red-400">LKR {totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
-              <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4"><p className="text-[10px] uppercase tracking-wider text-amber-400">Total Credit / Discount</p><p className="mt-1 text-lg font-black text-amber-400">LKR {totalCredit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
+              <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Discount</p><p className="mt-1 text-lg font-black text-amber-400">LKR {totalDiscount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
               <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Paid</p><p className="mt-1 text-lg font-black text-emerald-400">LKR {totalPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
-              <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Credit Records</p><p className="mt-1 text-lg font-black text-slate-100">{filteredCredits.length} • <span className="text-red-400 text-sm">{creditOverdueCount} Overdue</span></p></div>
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4"><p className="text-[10px] uppercase tracking-wider text-amber-400">Total Credit</p><p className="mt-1 text-lg font-black text-amber-400">LKR {totalCredit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
             </div>
           )}
 
           {isLoading ? <div className="py-16 text-center flex flex-col items-center justify-center space-y-2"><Loader2 size={24} className="text-red-500 animate-spin" /><p className="text-slate-400">Loading branch entries...</p></div> : filteredIncomes.length === 0 ? <div className="py-16 text-center text-slate-500">{filterDate || filterName ? `No records found ${filterName ? `for "${filterName}"` : ""} ${filterDate ? `on ${filterDate}` : ""}.` : "No sales income records found for this branch."}</div> : (
             <div className="overflow-x-auto rounded-xl border border-slate-800 bg-[#090e1a]/50">
               <table className="w-full text-left border-collapse">
-                {/* ✅ FIX: Credit Customer column eka add kala */}
-                <thead><tr className="border-b border-slate-800 bg-slate-900/60 text-[10px] font-bold text-slate-400 uppercase tracking-wider"><th className="py-3 px-4">Bill No</th><th className="py-3 px-4">Name</th><th className="py-3 px-4">Date</th><th className="py-3 px-4 text-right">Unit Price</th><th className="py-3 px-4 text-right">Qty</th><th className="py-3 px-4 text-right">Amount (LKR)</th><th className="py-3 px-4 text-right">Discount / Credit (LKR)</th><th className="py-3 px-4 text-right">Paid (LKR)</th><th className="py-3 px-4">Credit Customer</th><th className="py-3 px-4 text-center">Action</th></tr></thead>
+                <thead><tr className="border-b border-slate-800 bg-slate-900/60 text-[10px] font-bold text-slate-400 uppercase tracking-wider"><th className="py-3 px-4">Bill No</th><th className="py-3 px-4">Name</th><th className="py-3 px-4">Date</th><th className="py-3 px-4 text-right">Unit Price</th><th className="py-3 px-4 text-right">Qty</th><th className="py-3 px-4 text-right">Amount (LKR)</th><th className="py-3 px-4 text-right">Discount (LKR)</th><th className="py-3 px-4 text-right">Paid (LKR)</th><th className="py-3 px-4 text-right">Credit (LKR)</th><th className="py-3 px-4">Credit Customer</th><th className="py-3 px-4 text-center">Action</th></tr></thead>
                 <tbody className="divide-y divide-slate-800/50 text-xs">
                   {filteredIncomes.map((item) => {
                     const billNo = item.bill_number || item.billNumber || "-";
-                    const credit = getCreditByBill(billNo);
+                    const creditRec = getCreditByBill(billNo);
                     return (
                       <tr key={item.id} className="hover:bg-slate-900/70 transition-colors">
                         <td className="py-3 px-4 font-bold text-slate-200">{billNo}</td>
@@ -382,14 +405,14 @@ function SalesIncomesContent() {
                         <td className="py-3 px-4 text-right text-slate-300">{Number(item.quantity || 0)}</td>
                         <td className="py-3 px-4 text-right font-black text-red-400">LKR {Number(item.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                         <td className="py-3 px-4 text-right font-black text-amber-400">LKR {Number(item.discount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                        <td className="py-3 px-4 text-right font-black text-emerald-400">LKR {Number(item.credit ?? item.paid ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                        {/* ✅ Credit Page eke Customer eka - Bill No eken match wela */}
+                        <td className="py-3 px-4 text-right font-black text-emerald-400">LKR {Number(item.paid ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                        <td className="py-3 px-4 text-right font-black text-amber-400">LKR {Number(item.credit ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                         <td className="py-3 px-4">
-                          {credit ? (
+                          {creditRec ? (
                             <div>
-                              <p className="font-bold text-amber-300 flex items-center gap-1"><User size={11} /> {credit.customer_name}</p>
-                              <p className="text-[10px] text-slate-400 flex items-center gap-1"><Phone size={10} /> {credit.contact_number}</p>
-                              <p className="text-[10px] text-slate-400 flex items-center gap-1"><Car size={10} /> {credit.vehicle_number}</p>
+                              <p className="font-bold text-amber-300 flex items-center gap-1"><User size={11} /> {creditRec.customer_name}</p>
+                              <p className="text-[10px] text-slate-400 flex items-center gap-1"><Phone size={10} /> {creditRec.contact_number}</p>
+                              <p className="text-[10px] text-slate-400 flex items-center gap-1"><Car size={10} /> {creditRec.vehicle_number}</p>
                             </div>
                           ) : (
                             <span className="text-slate-600">-</span>
@@ -428,7 +451,6 @@ function SalesIncomesContent() {
             ) : (
               <div className="overflow-x-auto rounded-xl border border-slate-800 bg-[#090e1a]/50">
                 <table className="w-full text-left border-collapse">
-                  {/* ✅ FIX: Created Date + Total/Paid columns add kala */}
                   <thead><tr className="border-b border-slate-800 bg-slate-900/60 text-[10px] font-bold text-slate-400 uppercase tracking-wider"><th className="py-3 px-4">Bill No</th><th className="py-3 px-4">Customer</th><th className="py-3 px-4">Contact</th><th className="py-3 px-4">Vehicle</th><th className="py-3 px-4">Created Date</th><th className="py-3 px-4">Promise Date</th><th className="py-3 px-4">Status</th><th className="py-3 px-4 text-right">Credit Amount</th><th className="py-3 px-4 text-right">Total / Paid</th><th className="py-3 px-4 text-center">Action</th></tr></thead>
                   <tbody className="divide-y divide-slate-800/50 text-xs">
                     {filteredCredits.map((r) => {
