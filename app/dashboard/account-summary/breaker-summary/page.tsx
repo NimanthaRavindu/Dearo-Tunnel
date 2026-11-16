@@ -11,9 +11,6 @@ const isBreker = (s: any) => {
   const t = String(s || "").toLowerCase();
   return t.includes("breker") || t.includes("breaker");
 };
-// ✅ SALARY WALATA - Employee Name eken balanawa - Reason eken newei
-// Salary API eken enne: employee_name, reason="Monthly structural salary payout", total_payable
-// Reason eka hamotama ekai - e nisa employee_name == "Breker operator" kiyala balanna ona
 const isBrekerSalary = (r: any) => {
   return isBreker(r.employee_name) || isBreker(r.employeeName) || isBreker(r.name) || isBreker(r.reason);
 };
@@ -90,21 +87,19 @@ export default function BreakerSummaryPage() {
   const isBranch = (r: any) => branchFilter === "all" || getBranchKey(r) === branchFilter;
   const branchOptions = useMemo(() => branches.map((b: any) => ({ id: String(b.id), name: b.branch_name || `Branch ${b.id}` })), [branches]);
 
-  // ✅ CARDS - OKKOMA TOTAL - DATE NATHUWA
   const breakerIncomeAll = useMemo(() => (otherExpenses || []).filter(r => {
     if (!r) return false;
-    if (!isBreker(r.reason)) return false; // Other eke reason = Breker Expenses
+    if (!isBreker(r.reason)) return false;
     const ok = !search || String(r.reason || "").toLowerCase().includes(search.toLowerCase()) || getBranchName(r).toLowerCase().includes(search.toLowerCase());
     return ok && isBranch(r);
   }), [otherExpenses, branchFilter, search]);
 
   const breakerDieselAll = useMemo(() => (dieselRows || []).filter(r => {
     if (!r) return false;
-    if (!isBreker(r.machine)) return false; // Diesel eke machine = Breker
+    if (!isBreker(r.machine)) return false;
     return isBranch(r);
   }), [dieselRows, branchFilter]);
 
-  // ✅ SALARY - Employee Name = Breker operator - Reason eken newei
   const breakerSalaryAll = useMemo(() => (salaryRows || []).filter(r => {
     if (!r) return false;
     if (!isBrekerSalary(r)) return false;
@@ -119,7 +114,6 @@ export default function BreakerSummaryPage() {
   const balance = breakerIncomeTotal - totalUsed;
   const balancePositive = balance >= 0;
 
-  // ✅ TABLES WITHARAK - DATE WISE
   const breakerIncomeRows = useMemo(() => breakerIncomeAll.filter(r => getDateStr(r) === date), [breakerIncomeAll, date]);
   const breakerDieselRows = useMemo(() => breakerDieselAll.filter(r => getDateStr(r) === date), [breakerDieselAll, date]);
   const breakerSalaryRows = useMemo(() => breakerSalaryAll.filter(r => getDateStr(r) === date), [breakerSalaryAll, date]);
@@ -139,6 +133,19 @@ export default function BreakerSummaryPage() {
     });
     return Array.from(map.values()).sort((a, b) => b.total - a.total);
   }, [breakerIncomeRows, date]);
+
+  const debugSalary = useMemo(() => {
+    return (salaryRows || []).slice(0, 3).map((r: any) => JSON.stringify(r));
+  }, [salaryRows]);
+
+  const debugSalaryNames = useMemo(() => {
+    const names = new Map<string, number>();
+    (salaryRows || []).forEach((r: any) => {
+      const n = String(r.employee_name || r.name || "(no name)") + " | reason=" + String(r.reason || "");
+      names.set(n, (names.get(n) || 0) + 1);
+    });
+    return Array.from(names.entries()).slice(0, 20);
+  }, [salaryRows]);
 
   const exportCSV = () => {
     const head = "Date,Branch,Breker Income (Total Payable),Records";
@@ -177,6 +184,23 @@ export default function BreakerSummaryPage() {
 
         {isLoading ? <div className="flex justify-center py-16 text-slate-400"><Loader2 className="animate-spin" /> Loading...</div> : (
           <>
+            <div className="rounded-2xl border border-red-500/40 bg-red-500/[0.05] p-5">
+              <p className="font-black text-red-400 uppercase tracking-widest">DEBUG - Salary API eken ena data</p>
+              <p className="mt-2 text-slate-200">Total Salary Rows Fetched: <b className="text-white">{salaryRows.length}</b> | Breker Filter Wuna: <b className="text-white">{breakerSalaryAll.length}</b> | Salary Total: <b className="text-white">{fmt(salaryTotal)}</b></p>
+              <p className="mt-3 text-[11px] font-bold text-slate-400 uppercase">Employee Names - okkoma:</p>
+              <div className="mt-2 space-y-1">
+                {debugSalaryNames.length === 0 ? <p className="text-slate-500">Salary rows 0 - API eken data enne na</p> :
+                  debugSalaryNames.map(([n, c]: any) => (
+                    <p key={n} className="flex justify-between border-b border-white/[0.05] py-1"><span className="text-slate-300">{n}</span><span className="font-bold text-white">{c} rows</span></p>
+                  ))
+                }
+              </div>
+              <p className="mt-3 text-[11px] font-bold text-slate-400 uppercase">First 3 rows raw JSON:</p>
+              {debugSalary.length === 0 ? <p className="text-slate-500">No rows</p> :
+                debugSalary.map((s: any, i: number) => <p key={i} className="mt-1 text-[11px] text-slate-300 break-all">{s}</p>)
+              }
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.05] p-5">
                 <div className="flex items-center justify-between"><p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase">Breker Income</p><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400"><Wallet size={15} /></span></div>
