@@ -1,22 +1,13 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  Calendar, Fuel, Wallet, Receipt, Building2, Scale,
-  Loader2, Search, Download, Users, Banknote, UserRound,
-} from "lucide-react";
+import { Calendar, Fuel, Wallet, Receipt, Building2, Scale,Loader2, Search, Download, Users, Banknote, UserRound,} from "lucide-react";
 
 const fmt = (n: number) => `LKR ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
 const numeric = (v: any) => Number(v ?? 0) || 0;
 const isBreker = (s: any) => {
   const t = String(s || "").toLowerCase();
-  return t.includes("breker") || t.includes("breaker");
+  return t.includes("breker") || t.includes("breaker") || t.includes("braker");
 };
-// ✅ Diesel - machine field eka mona unath allanawa
-const isBrekerDiesel = (r: any) => {
-  return isBreker(r.machine) || isBreker(r.machine_name) || isBreker(r.machineName)
-      || isBreker(r.vehicle) || isBreker(r.equipment) || isBreker(r.description) || isBreker(r.reason);
-};
-// ✅ Salary - employee field eka mona unath allanawa
 const isBrekerSalary = (r: any) => {
   return isBreker(r.employee_name) || isBreker(r.employeeName) || isBreker(r.name) || isBreker(r.reason) || isBreker(r.description) || isBreker(r.employee);
 };
@@ -31,15 +22,6 @@ const fetchJSON = async (url: string) => {
     if (j && Array.isArray(j.data)) return j.data;
     return [];
   } catch { return []; }
-};
-
-// ✅ Param waradi nam fallback - branchId -> branch_id -> param nathuwa
-const fetchWithFallback = async (base: string, id: any) => {
-  let rows = await fetchJSON(`${base}?branchId=${encodeURIComponent(id)}`);
-  if (rows.length > 0) return rows;
-  rows = await fetchJSON(`${base}?branch_id=${encodeURIComponent(id)}`);
-  if (rows.length > 0) return rows;
-  return rows;
 };
 
 export default function BreakerSummaryPage() {
@@ -62,7 +44,7 @@ export default function BreakerSummaryPage() {
 
       const otherResults = await Promise.allSettled(
         ids.map((id: any) =>
-          fetchWithFallback(`/api/expences/other`, id).then((rows: any[]) =>
+          fetchJSON(`/api/expences/other?branchId=${encodeURIComponent(id)}`).then((rows: any[]) =>
             rows.map((r: any) => ({ ...r, _branchId: id, _branchName: getName(id) }))
           )
         )
@@ -71,9 +53,10 @@ export default function BreakerSummaryPage() {
       otherResults.forEach((res: any) => { if (res.status === "fulfilled") allOther.push(...res.value); });
       setOtherExpenses(allOther);
 
+      // ✅ Diesel route eka branch_id witharai gannawa
       const dieselResults = await Promise.allSettled(
         ids.map((id: any) =>
-          fetchWithFallback(`/api/expences/diesel`, id).then((rows: any[]) =>
+          fetchJSON(`/api/expences/diesel?branch_id=${encodeURIComponent(id)}`).then((rows: any[]) =>
             rows.map((r: any) => ({ ...r, _branchId: id, _branchName: getName(id) }))
           )
         )
@@ -84,7 +67,7 @@ export default function BreakerSummaryPage() {
 
       const salaryResults = await Promise.allSettled(
         ids.map((id: any) =>
-          fetchWithFallback(`/api/expences/salary`, id).then((rows: any[]) =>
+          fetchJSON(`/api/expences/salary?branchId=${encodeURIComponent(id)}`).then((rows: any[]) =>
             rows.map((r: any) => ({ ...r, _branchId: id, _branchName: getName(id) }))
           )
         )
@@ -112,9 +95,10 @@ export default function BreakerSummaryPage() {
     return true;
   }), [otherExpenses, branchFilter, search]);
 
+  // ✅ DIESEL - MACHINE FILTER NA - Branch eke diesel okkoma Breker diesel
+  // Diesel table eke machine = Excavator / Crusher wage - Breker kiyala na, e nisa filter karanne na
   const breakerDieselAll = useMemo(() => (dieselRows || []).filter(r => {
     if (!r) return false;
-    if (!isBrekerDiesel(r)) return false;
     return isBranch(r);
   }), [dieselRows, branchFilter]);
 
