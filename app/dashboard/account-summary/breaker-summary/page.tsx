@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Calendar, Fuel, Wallet, Receipt, Building2, Scale,
-  Loader2, Search, Download, Users, Banknote, UserRound, ListChecks, Filter, X,
+  Loader2, Search, Download, Users, Banknote, UserRound, ListChecks, Filter,
 } from "lucide-react";
 
 const fmt = (n: number) => `LKR ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
@@ -28,8 +28,7 @@ const fetchJSON = async (url: string) => {
 };
 
 export default function BreakerSummaryPage() {
-  // ✅ FIX 1 - Default "all" - Date filter apply wela na
-  const [date, setDate] = useState("all");
+  const [date, setDate] = useState("2026-11-14");
   const [branchFilter, setBranchFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -38,6 +37,7 @@ export default function BreakerSummaryPage() {
   const [salaryRows, setSalaryRows] = useState<any[]>([]);
   const [branches, setBranches] = useState<any[]>([]);
 
+  // ✅ ALL ENTRIES walata wenama filter - Default okkoma "all" - e nisa okkoma penawa
   const [allDate, setAllDate] = useState("all");
   const [allBranch, setAllBranch] = useState("all");
   const [allType, setAllType] = useState("all");
@@ -90,11 +90,10 @@ export default function BreakerSummaryPage() {
   const getBranchKey = (r: any) => String(r._branchId || r.branch_id || r.branchId || "");
   const getDateStr = (r: any) => String(r.expense_date || r.date || "").slice(0, 10);
   const isBranch = (r: any) => branchFilter === "all" || getBranchKey(r) === branchFilter;
-  // ✅ FIX 2 - "all" nam okkoma, date ekak thoruwoth eka witharak
-  const isDate = (r: any) => date === "all" || getDateStr(r) === date;
+  const isDate = (r: any) => getDateStr(r) === date;
   const branchOptions = useMemo(() => branches.map((b: any) => ({ id: String(b.id), name: b.branch_name || `Branch ${b.id}` })), [branches]);
-  const dateLabel = date === "all" ? "All Dates" : date;
 
+  // ✅ CARDS - DATE FILTER NA
   const breakerIncomeAll = useMemo(() => (otherExpenses || []).filter(r => {
     if (!r) return false;
     if (!isBreker(r.reason)) return false;
@@ -122,6 +121,7 @@ export default function BreakerSummaryPage() {
   const balance = breakerIncomeTotal - totalUsed;
   const balancePositive = balance >= 0;
 
+  // ✅ SUMMARY TABLE - DATE + BRANCH FILTER
   const breakerIncomeDate = useMemo(() => breakerIncomeAll.filter(r => isDate(r)), [breakerIncomeAll, date]);
   const breakerDieselDate = useMemo(() => breakerDieselAll.filter(r => isDate(r)), [breakerDieselAll, date]);
   const breakerSalaryDate = useMemo(() => breakerSalaryAll.filter(r => isDate(r)), [breakerSalaryAll, date]);
@@ -133,20 +133,19 @@ export default function BreakerSummaryPage() {
   const balanceDatePositive = balanceDateTotal >= 0;
 
   const summaryRows = useMemo(() => {
-    const map = new Map<string, { key: string, branchId: string, branchName: string, date: string, income: number, diesel: number, dieselQty: number, salary: number, incomeCount: number, dieselCount: number, salaryCount: number }>();
-    // ✅ FIX 3 - All Dates nam Date + Branch walin group karanawa
+    const map = new Map<string, { branchId: string, branchName: string, date: string, income: number, diesel: number, dieselQty: number, salary: number, incomeCount: number, dieselCount: number, salaryCount: number }>();
     const getRow = (r: any) => {
-      const d = getDateStr(r);
-      const key = date === "all" ? `${d}|${getBranchKey(r)}` : getBranchKey(r);
-      if (!map.has(key)) map.set(key, { key, branchId: getBranchKey(r), branchName: getBranchName(r), date: d, income: 0, diesel: 0, dieselQty: 0, salary: 0, incomeCount: 0, dieselCount: 0, salaryCount: 0 });
+      const key = getBranchKey(r);
+      if (!map.has(key)) map.set(key, { branchId: key, branchName: getBranchName(r), date, income: 0, diesel: 0, dieselQty: 0, salary: 0, incomeCount: 0, dieselCount: 0, salaryCount: 0 });
       return map.get(key)!;
     };
     breakerIncomeDate.forEach(r => { const row = getRow(r); row.income += numeric(r.total_payable ?? r.amount); row.incomeCount += 1; row.branchName = getBranchName(r); });
     breakerDieselDate.forEach(r => { const row = getRow(r); row.diesel += numeric(r.payable ?? r.total_payable ?? r.amount); row.dieselQty += numeric(r.diesel ?? r.qty ?? r.quantity); row.dieselCount += 1; row.branchName = getBranchName(r); });
     breakerSalaryDate.forEach(r => { const row = getRow(r); row.salary += numeric(r.total_payable ?? r.amount ?? r.salary); row.salaryCount += 1; row.branchName = getBranchName(r); });
-    return Array.from(map.values()).map(r => ({ ...r, balance: r.income - r.diesel - r.salary })).sort((a, b) => String(b.date).localeCompare(String(a.date)) || b.income - a.income);
+    return Array.from(map.values()).map(r => ({ ...r, balance: r.income - r.diesel - r.salary })).sort((a, b) => b.income - a.income);
   }, [breakerIncomeDate, breakerDieselDate, breakerSalaryDate, date]);
 
+  // ✅ ALL ENTRIES - RAW LIST
   const allEntriesRaw = useMemo(() => {
     const list: any[] = [];
     (otherExpenses || []).forEach(r => {
@@ -165,6 +164,7 @@ export default function BreakerSummaryPage() {
     return list;
   }, [otherExpenses, dieselRows, salaryRows]);
 
+  // ✅ ALL ENTRIES - FILTERED - Default All = Okkoma penawa
   const allEntries = useMemo(() => {
     let list = [...allEntriesRaw];
     if (allDate !== "all") list = list.filter(r => r._date === allDate);
@@ -177,22 +177,22 @@ export default function BreakerSummaryPage() {
     return list;
   }, [allEntriesRaw, allDate, allBranch, allType, search]);
 
+  // Date dropdown ekata thiyena dates tika
   const allDates = useMemo(() => {
     const set = new Set(allEntriesRaw.map(r => r._date).filter(Boolean));
     return Array.from(set).sort((a, b) => String(b).localeCompare(String(a)));
   }, [allEntriesRaw]);
 
   const resetAllFilter = () => { setAllDate("all"); setAllBranch("all"); setAllType("all"); };
-  const resetTopFilter = () => { setDate("all"); setBranchFilter("all"); };
 
   const exportCSV = () => {
     const head = "Date,Branch,Income,Diesel,Operator Salary,Balance";
     const body = [
       ...summaryRows.map(r => [r.date, `"${r.branchName}"`, r.income, r.diesel, r.salary, r.balance].join(",")),
-      `Total ${dateLabel},,${incomeDateTotal},${dieselDateTotal},${salaryDateTotal},${balanceDateTotal}`
+      `Total ${date},,${incomeDateTotal},${dieselDateTotal},${salaryDateTotal},${balanceDateTotal}`
     ].join("\n");
     const blob = new Blob([head + "\n" + body], { type: "text/csv" });
-    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `breaker-summary-${dateLabel}.csv`; a.click();
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `breaker-summary-${date}.csv`; a.click();
   };
 
   const exportAllCSV = () => {
@@ -211,7 +211,7 @@ export default function BreakerSummaryPage() {
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/30"><Banknote size={18} /></span>
               Breaker Summary
             </h1>
-            <p className="mt-1 text-slate-400">Cards - Total (All Dates) • Summary - {dateLabel} • All Entries - Filter nathnam okkoma penawa</p>
+            <p className="mt-1 text-slate-400">Cards - Total (All Dates) • Summary Table - Date + Branch Filter • {date} • All Entries - Filter karanna puluwan / Nethnam okkoma penawa</p>
           </div>
           <div className="flex gap-2">
             <button onClick={fetchAll} className="rounded-xl bg-amber-500 px-4 py-2.5 font-bold text-black hover:bg-amber-400">Refresh</button>
@@ -220,12 +220,7 @@ export default function BreakerSummaryPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/[0.06] bg-[#0B1226] p-4">
-          <div className="flex items-center gap-2">
-            <Calendar size={14} className="text-slate-400" />
-            <input type="date" value={date === "all" ? "" : date} onChange={e => setDate(e.target.value || "all")} className="rounded-xl bg-slate-950 px-3 py-2.5 text-slate-200 ring-1 ring-white/10 focus:outline-none focus:ring-amber-500/50" />
-            <button onClick={() => setDate("all")} className={`rounded-xl px-3 py-2.5 font-bold ring-1 ${date === "all" ? "bg-amber-500 text-black ring-amber-500" : "bg-slate-950 text-slate-300 ring-white/10 hover:bg-slate-800"}`}>All Dates</button>
-            {date !== "all" && <button onClick={() => setDate("all")} className="flex items-center gap-1 rounded-xl bg-slate-800 px-2 py-2 font-bold text-white ring-1 ring-white/10"><X size={13} /> Clear</button>}
-          </div>
+          <div className="flex items-center gap-2"><Calendar size={14} className="text-slate-400" /><input type="date" value={date} onChange={e => setDate(e.target.value)} className="rounded-xl bg-slate-950 px-3 py-2.5 text-slate-200 ring-1 ring-white/10 focus:outline-none focus:ring-amber-500/50" /></div>
           <div className="flex items-center gap-2"><Building2 size={14} className="text-slate-400" />
             <select value={branchFilter} onChange={e => setBranchFilter(e.target.value)} className="rounded-xl bg-slate-950 px-3 py-2.5 text-slate-200 ring-1 ring-white/10 focus:outline-none">
               <option value="all">All Branches</option>
@@ -233,7 +228,6 @@ export default function BreakerSummaryPage() {
             </select>
           </div>
           <div className="relative flex-1 min-w-[200px]"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" /><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search..." className="w-full rounded-xl bg-slate-950 py-2.5 pl-8 pr-3 ring-1 ring-white/10 focus:outline-none focus:ring-amber-500/50" /></div>
-          {(date !== "all" || branchFilter !== "all") && <button onClick={resetTopFilter} className="rounded-xl bg-slate-800 px-3 py-2.5 font-bold text-white ring-1 ring-white/10">Clear Filter</button>}
         </div>
 
         {isLoading ? <div className="flex justify-center py-16 text-slate-400"><Loader2 className="animate-spin" /> Loading...</div> : (
@@ -276,8 +270,8 @@ export default function BreakerSummaryPage() {
             </div>
 
             <div className="rounded-2xl border border-emerald-500/20 bg-[#0B1226] p-5">
-              <h3 className="flex items-center gap-2 font-bold uppercase tracking-wider"><Receipt size={14} className="text-emerald-400" /> Breaker Summary • {dateLabel}</h3>
-              <p className="text-[10px] text-slate-500 mt-1">{date === "all" ? "Filter nathnam - Okkoma dates tika Date + Branch walin group karala penawa" : "Date + Branch Filter Only"} • Balance = Income - (Diesel + Operator Salary)</p>
+              <h3 className="flex items-center gap-2 font-bold uppercase tracking-wider"><Receipt size={14} className="text-emerald-400" /> Breaker Summary • {date}</h3>
+              <p className="text-[10px] text-slate-500 mt-1">Date + Branch Filter Only • Balance = Income - (Diesel + Operator Salary)</p>
               {summaryRows.length === 0 ? <p className="py-8 text-center text-slate-500">Me date / branch ekata Breker data na.</p> : (
                 <div className="overflow-x-auto">
                 <table className="mt-4 w-full text-left min-w-[720px]">
@@ -293,7 +287,7 @@ export default function BreakerSummaryPage() {
                   </thead>
                   <tbody>
                     {summaryRows.map(r => (
-                      <tr key={r.key} className="border-b border-white/[0.04]">
+                      <tr key={r.branchId} className="border-b border-white/[0.04]">
                         <td className="py-3 font-bold whitespace-nowrap">{r.date}</td>
                         <td className="py-3"><p className="font-bold flex items-center gap-2"><Building2 size={13} className="text-cyan-400" /> {r.branchName}</p><p className="text-[10px] text-slate-500">{r.incomeCount} income • {r.dieselCount} diesel • {r.salaryCount} salary</p></td>
                         <td className="py-3 text-right font-black text-emerald-400">{fmt(r.income)}</td>
@@ -305,8 +299,8 @@ export default function BreakerSummaryPage() {
                   </tbody>
                   <tfoot>
                     <tr className="font-black text-base">
-                      <td className="py-4">Total • {dateLabel}</td>
-                      <td className="py-4 text-slate-400">{summaryRows.length} Rows</td>
+                      <td className="py-4">Total • {date}</td>
+                      <td className="py-4 text-slate-400">{summaryRows.length} Branches</td>
                       <td className="py-4 text-right text-emerald-400">{fmt(incomeDateTotal)}</td>
                       <td className="py-4 text-right text-blue-400">{fmt(dieselDateTotal)}</td>
                       <td className="py-4 text-right text-violet-400">{fmt(salaryDateTotal)}</td>
@@ -318,6 +312,7 @@ export default function BreakerSummaryPage() {
               )}
             </div>
 
+            {/* ✅ ALL ENTRIES - FILTER KARANNATH PULUWAN / NETHNAM OKKOMA */}
             <div className="rounded-2xl border border-white/[0.06] bg-[#0B1226] p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -330,6 +325,7 @@ export default function BreakerSummaryPage() {
                 </div>
               </div>
 
+              {/* Filter Row - All Entries ekata witharak */}
               <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-white/[0.06] bg-slate-950/60 p-3">
                 <span className="flex items-center gap-1.5 text-[10px] font-black tracking-widest text-slate-400 uppercase"><Filter size={13} /> Filter:</span>
                 <select value={allDate} onChange={e => setAllDate(e.target.value)} className="rounded-xl bg-slate-950 px-3 py-2.5 text-slate-200 ring-1 ring-white/10 focus:outline-none">
