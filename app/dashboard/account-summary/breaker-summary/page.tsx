@@ -1,6 +1,9 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
-import { Calendar, Fuel, Wallet, Receipt, Building2, Scale,Loader2, Search, Download, Users, Banknote, UserRound,} from "lucide-react";
+import {
+  Calendar, Fuel, Wallet, Receipt, Building2, Scale,
+  Loader2, Search, Download, Users, Banknote, UserRound,
+} from "lucide-react";
 
 const fmt = (n: number) => `LKR ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
 const numeric = (v: any) => Number(v ?? 0) || 0;
@@ -82,26 +85,32 @@ export default function BreakerSummaryPage() {
   const getBranchKey = (r: any) => String(r._branchId || r.branch_id || "");
   const getDateStr = (r: any) => String(r.expense_date || r.date || "").slice(0, 10);
   const isBranch = (r: any) => branchFilter === "all" || getBranchKey(r) === branchFilter;
+  const isDate = (r: any) => getDateStr(r) === date;
   const branchOptions = useMemo(() => branches.map((b: any) => ({ id: String(b.id), name: b.branch_name || `Branch ${b.id}` })), [branches]);
 
+  // ✅ OKKOMA - THORAPU DATE + BRANCH WALATA WITHARAK
   const breakerIncomeAll = useMemo(() => (otherExpenses || []).filter(r => {
     if (!r) return false;
     if (!isBreker(r.reason)) return false;
-    const ok = !search || String(r.reason || "").toLowerCase().includes(search.toLowerCase()) || getBranchName(r).toLowerCase().includes(search.toLowerCase());
-    return ok && isBranch(r);
-  }), [otherExpenses, branchFilter, search]);
+    if (!isDate(r)) return false;
+    if (!isBranch(r)) return false;
+    if (search && !String(r.reason || "").toLowerCase().includes(search.toLowerCase()) && !getBranchName(r).toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  }), [otherExpenses, branchFilter, search, date]);
 
   const breakerDieselAll = useMemo(() => (dieselRows || []).filter(r => {
     if (!r) return false;
     if (!isBreker(r.machine)) return false;
+    if (!isDate(r)) return false;
     return isBranch(r);
-  }), [dieselRows, branchFilter]);
+  }), [dieselRows, branchFilter, date]);
 
   const breakerSalaryAll = useMemo(() => (salaryRows || []).filter(r => {
     if (!r) return false;
     if (!isBrekerSalary(r)) return false;
+    if (!isDate(r)) return false;
     return isBranch(r);
-  }), [salaryRows, branchFilter]);
+  }), [salaryRows, branchFilter, date]);
 
   const breakerIncomeTotal = useMemo(() => breakerIncomeAll.reduce((t, r) => t + numeric(r.total_payable), 0), [breakerIncomeAll]);
   const dieselQtyAll = useMemo(() => breakerDieselAll.reduce((t, r) => t + numeric(r.diesel), 0), [breakerDieselAll]);
@@ -111,29 +120,27 @@ export default function BreakerSummaryPage() {
   const balance = breakerIncomeTotal - totalUsed;
   const balancePositive = balance >= 0;
 
-  const breakerIncomeRows = useMemo(() => breakerIncomeAll.filter(r => getDateStr(r) === date), [breakerIncomeAll, date]);
-  const breakerDieselRows = useMemo(() => breakerDieselAll.filter(r => getDateStr(r) === date), [breakerDieselAll, date]);
-  const breakerSalaryRows = useMemo(() => breakerSalaryAll.filter(r => getDateStr(r) === date), [breakerSalaryAll, date]);
-
-  const dieselQtyDate = useMemo(() => breakerDieselRows.reduce((t, r) => t + numeric(r.diesel), 0), [breakerDieselRows]);
-  const dieselTotalDate = useMemo(() => breakerDieselRows.reduce((t, r) => t + numeric(r.payable ?? r.amount), 0), [breakerDieselRows]);
-  const salaryTotalDate = useMemo(() => breakerSalaryRows.reduce((t, r) => t + numeric(r.total_payable), 0), [breakerSalaryRows]);
-  const incomeTotalDate = useMemo(() => breakerIncomeRows.reduce((t, r) => t + numeric(r.total_payable), 0), [breakerIncomeRows]);
-
-  const branchWiseIncome = useMemo(() => {
-    const map = new Map<string, { branchId: string, branchName: string, date: string, count: number, total: number }>();
-    breakerIncomeRows.forEach(r => {
+  // ✅ MAIN TABLE - Date + Branch walin group karala
+  // Columns: Date | Branch | Income | Diesel | Operator Salary | Balance
+  const summaryRows = useMemo(() => {
+    const map = new Map<string, { branchId: string, branchName: string, date: string, income: number, diesel: number, dieselQty: number, salary: number, incomeCount: number, dieselCount: number, salaryCount: number }>();
+    const getRow = (r: any) => {
       const key = getBranchKey(r);
-      const cur = map.get(key) || { branchId: key, branchName: getBranchName(r), date, count: 0, total: 0 };
-      cur.count += 1; cur.total += numeric(r.total_payable); cur.branchName = getBranchName(r);
-      map.set(key, cur);
-    });
-    return Array.from(map.values()).sort((a, b) => b.total - a.total);
-  }, [breakerIncomeRows, date]);
+      if (!map.has(key)) map.set(key, { branchId: key, branchName: getBranchName(r), date, income: 0, diesel: 0, dieselQty: 0, salary: 0, incomeCount: 0, dieselCount: 0, salaryCount: 0 });
+      return map.get(key)!;
+    };
+    breakerIncomeAll.forEach(r => { const row = getRow(r); row.income += numeric(r.total_payable); row.incomeCount += 1; row.branchName = getBranchName(r); });
+    breakerDieselAll.forEach(r => { const row = getRow(r); row.diesel += numeric(r.payable ?? r.amount); row.dieselQty += numeric(r.diesel); row.dieselCount += 1; row.branchName = getBranchName(r); });
+    breakerSalaryAll.forEach(r => { const row = getRow(r); row.salary += numeric(r.total_payable); row.salaryCount += 1; row.branchName = getBranchName(r); });
+    return Array.from(map.values()).map(r => ({ ...r, balance: r.income - r.diesel - r.salary })).sort((a, b) => b.income - a.income);
+  }, [breakerIncomeAll, breakerDieselAll, breakerSalaryAll, date]);
 
   const exportCSV = () => {
-    const head = "Date,Branch,Breker Income (Total Payable),Records";
-    const body = [...branchWiseIncome.map(r => [r.date, `"${r.branchName}"`, r.total, r.count].join(",")), `Total,,${incomeTotalDate},${breakerIncomeRows.length}`].join("\n");
+    const head = "Date,Branch,Income,Diesel,Operator Salary,Balance";
+    const body = [
+      ...summaryRows.map(r => [r.date, `"${r.branchName}"`, r.income, r.diesel, r.salary, r.balance].join(",")),
+      `Total,,${breakerIncomeTotal},${dieselTotal},${salaryTotal},${balance}`
+    ].join("\n");
     const blob = new Blob([head + "\n" + body], { type: "text/csv" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `breaker-summary-${date}.csv`; a.click();
   };
@@ -147,7 +154,7 @@ export default function BreakerSummaryPage() {
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/30"><Banknote size={18} /></span>
               Breaker Summary
             </h1>
-            <p className="mt-1 text-slate-400">Cards - Okkoma Total (All Dates) • Tables - Date Wise ({date}) • Salary - Employee Name = Breker operator</p>
+            <p className="mt-1 text-slate-400">Date + Branch Filter Only • {date} • {branchFilter === "all" ? "All Branches" : branchOptions.find(b => b.id === branchFilter)?.name}</p>
           </div>
           <div className="flex gap-2">
             <button onClick={fetchAll} className="rounded-xl bg-amber-500 px-4 py-2.5 font-bold text-black hover:bg-amber-400">Refresh</button>
@@ -170,34 +177,29 @@ export default function BreakerSummaryPage() {
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.05] p-5">
-                <div className="flex items-center justify-between"><p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase">Breker Income</p><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400"><Wallet size={15} /></span></div>
+                <div className="flex items-center justify-between"><p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase">Breker Income • {date}</p><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400"><Wallet size={15} /></span></div>
                 <p className="mt-3 text-2xl font-black text-emerald-400">{fmt(breakerIncomeTotal)}</p>
-                <p className="mt-1 text-[10px] text-slate-500">{breakerIncomeAll.length} records • All Dates</p>
-                <div className="mt-3 border-t border-white/[0.06] pt-3 space-y-1 text-[11px]">
-                  <p className="flex justify-between text-slate-400"><span>Other - Breker (All)</span><span className="font-black text-white">{fmt(breakerIncomeTotal)}</span></p>
-                  <p className="flex justify-between text-slate-400"><span>Diesel (All)</span><span className="font-bold text-blue-400">- {fmt(dieselTotal)}</span></p>
-                  <p className="flex justify-between text-slate-400"><span>Operator Salary (All)</span><span className="font-bold text-violet-400">- {fmt(salaryTotal)}</span></p>
-                </div>
+                <p className="mt-1 text-[10px] text-slate-500">{breakerIncomeAll.length} records • {date}</p>
               </div>
               <div className="rounded-2xl border border-white/[0.06] bg-[#0B1226] p-5">
-                <div className="flex items-center justify-between"><p className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">Breaker Diesel</p><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/15 text-blue-400"><Fuel size={15} /></span></div>
+                <div className="flex items-center justify-between"><p className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">Breaker Diesel • {date}</p><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/15 text-blue-400"><Fuel size={15} /></span></div>
                 <p className="mt-3 text-2xl font-black text-blue-400">{fmt(dieselTotal)}</p>
-                <p className="mt-1 text-[10px] text-slate-500">{dieselQtyAll.toLocaleString()} L • {breakerDieselAll.length} records • All Dates</p>
+                <p className="mt-1 text-[10px] text-slate-500">{dieselQtyAll.toLocaleString()} L • {breakerDieselAll.length} records • {date}</p>
               </div>
               <div className="rounded-2xl border border-white/[0.06] bg-[#0B1226] p-5">
-                <div className="flex items-center justify-between"><p className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">Operator Salary</p><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/15 text-violet-400"><Users size={15} /></span></div>
+                <div className="flex items-center justify-between"><p className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">Operator Salary • {date}</p><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/15 text-violet-400"><Users size={15} /></span></div>
                 <p className="mt-3 text-2xl font-black text-violet-400">{fmt(salaryTotal)}</p>
-                <p className="mt-1 text-[10px] text-slate-500">{breakerSalaryAll.length} records • Employee Name = Breker operator • All Dates</p>
+                <p className="mt-1 text-[10px] text-slate-500">{breakerSalaryAll.length} records • Breker operator • {date}</p>
               </div>
               <div className={`rounded-2xl border p-5 ${balancePositive ? "border-emerald-500/30 bg-emerald-500/[0.07]" : "border-red-500/30 bg-red-500/[0.07]"}`}>
-                <div className="flex items-center justify-between"><p className="text-[10px] font-bold tracking-widest uppercase text-slate-400">Balance</p><span className={`flex h-8 w-8 items-center justify-center rounded-lg ${balancePositive ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"}`}><Scale size={15} /></span></div>
+                <div className="flex items-center justify-between"><p className="text-[10px] font-bold tracking-widest uppercase text-slate-400">Balance • {date}</p><span className={`flex h-8 w-8 items-center justify-center rounded-lg ${balancePositive ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"}`}><Scale size={15} /></span></div>
                 <p className={`mt-3 text-2xl font-black ${balancePositive ? "text-emerald-400" : "text-red-400"}`}>{fmt(balance)}</p>
-                <p className="mt-1 text-[10px] text-slate-400">Total Used {fmt(totalUsed)} • All Dates</p>
+                <p className="mt-1 text-[10px] text-slate-400">Total Used {fmt(totalUsed)} • {date}</p>
               </div>
             </div>
 
             <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.05] p-5">
-              <p className="text-[10px] font-black tracking-widest text-amber-400 uppercase mb-3">Calculation • All Dates Total</p>
+              <p className="text-[10px] font-black tracking-widest text-amber-400 uppercase mb-3">Calculation • {date}</p>
               <div className="flex flex-wrap items-center gap-2 text-sm font-bold">
                 <span className="rounded-lg bg-emerald-500/10 px-3 py-2 text-emerald-400 ring-1 ring-emerald-500/20">Income {fmt(breakerIncomeTotal)}</span><span className="text-slate-500">−</span>
                 <span className="rounded-lg bg-slate-950 px-3 py-2 ring-1 ring-white/10">( Diesel {fmt(dieselTotal)} <span className="text-slate-500">+</span> Salary {fmt(salaryTotal)} )</span><span className="text-slate-500">=</span>
@@ -205,48 +207,48 @@ export default function BreakerSummaryPage() {
               </div>
             </div>
 
+            {/* ✅ MAIN TABLE - Oya kiuwa columns tika witharai */}
             <div className="rounded-2xl border border-emerald-500/20 bg-[#0B1226] p-5">
-              <h3 className="flex items-center gap-2 font-bold uppercase tracking-wider"><Receipt size={14} className="text-emerald-400" /> Breker Income - Branch Wise • {date}</h3>
-              <p className="text-[10px] text-slate-500 mt-1">Date Wise</p>
-              {branchWiseIncome.length === 0 ? <p className="py-8 text-center text-slate-500">Me date ekata Breker Expenses na.</p> : (
-                <table className="mt-4 w-full text-left">
-                  <thead><tr className="border-b border-white/[0.06] text-[10px] uppercase text-slate-500"><th className="py-3">Date</th><th className="py-3">Branch</th><th className="py-3 text-center">Records</th><th className="py-3 text-right">Breker Income</th></tr></thead>
-                  <tbody>{branchWiseIncome.map(r => (
-                    <tr key={r.branchId} className="border-b border-white/[0.04]"><td className="py-3 font-bold">{r.date}</td><td className="py-3"><p className="font-bold flex items-center gap-2"><Building2 size={13} className="text-cyan-400" /> {r.branchName}</p></td><td className="py-3 text-center text-slate-400">{r.count}</td><td className="py-3 text-right font-black text-emerald-400">{fmt(r.total)}</td></tr>
-                  ))}</tbody>
-                  <tfoot><tr className="font-black text-base"><td className="py-4">Total • {date}</td><td className="py-4 text-slate-400">{branchWiseIncome.length} Branches</td><td className="py-4 text-center text-slate-400">{breakerIncomeRows.length}</td><td className="py-4 text-right text-emerald-400">{fmt(incomeTotalDate)}</td></tr></tfoot>
+              <h3 className="flex items-center gap-2 font-bold uppercase tracking-wider"><Receipt size={14} className="text-emerald-400" /> Breaker Summary • {date}</h3>
+              <p className="text-[10px] text-slate-500 mt-1">Date + Branch Filter Only • Balance = Income - (Diesel + Operator Salary)</p>
+              {summaryRows.length === 0 ? <p className="py-8 text-center text-slate-500">Me date / branch ekata Breker data na.</p> : (
+                <div className="overflow-x-auto">
+                <table className="mt-4 w-full text-left min-w-[720px]">
+                  <thead>
+                    <tr className="border-b border-white/[0.06] text-[10px] uppercase text-slate-500">
+                      <th className="py-3">Date</th>
+                      <th className="py-3">Branch</th>
+                      <th className="py-3 text-right">Income</th>
+                      <th className="py-3 text-right">Diesel</th>
+                      <th className="py-3 text-right">Operator Salary</th>
+                      <th className="py-3 text-right">Balance</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {summaryRows.map(r => (
+                      <tr key={r.branchId} className="border-b border-white/[0.04]">
+                        <td className="py-3 font-bold whitespace-nowrap">{r.date}</td>
+                        <td className="py-3"><p className="font-bold flex items-center gap-2"><Building2 size={13} className="text-cyan-400" /> {r.branchName}</p><p className="text-[10px] text-slate-500">{r.incomeCount} income • {r.dieselCount} diesel • {r.salaryCount} salary</p></td>
+                        <td className="py-3 text-right font-black text-emerald-400">{fmt(r.income)}</td>
+                        <td className="py-3 text-right font-bold text-blue-400">{fmt(r.diesel)}<p className="text-[10px] font-normal text-slate-500">{r.dieselQty.toLocaleString()} L</p></td>
+                        <td className="py-3 text-right font-bold text-violet-400">{fmt(r.salary)}</td>
+                        <td className={`py-3 text-right font-black ${r.balance >= 0 ? "text-emerald-400" : "text-red-400"}`}>{fmt(r.balance)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="font-black text-base">
+                      <td className="py-4">Total • {date}</td>
+                      <td className="py-4 text-slate-400">{summaryRows.length} Branches</td>
+                      <td className="py-4 text-right text-emerald-400">{fmt(breakerIncomeTotal)}</td>
+                      <td className="py-4 text-right text-blue-400">{fmt(dieselTotal)}</td>
+                      <td className="py-4 text-right text-violet-400">{fmt(salaryTotal)}</td>
+                      <td className={`py-4 text-right ${balancePositive ? "text-emerald-400" : "text-red-400"}`}>{fmt(balance)}</td>
+                    </tr>
+                  </tfoot>
                 </table>
+                </div>
               )}
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              <div className="rounded-2xl border border-white/[0.06] bg-[#0B1226] p-5">
-                <h3 className="flex items-center gap-2 font-bold uppercase tracking-wider"><Receipt size={14} className="text-emerald-400" /> Breker Income Details</h3>
-                <p className="text-[10px] text-slate-500 mt-1">Date Wise • {date}</p>
-                {breakerIncomeRows.length === 0 ? <p className="py-8 text-center text-slate-500">No data for {date}.</p> : (
-                  <table className="mt-4 w-full text-left"><thead><tr className="border-b border-white/[0.06] text-[10px] uppercase text-slate-500"><th className="py-2">Branch / Reason</th><th className="py-2 text-right">Amount</th></tr></thead>
-                    <tbody>{breakerIncomeRows.map((r: any) => <tr key={r.id} className="border-b border-white/[0.04]"><td className="py-2.5"><p className="font-bold">{getBranchName(r)}</p><p className="text-[10px] text-slate-500">{r.reason}</p></td><td className="py-2.5 text-right font-black text-emerald-400">{fmt(numeric(r.total_payable))}</td></tr>)}
-                    </tbody><tfoot><tr className="font-black"><td className="py-3">Total • {date}</td><td className="py-3 text-right text-emerald-400">{fmt(incomeTotalDate)}</td></tr></tfoot></table>
-                )}
-              </div>
-              <div className="rounded-2xl border border-white/[0.06] bg-[#0B1226] p-5">
-                <h3 className="flex items-center gap-2 font-bold uppercase tracking-wider"><Fuel size={14} className="text-blue-400" /> Breker Diesel</h3>
-                <p className="text-[10px] text-slate-500 mt-1">Date Wise • {date}</p>
-                {breakerDieselRows.length === 0 ? <p className="py-8 text-center text-slate-500">No Breker diesel for {date}.</p> : (
-                  <table className="mt-4 w-full text-left"><thead><tr className="border-b border-white/[0.06] text-[10px] uppercase text-slate-500"><th className="py-2">Branch / Machine</th><th className="py-2 text-right">Qty</th><th className="py-2 text-right">Amount</th></tr></thead>
-                    <tbody>{breakerDieselRows.map((r: any) => <tr key={r.id} className="border-b border-white/[0.04]"><td className="py-2.5"><p className="font-bold">{getBranchName(r)}</p><p className="text-[10px] text-slate-500">{r.machine}</p></td><td className="py-2.5 text-right">{numeric(r.diesel).toLocaleString()} L</td><td className="py-2.5 text-right font-black text-blue-400">{fmt(numeric(r.payable))}</td></tr>)}
-                    </tbody><tfoot><tr className="font-black"><td className="py-3">Total • {date}</td><td className="py-3 text-right">{dieselQtyDate.toLocaleString()} L</td><td className="py-3 text-right text-blue-400">{fmt(dieselTotalDate)}</td></tr></tfoot></table>
-                )}
-              </div>
-              <div className="rounded-2xl border border-white/[0.06] bg-[#0B1226] p-5">
-                <h3 className="flex items-center gap-2 font-bold uppercase tracking-wider"><UserRound size={14} className="text-violet-400" /> Operator Salary</h3>
-                <p className="text-[10px] text-slate-500 mt-1">Date Wise • Employee Name = Breker operator • {date}</p>
-                {breakerSalaryRows.length === 0 ? <p className="py-8 text-center text-slate-500">No Breker operator salary for {date}.</p> : (
-                  <table className="mt-4 w-full text-left"><thead><tr className="border-b border-white/[0.06] text-[10px] uppercase text-slate-500"><th className="py-2">Branch / Operator</th><th className="py-2 text-right">Amount</th></tr></thead>
-                    <tbody>{breakerSalaryRows.map((r: any) => <tr key={r.id} className="border-b border-white/[0.04]"><td className="py-2.5"><p className="font-bold">{getBranchName(r)}</p><p className="text-[10px] text-slate-500">{r.employee_name || "-"} • {r.reason || ""}</p></td><td className="py-2.5 text-right font-black text-violet-400">{fmt(numeric(r.total_payable))}</td></tr>)}
-                    </tbody><tfoot><tr className="font-black"><td className="py-3">Total • {date}</td><td className="py-3 text-right text-violet-400">{fmt(salaryTotalDate)}</td></tr></tfoot></table>
-                )}
-              </div>
             </div>
           </>
         )}
