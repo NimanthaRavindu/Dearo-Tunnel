@@ -1,11 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  Calendar, Fuel, Wallet, Receipt, Building2, Scale,
-  Loader2, Search, Download, TrendingDown, TrendingUp,
-  Users, ArrowDownRight, ArrowUpRight, Banknote, UserRound,
-} from "lucide-react";
+import {  Calendar, Fuel, Wallet, Receipt, Building2, Scale,Loader2, Search, Download, TrendingDown, TrendingUp,Users, ArrowDownRight, ArrowUpRight, Banknote, UserRound} from "lucide-react";
 
 const fmt = (n: number) => `LKR ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
 const safeArray = (v: any): any[] => {
@@ -46,7 +42,7 @@ export default function BreakerSummaryPage() {
       // Branch filter eka frontend eken karanawa, API eken na
       const [b, o, d, s] = await Promise.allSettled([
         fetchWithTimeout(`/api/branches`),
-        fetchWithTimeout(`/api/expences/other-expenses`),
+        fetchWithTimeout(`/api/expences/other`),
         fetchWithTimeout(`/api/expences/diesel`),
         fetchWithTimeout(`/api/expences/salary`),
       ]);
