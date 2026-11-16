@@ -16,7 +16,6 @@ const safeArray = (v: any): any[] => {
   return [];
 };
 
-// ✅ 8 sec walin API eka response nathnam cut karanawa - Loading stuck wenne na
 const fetchWithTimeout = async (url: string, ms = 8000) => {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), ms);
@@ -42,29 +41,18 @@ export default function BreakerSummaryPage() {
   const fetchAll = async () => {
     setIsLoading(true);
     try {
-      // ✅ PARALLEL - okkoma ekata gannawa, branch loop ekak na
-      // Branch filter eka frontend eken karanawa, API eken na
       const [b, o, d, s] = await Promise.allSettled([
         fetchWithTimeout(`/api/branches`),
         fetchWithTimeout(`/api/expences/other-expenses`),
         fetchWithTimeout(`/api/expences/diesel`),
         fetchWithTimeout(`/api/expences/salary`),
       ]);
-
-      const branchList = b.status === "fulfilled" ? b.value : [];
-      const other = o.status === "fulfilled" ? o.value : [];
-      const diesel = d.status === "fulfilled" ? d.value : [];
-      const salary = s.status === "fulfilled" ? s.value : [];
-
-      setBranches(branchList);
-      setOtherExpenses(other);
-      setDieselRows(diesel);
-      setSalaryRows(salary);
-    } finally {
-      setIsLoading(false);
-    }
+      setBranches(b.status === "fulfilled" ? b.value : []);
+      setOtherExpenses(o.status === "fulfilled" ? o.value : []);
+      setDieselRows(d.status === "fulfilled" ? d.value : []);
+      setSalaryRows(s.status === "fulfilled" ? s.value : []);
+    } finally { setIsLoading(false); }
   };
-
   useEffect(() => { fetchAll(); }, []);
 
   const getBranchName = (r: any) => {
@@ -85,23 +73,44 @@ export default function BreakerSummaryPage() {
   const isSameDate = (d?: string) => (d || "").slice(0, 10) === date;
   const isBranch = (r: any) => branchFilter === "all" || getBranchKey(r) === branchFilter;
 
-  // ✅ BREKER INCOME = Date ekata adala Other Expenses okkoma Total
+  // ✅ FIX 1 - Payable Amount eka ganna function eka
+  // Other Expenses page eke penne Payable Amount eka
+  const getPayable = (r: any) => Number(r.payable_amount ?? r.total_amount ?? r.total ?? r.amount ?? r.paid_amount ?? 0);
+
+  // ✅ FIX 2 - BREKER INCOME = Other Expenses wala BREKER EXPENSES witharak
+  // Oya kalin code eke me filter eka thibbe na - dan thiyenawa
   const breakerIncomeRows = useMemo(() => (otherExpenses || []).filter(r => {
     if (!r) return false;
-    const txt = `${r.name || ""} ${r.description || ""} ${r.title || ""} ${r.category || ""}`.toLowerCase();
+    const cat = `${r.category || r.classification || r.type || r.expense_type || ""}`.toLowerCase();
+    const isBreker = cat.includes("breker") || cat.includes("breaker");
+    if (!isBreker) return false; // Credit / General / anith ewa ganna epa
+    const txt = `${r.name || ""} ${r.description || ""} ${r.title || ""}`.toLowerCase();
     const ok = !search || txt.includes(search.toLowerCase()) || getBranchName(r).toLowerCase().includes(search.toLowerCase());
     return ok && isSameDate(r.date || r.created_at) && isBranch(r);
   }), [otherExpenses, date, branchFilter, search]);
 
-  const breakerDieselRows = useMemo(() => (dieselRows || []).filter(r => isSameDate(r.date || r.created_at) && isBranch(r)), [dieselRows, date, branchFilter]);
+  // ✅ FIX 3 - BRANCH WISE TOTAL - Date | Branch | Breker Income (Payable)
+  const branchWiseIncome = useMemo(() => {
+    const map = new Map<string, { branchId: string, branchName: string, date: string, count: number, total: number }>();
+    breakerIncomeRows.forEach(r => {
+      const key = getBranchKey(r);
+      const cur = map.get(key) || { branchId: key, branchName: getBranchName(r), date, count: 0, total: 0 };
+      cur.count += 1;
+      cur.total += getPayable(r);
+      cur.branchName = getBranchName(r);
+      map.set(key, cur);
+    });
+    return Array.from(map.values()).sort((a, b) => b.total - a.total);
+  }, [breakerIncomeRows, date]);
 
+  const breakerDieselRows = useMemo(() => (dieselRows || []).filter(r => isSameDate(r.date || r.created_at) && isBranch(r)), [dieselRows, date, branchFilter]);
   const breakerSalaryRows = useMemo(() => (salaryRows || []).filter(r => {
     if (!r) return false;
     const txt = `${r.role || ""} ${r.position || ""} ${r.category || ""} ${r.employee_name || ""} ${r.name || ""} ${r.designation || ""}`.toLowerCase();
     return (txt.includes("breker") || txt.includes("breaker")) && isSameDate(r.date || r.created_at) && isBranch(r);
   }), [salaryRows, date, branchFilter]);
 
-  const breakerIncomeTotal = useMemo(() => breakerIncomeRows.reduce((t, r) => t + Number(r.amount || r.total || r.total_amount || r.paid_amount || 0), 0), [breakerIncomeRows]);
+  const breakerIncomeTotal = useMemo(() => breakerIncomeRows.reduce((t, r) => t + getPayable(r), 0), [breakerIncomeRows]);
   const dieselQty = useMemo(() => breakerDieselRows.reduce((t, r) => t + Number(r.quantity ?? r.litres ?? r.liter ?? 0), 0), [breakerDieselRows]);
   const dieselTotal = useMemo(() => breakerDieselRows.reduce((t, r) => t + Number(r.amount || r.total || r.total_amount || 0), 0), [breakerDieselRows]);
   const salaryTotal = useMemo(() => breakerSalaryRows.reduce((t, r) => t + Number(r.amount ?? r.salary ?? r.total ?? r.net_salary ?? 0), 0), [breakerSalaryRows]);
@@ -110,12 +119,11 @@ export default function BreakerSummaryPage() {
   const balancePositive = balance >= 0;
 
   const exportCSV = () => {
-    const head = "Date,Branch,Type,Description,Amount";
+    const head = "Date,Branch,Breker Income (Payable),Records";
     const body = [
-      ...breakerIncomeRows.map(r => [date, getBranchName(r), "Breker Income", `"${r.name || r.description || r.title || ""}"`, r.amount || r.total || 0].join(",")),
-      ...breakerDieselRows.map(r => [date, getBranchName(r), "Breker Diesel", `${r.quantity ?? r.litres ?? 0} L`, r.amount || 0].join(",")),
-      ...breakerSalaryRows.map(r => [date, getBranchName(r), "Breker Operator Salary", `"${r.employee_name || r.name || ""}"`, r.amount ?? r.salary ?? 0].join(",")),
-      `,,,Balance,${balance}`,
+      ...branchWiseIncome.map(r => [r.date, `"${r.branchName}"`, r.total, r.count].join(",")),
+      `,,,`,
+      `Total,,${breakerIncomeTotal},${breakerIncomeRows.length}`,
     ].join("\n");
     const blob = new Blob([head + "\n" + body], { type: "text/csv" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `breaker-summary-${date}.csv`; a.click();
@@ -130,7 +138,7 @@ export default function BreakerSummaryPage() {
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/30"><Banknote size={18} /></span>
               Breaker Summary
             </h1>
-            <p className="mt-1 text-slate-400">Breker Income - Diesel - Operator Salary = Balance • Date vise</p>
+            <p className="mt-1 text-slate-400">Breker Income (Other Expenses - BREKER EXPENSES Payable) - Diesel - Operator Salary = Balance • Date vise • Branch wise</p>
           </div>
           <div className="flex gap-2">
             <button onClick={fetchAll} className="rounded-xl bg-amber-500 px-4 py-2.5 font-bold text-black hover:bg-amber-400">Refresh</button>
@@ -155,9 +163,9 @@ export default function BreakerSummaryPage() {
               <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.05] p-5">
                 <div className="flex items-center justify-between"><p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase">Breker Income</p><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400"><Wallet size={15} /></span></div>
                 <p className="mt-3 text-2xl font-black text-emerald-400">{fmt(breakerIncomeTotal)}</p>
-                <p className="mt-1 text-[10px] text-slate-500">{breakerIncomeRows.length} records • Other Expenses • {date}</p>
+                <p className="mt-1 text-[10px] text-slate-500">{breakerIncomeRows.length} records • BREKER EXPENSES Payable • {date}</p>
                 <div className="mt-3 border-t border-white/[0.06] pt-3 space-y-1 text-[11px]">
-                  <p className="flex justify-between text-slate-400"><span>Other Expenses Total ({date})</span><span className="font-black text-white">{fmt(breakerIncomeTotal)}</span></p>
+                  <p className="flex justify-between text-slate-400"><span>Other Expenses - Breker ({date})</span><span className="font-black text-white">{fmt(breakerIncomeTotal)}</span></p>
                   <p className="flex justify-between text-slate-400"><span>Diesel</span><span className="font-bold text-blue-400">- {fmt(dieselTotal)}</span></p>
                   <p className="flex justify-between text-slate-400"><span>Operator Salary</span><span className="font-bold text-violet-400">- {fmt(salaryTotal)}</span></p>
                 </div>
@@ -188,16 +196,34 @@ export default function BreakerSummaryPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              <div className="rounded-2xl border border-white/[0.06] bg-[#0B1226] p-5">
-                <h3 className="flex items-center gap-2 font-bold uppercase tracking-wider"><Receipt size={14} className="text-emerald-400" /> Breker Income</h3>
-                <p className="text-[10px] text-slate-500 mt-1">Other Expenses • {date}</p>
-                {breakerIncomeRows.length === 0 ? <p className="py-8 text-center text-slate-500">No data for this date.</p> : (
-                  <table className="mt-4 w-full text-left"><thead><tr className="border-b border-white/[0.06] text-[10px] uppercase text-slate-500"><th className="py-2">Branch / Name</th><th className="py-2 text-right">Amount</th></tr></thead>
-                    <tbody>{breakerIncomeRows.map((r: any) => <tr key={r.id} className="border-b border-white/[0.04]"><td className="py-2.5"><p className="font-bold">{getBranchName(r)}</p><p className="text-[10px] text-slate-500">{r.name || r.description || r.title || "Breker Expenses"}</p><p className="text-[10px] text-slate-600">{(r.date || r.created_at || "").slice(0, 10)}</p></td><td className="py-2.5 text-right font-black text-emerald-400">{fmt(Number(r.amount || r.total || 0))}</td></tr>)}
-                    </tbody><tfoot><tr className="font-black"><td className="py-3">Total Income</td><td className="py-3 text-right text-emerald-400">{fmt(breakerIncomeTotal)}</td></tr></tfoot></table>
-                )}
-              </div>
+            {/* ✅ OYA ILLUWA TABLE EKA - Date | Branch | Breker Income (Payable) */}
+            <div className="rounded-2xl border border-emerald-500/20 bg-[#0B1226] p-5">
+              <h3 className="flex items-center gap-2 font-bold uppercase tracking-wider"><Receipt size={14} className="text-emerald-400" /> Breker Income - Branch Wise • {date}</h3>
+              <p className="text-[10px] text-slate-500 mt-1">Other Expenses Page - BREKER EXPENSES - Payable Amount</p>
+              {branchWiseIncome.length === 0 ? <p className="py-8 text-center text-slate-500">Me date ekata Breker Expenses na. Other Expenses page eke Classification eka BREKER EXPENSES da kiyala balanna.</p> : (
+                <table className="mt-4 w-full text-left">
+                  <thead><tr className="border-b border-white/[0.06] text-[10px] uppercase text-slate-500">
+                    <th className="py-3">Date</th><th className="py-3">Branch</th><th className="py-3 text-center">Records</th><th className="py-3 text-right">Breker Income (Payable)</th>
+                  </tr></thead>
+                  <tbody>
+                    {branchWiseIncome.map(r => (
+                      <tr key={r.branchId} className="border-b border-white/[0.04]">
+                        <td className="py-3 font-bold">{r.date}</td>
+                        <td className="py-3"><p className="font-bold flex items-center gap-2"><Building2 size={13} className="text-cyan-400" /> {r.branchName}</p></td>
+                        <td className="py-3 text-center text-slate-400">{r.count}</td>
+                        <td className="py-3 text-right font-black text-emerald-400">{fmt(r.total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot><tr className="font-black text-base">
+                    <td className="py-4">Total</td><td className="py-4 text-slate-400">{branchWiseIncome.length} Branches</td><td className="py-4 text-center text-slate-400">{breakerIncomeRows.length}</td><td className="py-4 text-right text-emerald-400">{fmt(breakerIncomeTotal)}</td>
+                  </tr></tfoot>
+                </table>
+              )}
+              <p className="mt-3 text-[10px] text-slate-500">* Me total eka Other Expenses page eke yata Filtered Total ekata match wenna ona.</p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div className="rounded-2xl border border-white/[0.06] bg-[#0B1226] p-5">
                 <h3 className="flex items-center gap-2 font-bold uppercase tracking-wider"><Fuel size={14} className="text-blue-400" /> Breker Diesel</h3>
                 <p className="text-[10px] text-slate-500 mt-1">Diesel • {date}</p>
@@ -221,16 +247,14 @@ export default function BreakerSummaryPage() {
             <div className="rounded-2xl border border-white/[0.06] bg-[#0B1226] p-5">
               <h3 className="flex items-center gap-2 font-bold uppercase tracking-wider"><Building2 size={14} className="text-cyan-400" /> Branch-wise Balance • {date}</h3>
               <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {branchOptions.map(b => {
-                  const bIncome = breakerIncomeRows.filter(r => getBranchKey(r) === b.id).reduce((t, r) => t + Number(r.amount || r.total || 0), 0);
-                  const bDiesel = breakerDieselRows.filter(r => getBranchKey(r) === b.id).reduce((t, r) => t + Number(r.amount || 0), 0);
-                  const bSalary = breakerSalaryRows.filter(r => getBranchKey(r) === b.id).reduce((t, r) => t + Number(r.amount ?? r.salary ?? 0), 0);
-                  const bBal = bIncome - (bDiesel + bSalary);
-                  if (bIncome === 0 && bDiesel === 0 && bSalary === 0) return null;
+                {branchWiseIncome.map(b => {
+                  const bDiesel = breakerDieselRows.filter(r => getBranchKey(r) === b.branchId).reduce((t, r) => t + Number(r.amount || 0), 0);
+                  const bSalary = breakerSalaryRows.filter(r => getBranchKey(r) === b.branchId).reduce((t, r) => t + Number(r.amount ?? r.salary ?? 0), 0);
+                  const bBal = b.total - (bDiesel + bSalary);
                   return (
-                    <div key={b.id} className="rounded-xl bg-slate-950/60 p-4 ring-1 ring-white/[0.06]">
-                      <p className="font-bold flex items-center gap-2"><Building2 size={13} className="text-cyan-400" /> {b.name}</p>
-                      <p className="mt-2 text-[11px] text-slate-400">Income {fmt(bIncome)} • Diesel {fmt(bDiesel)} • Salary {fmt(bSalary)}</p>
+                    <div key={b.branchId} className="rounded-xl bg-slate-950/60 p-4 ring-1 ring-white/[0.06]">
+                      <p className="font-bold flex items-center gap-2"><Building2 size={13} className="text-cyan-400" /> {b.branchName}</p>
+                      <p className="mt-2 text-[11px] text-slate-400">Income {fmt(b.total)} • Diesel {fmt(bDiesel)} • Salary {fmt(bSalary)}</p>
                       <p className={`mt-2 flex items-center gap-1 font-black ${bBal >= 0 ? "text-emerald-400" : "text-red-400"}`}>{bBal >= 0 ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />} Balance {fmt(bBal)}</p>
                     </div>
                   );
