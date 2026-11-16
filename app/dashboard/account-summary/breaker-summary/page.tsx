@@ -1,9 +1,6 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  Calendar, Fuel, Wallet, Receipt, Building2, Scale,
-  Loader2, Search, Download, Users, Banknote, UserRound,
-} from "lucide-react";
+import { Calendar, Fuel, Wallet, Receipt, Building2, Scale,Loader2, Search, Download, Users, Banknote, UserRound,} from "lucide-react";
 
 const fmt = (n: number) => `LKR ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
 const numeric = (v: any) => Number(v ?? 0) || 0;
@@ -88,29 +85,26 @@ export default function BreakerSummaryPage() {
   const isDate = (r: any) => getDateStr(r) === date;
   const branchOptions = useMemo(() => branches.map((b: any) => ({ id: String(b.id), name: b.branch_name || `Branch ${b.id}` })), [branches]);
 
-  // ✅ OKKOMA - THORAPU DATE + BRANCH WALATA WITHARAK
+  // ✅ CARDS - DATE FILTER NA - TOTAL ONLY (Branch filter witharak)
   const breakerIncomeAll = useMemo(() => (otherExpenses || []).filter(r => {
     if (!r) return false;
     if (!isBreker(r.reason)) return false;
-    if (!isDate(r)) return false;
     if (!isBranch(r)) return false;
     if (search && !String(r.reason || "").toLowerCase().includes(search.toLowerCase()) && !getBranchName(r).toLowerCase().includes(search.toLowerCase())) return false;
     return true;
-  }), [otherExpenses, branchFilter, search, date]);
+  }), [otherExpenses, branchFilter, search]);
 
   const breakerDieselAll = useMemo(() => (dieselRows || []).filter(r => {
     if (!r) return false;
     if (!isBreker(r.machine)) return false;
-    if (!isDate(r)) return false;
     return isBranch(r);
-  }), [dieselRows, branchFilter, date]);
+  }), [dieselRows, branchFilter]);
 
   const breakerSalaryAll = useMemo(() => (salaryRows || []).filter(r => {
     if (!r) return false;
     if (!isBrekerSalary(r)) return false;
-    if (!isDate(r)) return false;
     return isBranch(r);
-  }), [salaryRows, branchFilter, date]);
+  }), [salaryRows, branchFilter]);
 
   const breakerIncomeTotal = useMemo(() => breakerIncomeAll.reduce((t, r) => t + numeric(r.total_payable), 0), [breakerIncomeAll]);
   const dieselQtyAll = useMemo(() => breakerDieselAll.reduce((t, r) => t + numeric(r.diesel), 0), [breakerDieselAll]);
@@ -120,7 +114,19 @@ export default function BreakerSummaryPage() {
   const balance = breakerIncomeTotal - totalUsed;
   const balancePositive = balance >= 0;
 
-  // ✅ MAIN TABLE - Date + Branch walin group karala
+  // ✅ TABLE - DATE + BRANCH WALATA FILTER
+  const breakerIncomeDate = useMemo(() => breakerIncomeAll.filter(r => isDate(r)), [breakerIncomeAll, date]);
+  const breakerDieselDate = useMemo(() => breakerDieselAll.filter(r => isDate(r)), [breakerDieselAll, date]);
+  const breakerSalaryDate = useMemo(() => breakerSalaryAll.filter(r => isDate(r)), [breakerSalaryAll, date]);
+
+  const incomeDateTotal = useMemo(() => breakerIncomeDate.reduce((t, r) => t + numeric(r.total_payable), 0), [breakerIncomeDate]);
+  const dieselDateTotal = useMemo(() => breakerDieselDate.reduce((t, r) => t + numeric(r.payable ?? r.amount), 0), [breakerDieselDate]);
+  const dieselDateQty = useMemo(() => breakerDieselDate.reduce((t, r) => t + numeric(r.diesel), 0), [breakerDieselDate]);
+  const salaryDateTotal = useMemo(() => breakerSalaryDate.reduce((t, r) => t + numeric(r.total_payable), 0), [breakerSalaryDate]);
+  const balanceDateTotal = incomeDateTotal - dieselDateTotal - salaryDateTotal;
+  const balanceDatePositive = balanceDateTotal >= 0;
+
+  // ✅ TABLE ROWS - Date + Branch walin group
   // Columns: Date | Branch | Income | Diesel | Operator Salary | Balance
   const summaryRows = useMemo(() => {
     const map = new Map<string, { branchId: string, branchName: string, date: string, income: number, diesel: number, dieselQty: number, salary: number, incomeCount: number, dieselCount: number, salaryCount: number }>();
@@ -129,17 +135,17 @@ export default function BreakerSummaryPage() {
       if (!map.has(key)) map.set(key, { branchId: key, branchName: getBranchName(r), date, income: 0, diesel: 0, dieselQty: 0, salary: 0, incomeCount: 0, dieselCount: 0, salaryCount: 0 });
       return map.get(key)!;
     };
-    breakerIncomeAll.forEach(r => { const row = getRow(r); row.income += numeric(r.total_payable); row.incomeCount += 1; row.branchName = getBranchName(r); });
-    breakerDieselAll.forEach(r => { const row = getRow(r); row.diesel += numeric(r.payable ?? r.amount); row.dieselQty += numeric(r.diesel); row.dieselCount += 1; row.branchName = getBranchName(r); });
-    breakerSalaryAll.forEach(r => { const row = getRow(r); row.salary += numeric(r.total_payable); row.salaryCount += 1; row.branchName = getBranchName(r); });
+    breakerIncomeDate.forEach(r => { const row = getRow(r); row.income += numeric(r.total_payable); row.incomeCount += 1; row.branchName = getBranchName(r); });
+    breakerDieselDate.forEach(r => { const row = getRow(r); row.diesel += numeric(r.payable ?? r.amount); row.dieselQty += numeric(r.diesel); row.dieselCount += 1; row.branchName = getBranchName(r); });
+    breakerSalaryDate.forEach(r => { const row = getRow(r); row.salary += numeric(r.total_payable); row.salaryCount += 1; row.branchName = getBranchName(r); });
     return Array.from(map.values()).map(r => ({ ...r, balance: r.income - r.diesel - r.salary })).sort((a, b) => b.income - a.income);
-  }, [breakerIncomeAll, breakerDieselAll, breakerSalaryAll, date]);
+  }, [breakerIncomeDate, breakerDieselDate, breakerSalaryDate, date]);
 
   const exportCSV = () => {
     const head = "Date,Branch,Income,Diesel,Operator Salary,Balance";
     const body = [
       ...summaryRows.map(r => [r.date, `"${r.branchName}"`, r.income, r.diesel, r.salary, r.balance].join(",")),
-      `Total,,${breakerIncomeTotal},${dieselTotal},${salaryTotal},${balance}`
+      `Total ${date},,${incomeDateTotal},${dieselDateTotal},${salaryDateTotal},${balanceDateTotal}`
     ].join("\n");
     const blob = new Blob([head + "\n" + body], { type: "text/csv" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `breaker-summary-${date}.csv`; a.click();
@@ -154,7 +160,7 @@ export default function BreakerSummaryPage() {
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/30"><Banknote size={18} /></span>
               Breaker Summary
             </h1>
-            <p className="mt-1 text-slate-400">Date + Branch Filter Only • {date} • {branchFilter === "all" ? "All Branches" : branchOptions.find(b => b.id === branchFilter)?.name}</p>
+            <p className="mt-1 text-slate-400">Cards - Total (All Dates) • Table - Date + Branch Filter • {date} • Salary - Employee Name = Breker operator</p>
           </div>
           <div className="flex gap-2">
             <button onClick={fetchAll} className="rounded-xl bg-amber-500 px-4 py-2.5 font-bold text-black hover:bg-amber-400">Refresh</button>
@@ -175,31 +181,37 @@ export default function BreakerSummaryPage() {
 
         {isLoading ? <div className="flex justify-center py-16 text-slate-400"><Loader2 className="animate-spin" /> Loading...</div> : (
           <>
+            {/* ✅ CARDS - TOTAL - DATE FILTER NA */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.05] p-5">
-                <div className="flex items-center justify-between"><p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase">Breker Income • {date}</p><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400"><Wallet size={15} /></span></div>
+                <div className="flex items-center justify-between"><p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase">Breker Income • Total</p><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400"><Wallet size={15} /></span></div>
                 <p className="mt-3 text-2xl font-black text-emerald-400">{fmt(breakerIncomeTotal)}</p>
-                <p className="mt-1 text-[10px] text-slate-500">{breakerIncomeAll.length} records • {date}</p>
+                <p className="mt-1 text-[10px] text-slate-500">{breakerIncomeAll.length} records • All Dates</p>
+                <div className="mt-3 border-t border-white/[0.06] pt-3 space-y-1 text-[11px]">
+                  <p className="flex justify-between text-slate-400"><span>Other - Breker (Total)</span><span className="font-black text-white">{fmt(breakerIncomeTotal)}</span></p>
+                  <p className="flex justify-between text-slate-400"><span>Diesel (Total)</span><span className="font-bold text-blue-400">- {fmt(dieselTotal)}</span></p>
+                  <p className="flex justify-between text-slate-400"><span>Operator Salary (Total)</span><span className="font-bold text-violet-400">- {fmt(salaryTotal)}</span></p>
+                </div>
               </div>
               <div className="rounded-2xl border border-white/[0.06] bg-[#0B1226] p-5">
-                <div className="flex items-center justify-between"><p className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">Breaker Diesel • {date}</p><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/15 text-blue-400"><Fuel size={15} /></span></div>
+                <div className="flex items-center justify-between"><p className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">Breaker Diesel • Total</p><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/15 text-blue-400"><Fuel size={15} /></span></div>
                 <p className="mt-3 text-2xl font-black text-blue-400">{fmt(dieselTotal)}</p>
-                <p className="mt-1 text-[10px] text-slate-500">{dieselQtyAll.toLocaleString()} L • {breakerDieselAll.length} records • {date}</p>
+                <p className="mt-1 text-[10px] text-slate-500">{dieselQtyAll.toLocaleString()} L • {breakerDieselAll.length} records • All Dates</p>
               </div>
               <div className="rounded-2xl border border-white/[0.06] bg-[#0B1226] p-5">
-                <div className="flex items-center justify-between"><p className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">Operator Salary • {date}</p><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/15 text-violet-400"><Users size={15} /></span></div>
+                <div className="flex items-center justify-between"><p className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">Operator Salary • Total</p><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/15 text-violet-400"><Users size={15} /></span></div>
                 <p className="mt-3 text-2xl font-black text-violet-400">{fmt(salaryTotal)}</p>
-                <p className="mt-1 text-[10px] text-slate-500">{breakerSalaryAll.length} records • Breker operator • {date}</p>
+                <p className="mt-1 text-[10px] text-slate-500">{breakerSalaryAll.length} records • Breker operator • All Dates</p>
               </div>
               <div className={`rounded-2xl border p-5 ${balancePositive ? "border-emerald-500/30 bg-emerald-500/[0.07]" : "border-red-500/30 bg-red-500/[0.07]"}`}>
-                <div className="flex items-center justify-between"><p className="text-[10px] font-bold tracking-widest uppercase text-slate-400">Balance • {date}</p><span className={`flex h-8 w-8 items-center justify-center rounded-lg ${balancePositive ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"}`}><Scale size={15} /></span></div>
+                <div className="flex items-center justify-between"><p className="text-[10px] font-bold tracking-widest uppercase text-slate-400">Balance • Total</p><span className={`flex h-8 w-8 items-center justify-center rounded-lg ${balancePositive ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"}`}><Scale size={15} /></span></div>
                 <p className={`mt-3 text-2xl font-black ${balancePositive ? "text-emerald-400" : "text-red-400"}`}>{fmt(balance)}</p>
-                <p className="mt-1 text-[10px] text-slate-400">Total Used {fmt(totalUsed)} • {date}</p>
+                <p className="mt-1 text-[10px] text-slate-400">Total Used {fmt(totalUsed)} • All Dates</p>
               </div>
             </div>
 
             <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.05] p-5">
-              <p className="text-[10px] font-black tracking-widest text-amber-400 uppercase mb-3">Calculation • {date}</p>
+              <p className="text-[10px] font-black tracking-widest text-amber-400 uppercase mb-3">Calculation • Total (All Dates)</p>
               <div className="flex flex-wrap items-center gap-2 text-sm font-bold">
                 <span className="rounded-lg bg-emerald-500/10 px-3 py-2 text-emerald-400 ring-1 ring-emerald-500/20">Income {fmt(breakerIncomeTotal)}</span><span className="text-slate-500">−</span>
                 <span className="rounded-lg bg-slate-950 px-3 py-2 ring-1 ring-white/10">( Diesel {fmt(dieselTotal)} <span className="text-slate-500">+</span> Salary {fmt(salaryTotal)} )</span><span className="text-slate-500">=</span>
@@ -207,7 +219,7 @@ export default function BreakerSummaryPage() {
               </div>
             </div>
 
-            {/* ✅ MAIN TABLE - Oya kiuwa columns tika witharai */}
+            {/* ✅ TABLE - DATE + BRANCH FILTER */}
             <div className="rounded-2xl border border-emerald-500/20 bg-[#0B1226] p-5">
               <h3 className="flex items-center gap-2 font-bold uppercase tracking-wider"><Receipt size={14} className="text-emerald-400" /> Breaker Summary • {date}</h3>
               <p className="text-[10px] text-slate-500 mt-1">Date + Branch Filter Only • Balance = Income - (Diesel + Operator Salary)</p>
@@ -240,10 +252,10 @@ export default function BreakerSummaryPage() {
                     <tr className="font-black text-base">
                       <td className="py-4">Total • {date}</td>
                       <td className="py-4 text-slate-400">{summaryRows.length} Branches</td>
-                      <td className="py-4 text-right text-emerald-400">{fmt(breakerIncomeTotal)}</td>
-                      <td className="py-4 text-right text-blue-400">{fmt(dieselTotal)}</td>
-                      <td className="py-4 text-right text-violet-400">{fmt(salaryTotal)}</td>
-                      <td className={`py-4 text-right ${balancePositive ? "text-emerald-400" : "text-red-400"}`}>{fmt(balance)}</td>
+                      <td className="py-4 text-right text-emerald-400">{fmt(incomeDateTotal)}</td>
+                      <td className="py-4 text-right text-blue-400">{fmt(dieselDateTotal)}</td>
+                      <td className="py-4 text-right text-violet-400">{fmt(salaryDateTotal)}</td>
+                      <td className={`py-4 text-right ${balanceDatePositive ? "text-emerald-400" : "text-red-400"}`}>{fmt(balanceDateTotal)}</td>
                     </tr>
                   </tfoot>
                 </table>
