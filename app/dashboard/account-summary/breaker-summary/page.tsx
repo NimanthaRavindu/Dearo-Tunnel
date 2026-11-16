@@ -1,6 +1,9 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
-import { Calendar, Fuel, Wallet, Receipt, Building2, Scale,Loader2, Search, Download, Users, Banknote, UserRound,} from "lucide-react";
+import {
+  Calendar, Fuel, Wallet, Receipt, Building2, Scale,
+  Loader2, Search, Download, Users, Banknote, UserRound,
+} from "lucide-react";
 
 const fmt = (n: number) => `LKR ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
 const numeric = (v: any) => Number(v ?? 0) || 0;
@@ -8,8 +11,14 @@ const isBreker = (s: any) => {
   const t = String(s || "").toLowerCase();
   return t.includes("breker") || t.includes("breaker");
 };
+// ✅ Diesel - machine field eka mona unath allanawa
+const isBrekerDiesel = (r: any) => {
+  return isBreker(r.machine) || isBreker(r.machine_name) || isBreker(r.machineName)
+      || isBreker(r.vehicle) || isBreker(r.equipment) || isBreker(r.description) || isBreker(r.reason);
+};
+// ✅ Salary - employee field eka mona unath allanawa
 const isBrekerSalary = (r: any) => {
-  return isBreker(r.employee_name) || isBreker(r.employeeName) || isBreker(r.name) || isBreker(r.reason);
+  return isBreker(r.employee_name) || isBreker(r.employeeName) || isBreker(r.name) || isBreker(r.reason) || isBreker(r.description) || isBreker(r.employee);
 };
 
 const fetchJSON = async (url: string) => {
@@ -22,6 +31,15 @@ const fetchJSON = async (url: string) => {
     if (j && Array.isArray(j.data)) return j.data;
     return [];
   } catch { return []; }
+};
+
+// ✅ Param waradi nam fallback - branchId -> branch_id -> param nathuwa
+const fetchWithFallback = async (base: string, id: any) => {
+  let rows = await fetchJSON(`${base}?branchId=${encodeURIComponent(id)}`);
+  if (rows.length > 0) return rows;
+  rows = await fetchJSON(`${base}?branch_id=${encodeURIComponent(id)}`);
+  if (rows.length > 0) return rows;
+  return rows;
 };
 
 export default function BreakerSummaryPage() {
@@ -44,7 +62,7 @@ export default function BreakerSummaryPage() {
 
       const otherResults = await Promise.allSettled(
         ids.map((id: any) =>
-          fetchJSON(`/api/expences/other?branchId=${encodeURIComponent(id)}`).then((rows: any[]) =>
+          fetchWithFallback(`/api/expences/other`, id).then((rows: any[]) =>
             rows.map((r: any) => ({ ...r, _branchId: id, _branchName: getName(id) }))
           )
         )
@@ -55,7 +73,7 @@ export default function BreakerSummaryPage() {
 
       const dieselResults = await Promise.allSettled(
         ids.map((id: any) =>
-          fetchJSON(`/api/expences/diesel?branch_id=${encodeURIComponent(id)}`).then((rows: any[]) =>
+          fetchWithFallback(`/api/expences/diesel`, id).then((rows: any[]) =>
             rows.map((r: any) => ({ ...r, _branchId: id, _branchName: getName(id) }))
           )
         )
@@ -66,7 +84,7 @@ export default function BreakerSummaryPage() {
 
       const salaryResults = await Promise.allSettled(
         ids.map((id: any) =>
-          fetchJSON(`/api/expences/salary?branchId=${encodeURIComponent(id)}`).then((rows: any[]) =>
+          fetchWithFallback(`/api/expences/salary`, id).then((rows: any[]) =>
             rows.map((r: any) => ({ ...r, _branchId: id, _branchName: getName(id) }))
           )
         )
@@ -79,13 +97,13 @@ export default function BreakerSummaryPage() {
   useEffect(() => { fetchAll(); }, []);
 
   const getBranchName = (r: any) => r._branchName || "-";
-  const getBranchKey = (r: any) => String(r._branchId || r.branch_id || "");
+  const getBranchKey = (r: any) => String(r._branchId || r.branch_id || r.branchId || "");
   const getDateStr = (r: any) => String(r.expense_date || r.date || "").slice(0, 10);
   const isBranch = (r: any) => branchFilter === "all" || getBranchKey(r) === branchFilter;
   const isDate = (r: any) => getDateStr(r) === date;
   const branchOptions = useMemo(() => branches.map((b: any) => ({ id: String(b.id), name: b.branch_name || `Branch ${b.id}` })), [branches]);
 
-  // ✅ CARDS - DATE FILTER NA - TOTAL ONLY (Branch filter witharak)
+  // ✅ CARDS - DATE FILTER NA - TOTAL ONLY
   const breakerIncomeAll = useMemo(() => (otherExpenses || []).filter(r => {
     if (!r) return false;
     if (!isBreker(r.reason)) return false;
@@ -96,7 +114,7 @@ export default function BreakerSummaryPage() {
 
   const breakerDieselAll = useMemo(() => (dieselRows || []).filter(r => {
     if (!r) return false;
-    if (!isBreker(r.machine)) return false;
+    if (!isBrekerDiesel(r)) return false;
     return isBranch(r);
   }), [dieselRows, branchFilter]);
 
@@ -106,28 +124,26 @@ export default function BreakerSummaryPage() {
     return isBranch(r);
   }), [salaryRows, branchFilter]);
 
-  const breakerIncomeTotal = useMemo(() => breakerIncomeAll.reduce((t, r) => t + numeric(r.total_payable), 0), [breakerIncomeAll]);
-  const dieselQtyAll = useMemo(() => breakerDieselAll.reduce((t, r) => t + numeric(r.diesel), 0), [breakerDieselAll]);
-  const dieselTotal = useMemo(() => breakerDieselAll.reduce((t, r) => t + numeric(r.payable ?? r.amount), 0), [breakerDieselAll]);
-  const salaryTotal = useMemo(() => breakerSalaryAll.reduce((t, r) => t + numeric(r.total_payable), 0), [breakerSalaryAll]);
+  const breakerIncomeTotal = useMemo(() => breakerIncomeAll.reduce((t, r) => t + numeric(r.total_payable ?? r.amount), 0), [breakerIncomeAll]);
+  const dieselQtyAll = useMemo(() => breakerDieselAll.reduce((t, r) => t + numeric(r.diesel ?? r.qty ?? r.quantity ?? r.liters), 0), [breakerDieselAll]);
+  const dieselTotal = useMemo(() => breakerDieselAll.reduce((t, r) => t + numeric(r.payable ?? r.total_payable ?? r.amount), 0), [breakerDieselAll]);
+  const salaryTotal = useMemo(() => breakerSalaryAll.reduce((t, r) => t + numeric(r.total_payable ?? r.amount ?? r.salary), 0), [breakerSalaryAll]);
   const totalUsed = dieselTotal + salaryTotal;
   const balance = breakerIncomeTotal - totalUsed;
   const balancePositive = balance >= 0;
 
-  // ✅ TABLE - DATE + BRANCH WALATA FILTER
+  // ✅ TABLE - DATE + BRANCH FILTER
   const breakerIncomeDate = useMemo(() => breakerIncomeAll.filter(r => isDate(r)), [breakerIncomeAll, date]);
   const breakerDieselDate = useMemo(() => breakerDieselAll.filter(r => isDate(r)), [breakerDieselAll, date]);
   const breakerSalaryDate = useMemo(() => breakerSalaryAll.filter(r => isDate(r)), [breakerSalaryAll, date]);
 
-  const incomeDateTotal = useMemo(() => breakerIncomeDate.reduce((t, r) => t + numeric(r.total_payable), 0), [breakerIncomeDate]);
-  const dieselDateTotal = useMemo(() => breakerDieselDate.reduce((t, r) => t + numeric(r.payable ?? r.amount), 0), [breakerDieselDate]);
-  const dieselDateQty = useMemo(() => breakerDieselDate.reduce((t, r) => t + numeric(r.diesel), 0), [breakerDieselDate]);
-  const salaryDateTotal = useMemo(() => breakerSalaryDate.reduce((t, r) => t + numeric(r.total_payable), 0), [breakerSalaryDate]);
+  const incomeDateTotal = useMemo(() => breakerIncomeDate.reduce((t, r) => t + numeric(r.total_payable ?? r.amount), 0), [breakerIncomeDate]);
+  const dieselDateTotal = useMemo(() => breakerDieselDate.reduce((t, r) => t + numeric(r.payable ?? r.total_payable ?? r.amount), 0), [breakerDieselDate]);
+  const dieselDateQty = useMemo(() => breakerDieselDate.reduce((t, r) => t + numeric(r.diesel ?? r.qty ?? r.quantity), 0), [breakerDieselDate]);
+  const salaryDateTotal = useMemo(() => breakerSalaryDate.reduce((t, r) => t + numeric(r.total_payable ?? r.amount ?? r.salary), 0), [breakerSalaryDate]);
   const balanceDateTotal = incomeDateTotal - dieselDateTotal - salaryDateTotal;
   const balanceDatePositive = balanceDateTotal >= 0;
 
-  // ✅ TABLE ROWS - Date + Branch walin group
-  // Columns: Date | Branch | Income | Diesel | Operator Salary | Balance
   const summaryRows = useMemo(() => {
     const map = new Map<string, { branchId: string, branchName: string, date: string, income: number, diesel: number, dieselQty: number, salary: number, incomeCount: number, dieselCount: number, salaryCount: number }>();
     const getRow = (r: any) => {
@@ -135,9 +151,9 @@ export default function BreakerSummaryPage() {
       if (!map.has(key)) map.set(key, { branchId: key, branchName: getBranchName(r), date, income: 0, diesel: 0, dieselQty: 0, salary: 0, incomeCount: 0, dieselCount: 0, salaryCount: 0 });
       return map.get(key)!;
     };
-    breakerIncomeDate.forEach(r => { const row = getRow(r); row.income += numeric(r.total_payable); row.incomeCount += 1; row.branchName = getBranchName(r); });
-    breakerDieselDate.forEach(r => { const row = getRow(r); row.diesel += numeric(r.payable ?? r.amount); row.dieselQty += numeric(r.diesel); row.dieselCount += 1; row.branchName = getBranchName(r); });
-    breakerSalaryDate.forEach(r => { const row = getRow(r); row.salary += numeric(r.total_payable); row.salaryCount += 1; row.branchName = getBranchName(r); });
+    breakerIncomeDate.forEach(r => { const row = getRow(r); row.income += numeric(r.total_payable ?? r.amount); row.incomeCount += 1; row.branchName = getBranchName(r); });
+    breakerDieselDate.forEach(r => { const row = getRow(r); row.diesel += numeric(r.payable ?? r.total_payable ?? r.amount); row.dieselQty += numeric(r.diesel ?? r.qty ?? r.quantity); row.dieselCount += 1; row.branchName = getBranchName(r); });
+    breakerSalaryDate.forEach(r => { const row = getRow(r); row.salary += numeric(r.total_payable ?? r.amount ?? r.salary); row.salaryCount += 1; row.branchName = getBranchName(r); });
     return Array.from(map.values()).map(r => ({ ...r, balance: r.income - r.diesel - r.salary })).sort((a, b) => b.income - a.income);
   }, [breakerIncomeDate, breakerDieselDate, breakerSalaryDate, date]);
 
@@ -181,7 +197,6 @@ export default function BreakerSummaryPage() {
 
         {isLoading ? <div className="flex justify-center py-16 text-slate-400"><Loader2 className="animate-spin" /> Loading...</div> : (
           <>
-            {/* ✅ CARDS - TOTAL - DATE FILTER NA */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.05] p-5">
                 <div className="flex items-center justify-between"><p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase">Breker Income • Total</p><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400"><Wallet size={15} /></span></div>
@@ -219,7 +234,6 @@ export default function BreakerSummaryPage() {
               </div>
             </div>
 
-            {/* ✅ TABLE - DATE + BRANCH FILTER */}
             <div className="rounded-2xl border border-emerald-500/20 bg-[#0B1226] p-5">
               <h3 className="flex items-center gap-2 font-bold uppercase tracking-wider"><Receipt size={14} className="text-emerald-400" /> Breaker Summary • {date}</h3>
               <p className="text-[10px] text-slate-500 mt-1">Date + Branch Filter Only • Balance = Income - (Diesel + Operator Salary)</p>
