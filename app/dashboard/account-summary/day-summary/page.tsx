@@ -21,7 +21,6 @@ const fetchRaw = async (url: string): Promise<{ ok: boolean; status: number; jso
 };
 
 export default function DaySummaryPage() {
-  // ✅ Default eka All Dates - Date filter eka nathuwa okkoma data
   const [date, setDate] = useState("all");
   const [branchFilter, setBranchFilter] = useState("all");
   const [search, setSearch] = useState("");
@@ -35,7 +34,6 @@ export default function DaySummaryPage() {
   const fetchAll = useCallback(async () => {
     setIsLoading(true);
     try {
-      // ✅ Date eka "all" nam date param eka yawan ne - okkoma data enawa
       const summaryUrl = date === "all"
         ? `/api/expences/sales-incomes?summary=true`
         : `/api/expences/sales-incomes?summary=true&date=${encodeURIComponent(date)}`;
@@ -90,7 +88,6 @@ export default function DaySummaryPage() {
   const isBranch = (r: any) => branchFilter === "all" || getBranchKey(r) === branchFilter;
   const branchOptions = useMemo(() => branches.map((b: any) => ({ id: String(b.id), name: b.branch_name })), [branches]);
 
-  // ✅ Creditors - Date eka "all" nam okkoma creditors, nathnam e date eke witharai
   const creditorRows = useMemo(() => {
     let list = credits.filter(r => {
       if (date !== "all" && getCreditDateStr(r) !== date) return false;
@@ -114,7 +111,6 @@ export default function DaySummaryPage() {
     return m;
   }, [creditorRows]);
 
-  // ✅ Day Rows - Date + Branch anuwa - All Dates nam okkoma date penawa
   const dayRows = useMemo(() => {
     const map = new Map<string, any>();
     summaryRows.forEach(r => {
@@ -132,19 +128,23 @@ export default function DaySummaryPage() {
       if (!map.has(key)) map.set(key, { key, branchId: k, branchName: getBranchName(r), date: d, income: 0, amount: 0, discount: 0, credit: 0, count: 0 });
     });
     map.forEach((row) => { row.credit = creditByBranchDate.get(`${row.branchId}|${row.date}`) || 0; });
-    return Array.from(map.values()).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    // ✅ Row eke Total Income = Total Paid + Total Credit
+    return Array.from(map.values()).map(r => ({ ...r, totalIncome: r.income + r.credit })).sort((a, b) => String(b.date).localeCompare(String(a.date)));
   }, [summaryRows, creditorRows, creditByBranchDate, branchFilter]);
 
-  // ✅ Cards - Okkoma data wala ekathuwa (Date filter eka anuwa)
-  const totalIncome = useMemo(() => dayRows.reduce((t, r) => t + r.income, 0), [dayRows]);
-  const totalDiscount = useMemo(() => dayRows.reduce((t, r) => t + r.discount, 0), [dayRows]);
+  // ✅ FIX - Total Paid = Sales Incomes Amount wala ekathuwa
+  const totalPaid = useMemo(() => dayRows.reduce((t, r) => t + r.income, 0), [dayRows]);
+  // ✅ Total Credit = Sales Credits credit_amount wala ekathuwa
   const totalCredit = useMemo(() => dayRows.reduce((t, r) => t + r.credit, 0), [dayRows]);
+  // ✅ FIX - Total Income = Total Paid + Total Credit (kalin thibba Income - Credit newei)
+  const totalIncome = useMemo(() => totalPaid + totalCredit, [totalPaid, totalCredit]);
+  const totalDiscount = useMemo(() => dayRows.reduce((t, r) => t + r.discount, 0), [dayRows]);
   const totalCreditFromCreditors = useMemo(() => creditorRows.reduce((t, r) => t + numeric(r.credit_amount), 0), [creditorRows]);
   const totalBills = useMemo(() => dayRows.reduce((t, r) => t + r.count, 0), [dayRows]);
 
   const exportCSV = () => {
-    const head = "Date,Branch,Income (Amount),Discount,Total Credit (sales_credits)";
-    const body = [...dayRows.map(r => [r.date, `"${r.branchName}"`, r.income, r.discount, r.credit].join(",")), `Total,,${totalIncome},${totalDiscount},${totalCredit}`].join("\n");
+    const head = "Date,Branch,Total Paid,Discount,Total Credit (sales_credits),Total Income (Paid + Credit)";
+    const body = [...dayRows.map(r => [r.date, `"${r.branchName}"`, r.income, r.discount, r.credit, r.totalIncome].join(",")), `Total,,${totalPaid},${totalDiscount},${totalCredit},${totalIncome}`].join("\n");
     const blob = new Blob([head + "\n" + body], { type: "text/csv" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `day-summary-${date}.csv`; a.click();
   };
@@ -158,7 +158,7 @@ export default function DaySummaryPage() {
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30"><Receipt size={18} /></span>
               Day Summary
             </h1>
-            <p className="mt-1 text-slate-400">Income = Sales Incomes Amount • Total Credits = Sales Credits credit_amount • Default: Okkoma Data</p>
+            <p className="mt-1 text-slate-400">Total Paid = Sales Incomes Amount • Total Credit = Sales Credits credit_amount • Total Income = Total Paid + Total Credit</p>
             {allDates.length > 0 && <p className="mt-2 text-[11px] text-slate-300">DB eke data thiyena dates: {allDates.map(d => <button key={d} onClick={() => setDate(d)} className="mx-1 px-2 py-1 bg-slate-800 rounded-lg text-white font-bold hover:bg-emerald-600">{d}</button>)}</p>}
           </div>
           <div className="flex gap-2">
@@ -188,19 +188,19 @@ export default function DaySummaryPage() {
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.05] p-5">
-                <p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase flex items-center gap-2"><Wallet size={13} /> Income • {date === "all" ? "All Dates" : date}</p>
-                <p className="mt-3 text-2xl font-black text-emerald-400">{fmt(totalIncome)}</p>
+                <p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase flex items-center gap-2"><Wallet size={13} /> Total Paid • {date === "all" ? "All Dates" : date}</p>
+                <p className="mt-3 text-2xl font-black text-emerald-400">{fmt(totalPaid)}</p>
                 <p className="mt-1 text-[10px] text-slate-500">Sales Incomes Amount wala okkoma ekathuwa • {totalBills} bills • Discount {fmt(totalDiscount)}</p>
               </div>
               <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.05] p-5">
-                <p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase flex items-center gap-2"><CreditCard size={13} /> Total Credits • {date === "all" ? "All Dates" : date}</p>
+                <p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase flex items-center gap-2"><CreditCard size={13} /> Total Credit • {date === "all" ? "All Dates" : date}</p>
                 <p className="mt-3 text-2xl font-black text-amber-400">{fmt(totalCredit)}</p>
                 <p className="mt-1 text-[10px] text-slate-500">{creditorRows.length} creditors • Creditors total {fmt(totalCreditFromCreditors)}</p>
               </div>
               <div className="rounded-2xl border border-white/[0.06] bg-[#0B1226] p-5">
-                <p className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">Net Income • Income - Credit</p>
-                <p className="mt-3 text-2xl font-black text-white">{fmt(totalIncome - totalCredit)}</p>
-                <p className="mt-1 text-[10px] text-slate-500">Amount - Credit = Cash Income • {date === "all" ? "Okkoma Data" : date}</p>
+                <p className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">Total Income • Paid + Credit</p>
+                <p className="mt-3 text-2xl font-black text-white">{fmt(totalIncome)}</p>
+                <p className="mt-1 text-[10px] text-slate-500">Total Paid {fmt(totalPaid)} + Total Credit {fmt(totalCredit)} • {date === "all" ? "Okkoma Data" : date}</p>
               </div>
             </div>
 
@@ -208,10 +208,10 @@ export default function DaySummaryPage() {
               <h3 className="flex items-center gap-2 font-bold uppercase tracking-wider"><Receipt size={14} className="text-emerald-400" /> Summary • {date === "all" ? "All Dates - Okkoma Data" : date}</h3>
               {dayRows.length === 0 ? <p className="py-8 text-center text-slate-500">Data na.</p> : (
                 <div className="overflow-x-auto">
-                  <table className="mt-4 w-full text-left min-w-[720px]">
-                    <thead><tr className="border-b border-white/[0.06] text-[10px] uppercase text-slate-500"><th className="py-3">Date</th><th className="py-3">Branch</th><th className="py-3 text-right">Income (Amount)</th><th className="py-3 text-right">Discount</th><th className="py-3 text-right">Total Credits</th></tr></thead>
-                    <tbody>{dayRows.map(r => (<tr key={r.key} className="border-b border-white/[0.04]"><td className="py-3 font-bold">{r.date}</td><td className="py-3"><p className="font-bold flex items-center gap-2"><Building2 size={13} className="text-cyan-400" /> {r.branchName}</p><p className="text-[10px] text-slate-500">{r.count} bills</p></td><td className="py-3 text-right font-black text-emerald-400">{fmt(r.income)}</td><td className="py-3 text-right text-amber-400">{fmt(r.discount)}</td><td className="py-3 text-right font-black text-amber-400">{fmt(r.credit)}</td></tr>))}</tbody>
-                    <tfoot><tr className="font-black text-base"><td className="py-4">Total</td><td className="py-4 text-slate-400">{dayRows.length} Rows</td><td className="py-4 text-right text-emerald-400">{fmt(totalIncome)}</td><td className="py-4 text-right text-amber-400">{fmt(totalDiscount)}</td><td className="py-4 text-right text-amber-400">{fmt(totalCredit)}</td></tr></tfoot>
+                  <table className="mt-4 w-full text-left min-w-[820px]">
+                    <thead><tr className="border-b border-white/[0.06] text-[10px] uppercase text-slate-500"><th className="py-3">Date</th><th className="py-3">Branch</th><th className="py-3 text-right">Total Paid</th><th className="py-3 text-right">Discount</th><th className="py-3 text-right">Total Credit</th><th className="py-3 text-right">Total Income</th></tr></thead>
+                    <tbody>{dayRows.map(r => (<tr key={r.key} className="border-b border-white/[0.04]"><td className="py-3 font-bold">{r.date}</td><td className="py-3"><p className="font-bold flex items-center gap-2"><Building2 size={13} className="text-cyan-400" /> {r.branchName}</p><p className="text-[10px] text-slate-500">{r.count} bills</p></td><td className="py-3 text-right font-black text-emerald-400">{fmt(r.income)}</td><td className="py-3 text-right text-amber-400">{fmt(r.discount)}</td><td className="py-3 text-right font-black text-amber-400">{fmt(r.credit)}</td><td className="py-3 text-right font-black text-white">{fmt(r.totalIncome)}</td></tr>))}</tbody>
+                    <tfoot><tr className="font-black text-base"><td className="py-4">Total</td><td className="py-4 text-slate-400">{dayRows.length} Rows</td><td className="py-4 text-right text-emerald-400">{fmt(totalPaid)}</td><td className="py-4 text-right text-amber-400">{fmt(totalDiscount)}</td><td className="py-4 text-right text-amber-400">{fmt(totalCredit)}</td><td className="py-4 text-right text-white">{fmt(totalIncome)}</td></tr></tfoot>
                   </table>
                 </div>
               )}
