@@ -5,16 +5,15 @@ import { Calendar, Wallet, CreditCard, Building2, Loader2, Search, Download, Pho
 const fmt = (n: number) => `LKR ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
 const numeric = (v: any) => Number(v ?? 0) || 0;
 
-const fetchJSON = async (url: string) => {
+const fetchList = async (url: string) => {
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
-    const r = await fetch(url, { cache: "no-store", signal: controller.signal });
-    clearTimeout(timeout);
-    if (!r.ok) return [];
-    const j = await r.json().catch(() => []);
+    const r = await fetch(url, { cache: "no-store" });
+    const j = await r.json().catch(() => null);
+    if (!j) return [];
     if (Array.isArray(j)) return j;
-    if (j && Array.isArray(j.data)) return j.data;
+    if (j.success && Array.isArray(j.data)) return j.data;
+    if (Array.isArray(j.data)) return j.data;
+    if (Array.isArray(j.branches)) return j.branches;
     return [];
   } catch { return []; }
 };
@@ -24,83 +23,78 @@ export default function DaySummaryPage() {
   const [branchFilter, setBranchFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
-  const [incomes, setIncomes] = useState<any[]>([]);
+  const [summaryRows, setSummaryRows] = useState<any[]>([]);
   const [credits, setCredits] = useState<any[]>([]);
   const [branches, setBranches] = useState<any[]>([]);
   const [showCreditors, setShowCreditors] = useState(true);
+  const [debug, setDebug] = useState("");
 
   const fetchAll = useCallback(async () => {
     setIsLoading(true);
     try {
-      const branchList = await fetchJSON(`/api/branches`);
+      // ✅ 1. INCOME - sales-incomes route.ts eke SUMMARY MODE eka
+      // GET /api/expences/sales-incomes?summary=true&date=2026-11-17
+      // -> [{ branchId, branchName, amount: SUM(amount), totalDiscount, totalCredit, date, entriesCount }]
+      const summary = await fetchList(`/api/expences/sales-incomes?summary=true&date=${encodeURIComponent(date)}`);
+      const normalizedSummary = summary.map((r: any) => ({
+        branchId: String(r.branchId ?? r.branch_id ?? ""),
+        branchName: r.branchName || r.branch_name || `Branch ${r.branchId ?? r.branch_id}`,
+        date: String(r.date || date).slice(0, 10),
+        income: numeric(r.amount ?? r.totalAmount ?? r.total_amount),
+        amount: numeric(r.amount ?? r.totalAmount ?? r.total_amount),
+        discount: numeric(r.totalDiscount ?? r.total_discount ?? r.discount),
+        incomeCredit: numeric(r.totalCredit ?? r.total_credit ?? r.credit),
+        count: numeric(r.entriesCount ?? r.entries_count ?? 0),
+      }));
+      setSummaryRows(normalizedSummary);
+
+      // ✅ 2. BRANCHES - /api/branches eken gannawa, fail unoth Summary eken gannawa
+      const branchListApi = await fetchList(`/api/branches`);
+      let branchList = branchListApi.length > 0
+        ? branchListApi.map((b: any) => ({ id: String(b.id ?? b.branch_id ?? b.branchId), branch_name: b.branch_name || b.name || `Branch ${b.id ?? b.branch_id}` }))
+        : normalizedSummary.map((r: any) => ({ id: r.branchId, branch_name: r.branchName }));
+      // Summary eke thiyena branch ekak /api/branches eke nathnam ekatath add karanawa
+      normalizedSummary.forEach((r: any) => {
+        if (!branchList.find((b: any) => String(b.id) === String(r.branchId))) branchList.push({ id: r.branchId, branch_name: r.branchName });
+      });
       setBranches(branchList);
+
       const ids = branchList.map((b: any) => b.id).filter(Boolean);
       const getName = (id: any) => branchList.find((x: any) => String(x.id) === String(id))?.branch_name || `Branch ${id}`;
 
-      const [incomeResults, creditResults] = await Promise.all([
-        Promise.allSettled(
-          ids.map((id: any) =>
-            fetchJSON(`/api/expences/sales-incomes?branch_id=${encodeURIComponent(id)}`).then((rows: any[]) =>
-              rows.map((r: any) => ({ ...r, _branchId: id, _branchName: getName(id) }))
-            )
+      // ✅ 3. CREDITS - sales-credits route eke branch_id required nisa branch ekata ekata loop
+      // GET /api/expences/sales-credits?branch_id=1
+      // Date filter eka backend eke NA, frontend eke created_date === date kiyala filter karanawa
+      const creditResults = await Promise.allSettled(
+        ids.map((id: any) =>
+          fetchList(`/api/expences/sales-credits?branch_id=${encodeURIComponent(id)}`).then((rows: any[]) =>
+            rows.map((r: any) => ({ ...r, _branchId: id, _branchName: getName(id) }))
           )
-        ),
-        Promise.allSettled(
-          ids.map((id: any) =>
-            fetchJSON(`/api/expences/sales-credits?branch_id=${encodeURIComponent(id)}`).then((rows: any[]) =>
-              rows.map((r: any) => ({ ...r, _branchId: id, _branchName: getName(id) }))
-            )
-          )
-        ),
-      ]);
-
-      const allIncomes: any[] = [];
-      incomeResults.forEach((res: any) => { if (res.status === "fulfilled") allIncomes.push(...res.value); });
+        )
+      );
       const allCredits: any[] = [];
       creditResults.forEach((res: any) => { if (res.status === "fulfilled") allCredits.push(...res.value); });
-
-      setIncomes(allIncomes);
       setCredits(allCredits);
+
+      setDebug(`Income Summary Rows: ${summary.length} | Fetched Credits (all dates): ${allCredits.length} | Date: ${date}`);
     } finally { setIsLoading(false); }
-  }, []);
+  }, [date]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const getBranchName = (r: any) => r._branchName || r.branch_name || "-";
   const getBranchKey = (r: any) => String(r._branchId || r.branch_id || r.branchId || "");
-  // ✅ Sales Incomes page eke date eka wage - r.date / r.created_date / r.expense_date 3ma balanawa
-  const getDateStr = (r: any) => String(r.date || r.created_date || r.expense_date || "").slice(0, 10);
+  // ✅ sales-credits route eke: DATE_FORMAT(created_date, '%Y-%m-%d') as created_date
+  const getCreditDateStr = (r: any) => String(r.created_date || r.date || r.created_at || "").slice(0, 10);
   const isBranch = (r: any) => branchFilter === "all" || getBranchKey(r) === branchFilter;
-  const isDate = (r: any) => getDateStr(r) === date;
 
-  // ✅ INCOME = Sales Incomes page eke Amount wala ekathuwa - Discount adu karanne NA
-  const getAmount = (r: any) => numeric(r.amount);
-  const getCredit = (r: any) => numeric(r.credit);
+  const branchOptions = useMemo(() => branches.map((b: any) => ({ id: String(b.id), name: b.branch_name })), [branches]);
 
-  const branchOptions = useMemo(() => branches.map((b: any) => ({ id: String(b.id), name: b.branch_name || `Branch ${b.id}` })), [branches]);
-
-  const dayRows = useMemo(() => {
-    const map = new Map<string, { key: string, branchId: string, branchName: string, date: string, income: number, amount: number, discount: number, credit: number, count: number }>();
-    const getRow = (r: any) => {
-      const key = `${getDateStr(r)}|${getBranchKey(r)}`;
-      if (!map.has(key)) map.set(key, { key, branchId: getBranchKey(r), branchName: getBranchName(r), date: getDateStr(r), income: 0, amount: 0, discount: 0, credit: 0, count: 0 });
-      return map.get(key)!;
-    };
-    incomes.forEach(r => {
-      if (!isDate(r) || !isBranch(r)) return;
-      const row = getRow(r);
-      row.amount += getAmount(r);
-      row.discount += numeric(r.discount);
-      row.credit += getCredit(r);
-      row.income += getAmount(r); // ✅ Income = Amount
-      row.count += 1;
-    });
-    return Array.from(map.values()).sort((a, b) => String(b.date).localeCompare(String(a.date)) || b.income - a.income);
-  }, [incomes, date, branchFilter]);
-
+  // ✅ Creditor list - Me date eke, me branch eke witharai - created_date anuwa
   const creditorRows = useMemo(() => {
     let list = credits.filter(r => {
-      if (!isDate(r) || !isBranch(r)) return false;
+      if (getCreditDateStr(r) !== date) return false;
+      if (!isBranch(r)) return false;
       if (numeric(r.credit_amount) <= 0) return false;
       if (search) {
         const s = search.toLowerCase();
@@ -111,14 +105,42 @@ export default function DaySummaryPage() {
     return list.sort((a, b) => numeric(b.credit_amount) - numeric(a.credit_amount));
   }, [credits, date, branchFilter, search]);
 
+  // ✅ Branch ekata ekata Credit - sales_credits table eken - Creditor list ekata match wenna
+  const creditByBranch = useMemo(() => {
+    const m = new Map<string, number>();
+    creditorRows.forEach(r => {
+      const k = getBranchKey(r);
+      m.set(k, (m.get(k) || 0) + numeric(r.credit_amount));
+    });
+    return m;
+  }, [creditorRows]);
+
+  // ✅ Day Rows - Income eka Summary eken + Credit eka sales_credits table eken
+  // Income thibba nathith Credit witharak thiyena branch ekakuth penawa
+  const dayRows = useMemo(() => {
+    const map = new Map<string, any>();
+    summaryRows.forEach(r => {
+      if (branchFilter !== "all" && String(r.branchId) !== branchFilter) return;
+      map.set(String(r.branchId), { branchId: String(r.branchId), branchName: r.branchName, date: r.date, income: r.income, amount: r.amount, discount: r.discount, credit: 0, count: r.count });
+    });
+    // Credit witharak thiyena branch
+    creditorRows.forEach(r => {
+      const k = getBranchKey(r);
+      if (branchFilter !== "all" && k !== branchFilter) return;
+      if (!map.has(k)) map.set(k, { branchId: k, branchName: getBranchName(r), date, income: 0, amount: 0, discount: 0, credit: 0, count: 0 });
+    });
+    // Credit tika danawa
+    map.forEach((row, k) => { row.credit = creditByBranch.get(k) || 0; });
+    return Array.from(map.values()).sort((a, b) => b.income - a.income);
+  }, [summaryRows, creditorRows, creditByBranch, branchFilter, date]);
+
   const totalIncome = useMemo(() => dayRows.reduce((t, r) => t + r.income, 0), [dayRows]);
-  const totalAmount = useMemo(() => dayRows.reduce((t, r) => t + r.amount, 0), [dayRows]);
   const totalDiscount = useMemo(() => dayRows.reduce((t, r) => t + r.discount, 0), [dayRows]);
   const totalCredit = useMemo(() => dayRows.reduce((t, r) => t + r.credit, 0), [dayRows]);
   const totalCreditFromCreditors = useMemo(() => creditorRows.reduce((t, r) => t + numeric(r.credit_amount), 0), [creditorRows]);
 
   const exportCSV = () => {
-    const head = "Date,Branch,Income (Amount),Discount,Total Credit";
+    const head = "Date,Branch,Income (Amount),Discount,Total Credit (sales_credits)";
     const body = [
       ...dayRows.map(r => [r.date, `"${r.branchName}"`, r.income, r.discount, r.credit].join(",")),
       `Total,,${totalIncome},${totalDiscount},${totalCredit}`
@@ -136,7 +158,8 @@ export default function DaySummaryPage() {
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30"><Receipt size={18} /></span>
               Day Summary
             </h1>
-            <p className="mt-1 text-slate-400">Income = Sales Incomes page eke Amount wala ekathuwa (Date + Branch anuwa) • Total Credits = Credit Amount</p>
+            <p className="mt-1 text-slate-400">Income = Sales Incomes Amount (Summary API) • Total Credits = Sales Credits credit_amount (created_date anuwa)</p>
+            {debug && <p className="mt-2 rounded-lg bg-slate-900 px-3 py-2 text-[10px] text-yellow-300 ring-1 ring-yellow-500/20">DEBUG: {debug}</p>}
           </div>
           <div className="flex gap-2">
             <button onClick={fetchAll} className="rounded-xl bg-amber-500 px-4 py-2.5 font-bold text-black hover:bg-amber-400">Refresh</button>
@@ -180,14 +203,13 @@ export default function DaySummaryPage() {
 
             <div className="rounded-2xl border border-emerald-500/20 bg-[#0B1226] p-5">
               <h3 className="flex items-center gap-2 font-bold uppercase tracking-wider"><Receipt size={14} className="text-emerald-400" /> Day Summary • {date}</h3>
-              <p className="text-[10px] text-slate-500 mt-1">Branch ekata ekata - Income = Amount</p>
               {dayRows.length === 0 ? <p className="py-8 text-center text-slate-500">Me date ekata data na.</p> : (
                 <div className="overflow-x-auto">
                   <table className="mt-4 w-full text-left min-w-[720px]">
                     <thead><tr className="border-b border-white/[0.06] text-[10px] uppercase text-slate-500"><th className="py-3">Date</th><th className="py-3">Branch</th><th className="py-3 text-right">Income (Amount)</th><th className="py-3 text-right">Discount</th><th className="py-3 text-right">Total Credits</th></tr></thead>
                     <tbody>
                       {dayRows.map(r => (
-                        <tr key={r.key} className="border-b border-white/[0.04]">
+                        <tr key={r.branchId} className="border-b border-white/[0.04]">
                           <td className="py-3 font-bold">{r.date}</td>
                           <td className="py-3"><p className="font-bold flex items-center gap-2"><Building2 size={13} className="text-cyan-400" /> {r.branchName}</p><p className="text-[10px] text-slate-500">{r.count} bills</p></td>
                           <td className="py-3 text-right font-black text-emerald-400">{fmt(r.income)}</td>
