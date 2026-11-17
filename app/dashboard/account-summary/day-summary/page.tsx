@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useMemo, useState, useCallback } from "react";
-import { Calendar, Wallet, CreditCard, User, Building2, Loader2, Search, Download, X, Phone, Car, Receipt } from "lucide-react";
+import { Calendar, Wallet, CreditCard, Building2, Loader2, Search, Download, Phone, Car, Receipt } from "lucide-react";
 
 const fmt = (n: number) => `LKR ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
 const numeric = (v: any) => Number(v ?? 0) || 0;
@@ -29,7 +29,6 @@ export default function DaySummaryPage() {
   const [branches, setBranches] = useState<any[]>([]);
   const [showCreditors, setShowCreditors] = useState(true);
 
-  // ✅ FAST - Okkoma ekata parallel
   const fetchAll = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -69,43 +68,36 @@ export default function DaySummaryPage() {
 
   const getBranchName = (r: any) => r._branchName || r.branch_name || "-";
   const getBranchKey = (r: any) => String(r._branchId || r.branch_id || r.branchId || "");
+  // ✅ Sales Incomes page eke date eka wage - r.date / r.created_date / r.expense_date 3ma balanawa
   const getDateStr = (r: any) => String(r.date || r.created_date || r.expense_date || "").slice(0, 10);
   const isBranch = (r: any) => branchFilter === "all" || getBranchKey(r) === branchFilter;
   const isDate = (r: any) => getDateStr(r) === date;
 
-  // ✅ Income = Payable = Amount - Discount - sales_incomes page eke Payable eka
-  const getPayable = (r: any) => {
-    const amount = numeric(r.amount);
-    const discount = numeric(r.discount);
-    return Math.max(0, amount - discount);
-  };
-  // ✅ Credit = Payable - Paid
+  // ✅ INCOME = Sales Incomes page eke Amount wala ekathuwa - Discount adu karanne NA
+  const getAmount = (r: any) => numeric(r.amount);
   const getCredit = (r: any) => numeric(r.credit);
 
   const branchOptions = useMemo(() => branches.map((b: any) => ({ id: String(b.id), name: b.branch_name || `Branch ${b.id}` })), [branches]);
 
-  // ✅ Day Summary - Date + Branch walin group karanawa
   const dayRows = useMemo(() => {
-    const map = new Map<string, { key: string, branchId: string, branchName: string, date: string, income: number, amount: number, discount: number, paid: number, credit: number, count: number }>();
+    const map = new Map<string, { key: string, branchId: string, branchName: string, date: string, income: number, amount: number, discount: number, credit: number, count: number }>();
     const getRow = (r: any) => {
       const key = `${getDateStr(r)}|${getBranchKey(r)}`;
-      if (!map.has(key)) map.set(key, { key, branchId: getBranchKey(r), branchName: getBranchName(r), date: getDateStr(r), income: 0, amount: 0, discount: 0, paid: 0, credit: 0, count: 0 });
+      if (!map.has(key)) map.set(key, { key, branchId: getBranchKey(r), branchName: getBranchName(r), date: getDateStr(r), income: 0, amount: 0, discount: 0, credit: 0, count: 0 });
       return map.get(key)!;
     };
     incomes.forEach(r => {
       if (!isDate(r) || !isBranch(r)) return;
       const row = getRow(r);
-      row.amount += numeric(r.amount);
+      row.amount += getAmount(r);
       row.discount += numeric(r.discount);
-      row.paid += numeric(r.paid);
       row.credit += getCredit(r);
-      row.income += getPayable(r); // ✅ Income = Payable
+      row.income += getAmount(r); // ✅ Income = Amount
       row.count += 1;
     });
     return Array.from(map.values()).sort((a, b) => String(b.date).localeCompare(String(a.date)) || b.income - a.income);
   }, [incomes, date, branchFilter]);
 
-  // ✅ Creditor list - Credit karapu customer la - sales-credits table eken
   const creditorRows = useMemo(() => {
     let list = credits.filter(r => {
       if (!isDate(r) || !isBranch(r)) return false;
@@ -119,19 +111,17 @@ export default function DaySummaryPage() {
     return list.sort((a, b) => numeric(b.credit_amount) - numeric(a.credit_amount));
   }, [credits, date, branchFilter, search]);
 
-  // ✅ Totals - Me date ekata
   const totalIncome = useMemo(() => dayRows.reduce((t, r) => t + r.income, 0), [dayRows]);
   const totalAmount = useMemo(() => dayRows.reduce((t, r) => t + r.amount, 0), [dayRows]);
   const totalDiscount = useMemo(() => dayRows.reduce((t, r) => t + r.discount, 0), [dayRows]);
-  const totalPaid = useMemo(() => dayRows.reduce((t, r) => t + r.paid, 0), [dayRows]);
   const totalCredit = useMemo(() => dayRows.reduce((t, r) => t + r.credit, 0), [dayRows]);
   const totalCreditFromCreditors = useMemo(() => creditorRows.reduce((t, r) => t + numeric(r.credit_amount), 0), [creditorRows]);
 
   const exportCSV = () => {
-    const head = "Date,Branch,Amount,Discount,Income (Payable),Paid,Total Credit";
+    const head = "Date,Branch,Income (Amount),Discount,Total Credit";
     const body = [
-      ...dayRows.map(r => [r.date, `"${r.branchName}"`, r.amount, r.discount, r.income, r.paid, r.credit].join(",")),
-      `Total,,${totalAmount},${totalDiscount},${totalIncome},${totalPaid},${totalCredit}`
+      ...dayRows.map(r => [r.date, `"${r.branchName}"`, r.income, r.discount, r.credit].join(",")),
+      `Total,,${totalIncome},${totalDiscount},${totalCredit}`
     ].join("\n");
     const blob = new Blob([head + "\n" + body], { type: "text/csv" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `day-summary-${date}.csv`; a.click();
@@ -146,7 +136,7 @@ export default function DaySummaryPage() {
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30"><Receipt size={18} /></span>
               Day Summary
             </h1>
-            <p className="mt-1 text-slate-400">Income = Payable (Amount - Discount) • Total Credits = Credit Amount • Creditor = Credit karapu customer</p>
+            <p className="mt-1 text-slate-400">Income = Sales Incomes page eke Amount wala ekathuwa (Date + Branch anuwa) • Total Credits = Credit Amount</p>
           </div>
           <div className="flex gap-2">
             <button onClick={fetchAll} className="rounded-xl bg-amber-500 px-4 py-2.5 font-bold text-black hover:bg-amber-400">Refresh</button>
@@ -170,16 +160,11 @@ export default function DaySummaryPage() {
 
         {isLoading ? <div className="flex justify-center py-16 text-slate-400"><Loader2 className="animate-spin" /> Loading...</div> : (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.05] p-5">
-                <p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase flex items-center gap-2"><Wallet size={13} /> Income • Payable • {date}</p>
+                <p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase flex items-center gap-2"><Wallet size={13} /> Income • {date}</p>
                 <p className="mt-3 text-2xl font-black text-emerald-400">{fmt(totalIncome)}</p>
-                <p className="mt-1 text-[10px] text-slate-500">Amount {fmt(totalAmount)} - Discount {fmt(totalDiscount)}</p>
-              </div>
-              <div className="rounded-2xl border border-white/[0.06] bg-[#0B1226] p-5">
-                <p className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">Total Paid • {date}</p>
-                <p className="mt-3 text-2xl font-black text-blue-400">{fmt(totalPaid)}</p>
-                <p className="mt-1 text-[10px] text-slate-500">{dayRows.reduce((t, r) => t + r.count, 0)} bills</p>
+                <p className="mt-1 text-[10px] text-slate-500">Sales Incomes Amount wala ekathuwa • {dayRows.reduce((t, r) => t + r.count, 0)} bills • Discount {fmt(totalDiscount)}</p>
               </div>
               <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.05] p-5">
                 <p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase flex items-center gap-2"><CreditCard size={13} /> Total Credits • {date}</p>
@@ -187,33 +172,31 @@ export default function DaySummaryPage() {
                 <p className="mt-1 text-[10px] text-slate-500">{creditorRows.length} creditors • Creditors total {fmt(totalCreditFromCreditors)}</p>
               </div>
               <div className="rounded-2xl border border-white/[0.06] bg-[#0B1226] p-5">
-                <p className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">Balance • Income - Paid</p>
-                <p className="mt-3 text-2xl font-black text-white">{fmt(totalIncome - totalPaid)}</p>
-                <p className="mt-1 text-[10px] text-slate-500">Payable - Paid = Credit</p>
+                <p className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">Net Income • Income - Credit</p>
+                <p className="mt-3 text-2xl font-black text-white">{fmt(totalIncome - totalCredit)}</p>
+                <p className="mt-1 text-[10px] text-slate-500">Amount - Credit = Cash Income</p>
               </div>
             </div>
 
             <div className="rounded-2xl border border-emerald-500/20 bg-[#0B1226] p-5">
               <h3 className="flex items-center gap-2 font-bold uppercase tracking-wider"><Receipt size={14} className="text-emerald-400" /> Day Summary • {date}</h3>
-              <p className="text-[10px] text-slate-500 mt-1">Branch ekata ekata - Income = Payable, Credit = Ithuru gana</p>
+              <p className="text-[10px] text-slate-500 mt-1">Branch ekata ekata - Income = Amount</p>
               {dayRows.length === 0 ? <p className="py-8 text-center text-slate-500">Me date ekata data na.</p> : (
                 <div className="overflow-x-auto">
                   <table className="mt-4 w-full text-left min-w-[720px]">
-                    <thead><tr className="border-b border-white/[0.06] text-[10px] uppercase text-slate-500"><th className="py-3">Date</th><th className="py-3">Branch</th><th className="py-3 text-right">Amount</th><th className="py-3 text-right">Discount</th><th className="py-3 text-right">Income (Payable)</th><th className="py-3 text-right">Paid</th><th className="py-3 text-right">Total Credits</th></tr></thead>
+                    <thead><tr className="border-b border-white/[0.06] text-[10px] uppercase text-slate-500"><th className="py-3">Date</th><th className="py-3">Branch</th><th className="py-3 text-right">Income (Amount)</th><th className="py-3 text-right">Discount</th><th className="py-3 text-right">Total Credits</th></tr></thead>
                     <tbody>
                       {dayRows.map(r => (
                         <tr key={r.key} className="border-b border-white/[0.04]">
                           <td className="py-3 font-bold">{r.date}</td>
                           <td className="py-3"><p className="font-bold flex items-center gap-2"><Building2 size={13} className="text-cyan-400" /> {r.branchName}</p><p className="text-[10px] text-slate-500">{r.count} bills</p></td>
-                          <td className="py-3 text-right">{fmt(r.amount)}</td>
-                          <td className="py-3 text-right text-amber-400">{fmt(r.discount)}</td>
                           <td className="py-3 text-right font-black text-emerald-400">{fmt(r.income)}</td>
-                          <td className="py-3 text-right font-bold text-blue-400">{fmt(r.paid)}</td>
+                          <td className="py-3 text-right text-amber-400">{fmt(r.discount)}</td>
                           <td className="py-3 text-right font-black text-amber-400">{fmt(r.credit)}</td>
                         </tr>
                       ))}
                     </tbody>
-                    <tfoot><tr className="font-black text-base"><td className="py-4">Total</td><td className="py-4 text-slate-400">{dayRows.length} Branches</td><td className="py-4 text-right">{fmt(totalAmount)}</td><td className="py-4 text-right text-amber-400">{fmt(totalDiscount)}</td><td className="py-4 text-right text-emerald-400">{fmt(totalIncome)}</td><td className="py-4 text-right text-blue-400">{fmt(totalPaid)}</td><td className="py-4 text-right text-amber-400">{fmt(totalCredit)}</td></tr></tfoot>
+                    <tfoot><tr className="font-black text-base"><td className="py-4">Total</td><td className="py-4 text-slate-400">{dayRows.length} Branches</td><td className="py-4 text-right text-emerald-400">{fmt(totalIncome)}</td><td className="py-4 text-right text-amber-400">{fmt(totalDiscount)}</td><td className="py-4 text-right text-amber-400">{fmt(totalCredit)}</td></tr></tfoot>
                   </table>
                 </div>
               )}
@@ -231,7 +214,7 @@ export default function DaySummaryPage() {
                 creditorRows.length === 0 ? <p className="py-8 text-center text-slate-500">Me date ekata creditors la na.</p> : (
                   <div className="overflow-x-auto mt-4">
                     <table className="w-full text-left min-w-[720px]">
-                      <thead><tr className="border-b border-white/[0.06] text-[10px] uppercase text-slate-500"><th className="py-3">Creditor (Customer)</th><th className="py-3">Branch</th><th className="py-3">Bill No</th><th className="py-3">Product</th><th className="py-3">Promise Date</th><th className="py-3 text-right">Credit Amount</th><th className="py-3 text-right">Total / Paid</th></tr></thead>
+                      <thead><tr className="border-b border-white/[0.06] text-[10px] uppercase text-slate-500"><th className="py-3">Creditor (Customer)</th><th className="py-3">Branch</th><th className="py-3">Bill No</th><th className="py-3">Product</th><th className="py-3">Promise Date</th><th className="py-3 text-right">Credit Amount</th><th className="py-3 text-right">Total</th></tr></thead>
                       <tbody>
                         {creditorRows.map(r => (
                           <tr key={r.id} className="border-b border-white/[0.04]">
@@ -244,7 +227,7 @@ export default function DaySummaryPage() {
                             <td className="py-3">{r.product_name || "-"}</td>
                             <td className="py-3">{String(r.promise_date || "").slice(0, 10) || "-"}</td>
                             <td className="py-3 text-right font-black text-amber-400">{fmt(numeric(r.credit_amount))}</td>
-                            <td className="py-3 text-right"><p>{fmt(numeric(r.total_amount))}</p><p className="text-[10px] text-emerald-400">Paid {fmt(numeric(r.paid_amount))}</p></td>
+                            <td className="py-3 text-right">{fmt(numeric(r.total_amount))}</td>
                           </tr>
                         ))}
                       </tbody>
