@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   Calendar, Fuel, Wallet, Receipt, Building2, Scale,
   Loader2, Search, Download, Users, Banknote, UserRound, ListChecks, Filter, X,
@@ -15,9 +15,13 @@ const isBrekerSalary = (r: any) => {
   return isBreker(r.employee_name) || isBreker(r.employeeName) || isBreker(r.name) || isBreker(r.reason) || isBreker(r.description) || isBreker(r.employee);
 };
 
+// ✅ FAST - Timeout ekak dala, hang wenna denne na
 const fetchJSON = async (url: string) => {
   try {
-    const r = await fetch(url, { cache: "no-store" });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    const r = await fetch(url, { cache: "no-store", signal: controller.signal });
+    clearTimeout(timeout);
     if (!r.ok) return [];
     const j = await r.json().catch(() => []);
     if (Array.isArray(j)) return j;
@@ -28,7 +32,6 @@ const fetchJSON = async (url: string) => {
 };
 
 export default function BreakerSummaryPage() {
-  // ✅ FIX 1 - Default "all" - Date filter apply wela na
   const [date, setDate] = useState("all");
   const [branchFilter, setBranchFilter] = useState("all");
   const [search, setSearch] = useState("");
@@ -42,7 +45,8 @@ export default function BreakerSummaryPage() {
   const [allBranch, setAllBranch] = useState("all");
   const [allType, setAllType] = useState("all");
 
-  const fetchAll = async () => {
+  // ✅ FAST - Kalin 4 step, dan 2 step - Okkoma ekata parallel
+  const fetchAll = useCallback(async () => {
     setIsLoading(true);
     try {
       const branchList = await fetchJSON(`/api/branches`);
@@ -50,47 +54,51 @@ export default function BreakerSummaryPage() {
       const ids = branchList.map((b: any) => b.id).filter(Boolean);
       const getName = (id: any) => branchList.find((x: any) => String(x.id) === String(id))?.branch_name || `Branch ${id}`;
 
-      const otherResults = await Promise.allSettled(
-        ids.map((id: any) =>
-          fetchJSON(`/api/expences/other?branchId=${encodeURIComponent(id)}`).then((rows: any[]) =>
-            rows.map((r: any) => ({ ...r, _branchId: id, _branchName: getName(id) }))
+      // ✅ Me 3ma ekata yawanna - Ekata passe ekak newei
+      const [otherResults, dieselResults, salaryResults] = await Promise.all([
+        Promise.allSettled(
+          ids.map((id: any) =>
+            fetchJSON(`/api/expences/other?branchId=${encodeURIComponent(id)}`).then((rows: any[]) =>
+              rows.map((r: any) => ({ ...r, _branchId: id, _branchName: getName(id) }))
+            )
           )
-        )
-      );
+        ),
+        Promise.allSettled(
+          ids.map((id: any) =>
+            fetchJSON(`/api/expences/diesel?branch_id=${encodeURIComponent(id)}`).then((rows: any[]) =>
+              rows.map((r: any) => ({ ...r, _branchId: id, _branchName: getName(id) }))
+            )
+          )
+        ),
+        Promise.allSettled(
+          ids.map((id: any) =>
+            fetchJSON(`/api/expences/salary?branchId=${encodeURIComponent(id)}`).then((rows: any[]) =>
+              rows.map((r: any) => ({ ...r, _branchId: id, _branchName: getName(id) }))
+            )
+          )
+        ),
+      ]);
+
       const allOther: any[] = [];
       otherResults.forEach((res: any) => { if (res.status === "fulfilled") allOther.push(...res.value); });
-      setOtherExpenses(allOther);
-
-      const dieselResults = await Promise.allSettled(
-        ids.map((id: any) =>
-          fetchJSON(`/api/expences/diesel?branch_id=${encodeURIComponent(id)}`).then((rows: any[]) =>
-            rows.map((r: any) => ({ ...r, _branchId: id, _branchName: getName(id) }))
-          )
-        )
-      );
       const allDiesel: any[] = [];
       dieselResults.forEach((res: any) => { if (res.status === "fulfilled") allDiesel.push(...res.value); });
-      setDieselRows(allDiesel);
-
-      const salaryResults = await Promise.allSettled(
-        ids.map((id: any) =>
-          fetchJSON(`/api/expences/salary?branchId=${encodeURIComponent(id)}`).then((rows: any[]) =>
-            rows.map((r: any) => ({ ...r, _branchId: id, _branchName: getName(id) }))
-          )
-        )
-      );
       const allSalary: any[] = [];
       salaryResults.forEach((res: any) => { if (res.status === "fulfilled") allSalary.push(...res.value); });
+
+      // ✅ setState 3 parak newei, 1 render ekak - Batch karanawa
+      setOtherExpenses(allOther);
+      setDieselRows(allDiesel);
       setSalaryRows(allSalary);
     } finally { setIsLoading(false); }
-  };
-  useEffect(() => { fetchAll(); }, []);
+  }, []);
+
+  useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const getBranchName = (r: any) => r._branchName || "-";
   const getBranchKey = (r: any) => String(r._branchId || r.branch_id || r.branchId || "");
   const getDateStr = (r: any) => String(r.expense_date || r.date || "").slice(0, 10);
   const isBranch = (r: any) => branchFilter === "all" || getBranchKey(r) === branchFilter;
-  // ✅ FIX 2 - "all" nam okkoma, date ekak thoruwoth eka witharak
   const isDate = (r: any) => date === "all" || getDateStr(r) === date;
   const branchOptions = useMemo(() => branches.map((b: any) => ({ id: String(b.id), name: b.branch_name || `Branch ${b.id}` })), [branches]);
   const dateLabel = date === "all" ? "All Dates" : date;
@@ -134,7 +142,6 @@ export default function BreakerSummaryPage() {
 
   const summaryRows = useMemo(() => {
     const map = new Map<string, { key: string, branchId: string, branchName: string, date: string, income: number, diesel: number, dieselQty: number, salary: number, incomeCount: number, dieselCount: number, salaryCount: number }>();
-    // ✅ FIX 3 - All Dates nam Date + Branch walin group karanawa
     const getRow = (r: any) => {
       const d = getDateStr(r);
       const key = date === "all" ? `${d}|${getBranchKey(r)}` : getBranchKey(r);
@@ -316,7 +323,7 @@ export default function BreakerSummaryPage() {
                 </table>
                 </div>
               )}
-            </div>            
+            </div>
           </>
         )}
       </div>
