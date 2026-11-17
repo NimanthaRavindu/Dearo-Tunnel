@@ -50,7 +50,6 @@ export default function DieselExpensesPage({ params }: PageProps) {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  // ✅ Aluth - Summary Modal eka
   const [showSummary, setShowSummary] = useState(false);
 
   const loadRecords = useCallback(async () => {
@@ -68,6 +67,20 @@ export default function DieselExpensesPage({ params }: PageProps) {
   }, [branchId]);
 
   useEffect(() => { loadRecords(); }, [loadRecords]);
+
+  // ✅ Aluth - ESC key ekenuth close wenna
+  useEffect(() => {
+    if (!showSummary) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setShowSummary(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showSummary]);
+
+  // ✅ Aluth - Modal eka open wela thiyeddi pita page eka scroll wenna epa
+  useEffect(() => {
+    document.body.style.overflow = showSummary ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [showSummary]);
 
   const machineList = useMemo(() => {
     const machines = records.map(r => r.machine).filter(Boolean) as string[];
@@ -94,7 +107,6 @@ export default function DieselExpensesPage({ params }: PageProps) {
     }), EMPTY_SUMMARY);
   }, [filteredRecords]);
 
-  // ✅ Aluth - Machine walin wen wenama summary eka
   const machineSummary = useMemo(() => {
     const map = new Map<string, DieselSummary & { count: number }>();
     filteredRecords.forEach((r) => {
@@ -113,7 +125,6 @@ export default function DieselExpensesPage({ params }: PageProps) {
 
   const clearFilters = () => { setSelectedDate(""); setSelectedMachine(""); setSearch(""); };
 
-  // ✅ FIX - Wena page ekakata yanne na, modal eka open karanawa
   const openSummaryPage = () => {
     setShowSummary(true);
   };
@@ -167,11 +178,13 @@ export default function DieselExpensesPage({ params }: PageProps) {
         </section>
       </div>
 
-      {/* ✅ Aluth - VIEW SUMMARY Modal - Uda cards wala summary eka */}
+      {/* ✅ FIXED SUMMARY MODAL - Sampurna pituwata enne na, Close karanna puluwan */}
       {showSummary && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setShowSummary(false)}>
-          <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-[#0d1527] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+        <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black/70 p-4 overflow-y-auto" onClick={() => setShowSummary(false)}>
+          <div className="w-full max-w-lg my-4 sm:my-8 rounded-2xl border border-slate-700 bg-[#0d1527] shadow-2xl flex flex-col max-h-[90vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+
+            {/* Header - Fix - Hamadama penawa */}
+            <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4 shrink-0">
               <div className="flex items-center gap-3">
                 <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-2.5 text-cyan-400"><Fuel size={18} /></div>
                 <div>
@@ -179,37 +192,40 @@ export default function DieselExpensesPage({ params }: PageProps) {
                   <p className="text-[11px] text-slate-500 mt-0.5">Branch {branchId} {selectedDate ? `• ${formatDate(selectedDate)}` : ""} {selectedMachine ? `• ${selectedMachine}` : ""} • {filteredRecords.length} Records</p>
                 </div>
               </div>
-              <button onClick={() => setShowSummary(false)} className="rounded-lg border border-slate-700 p-2 text-slate-400 hover:text-white hover:bg-slate-800"><X size={16} /></button>
+              <button type="button" onClick={() => setShowSummary(false)} className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-black text-white hover:bg-red-500 hover:text-white hover:border-red-500"><X size={16} /></button>
             </div>
 
-            {/* Uda Cards wala Amount Summary */}
-            <div className="mt-4 space-y-2.5 text-sm">
-              <div className="flex justify-between rounded-xl bg-slate-900/60 px-4 py-3"><span className="text-slate-400">Diesel Used</span><span className="font-black text-cyan-400">{formatDiesel(summary.diesel)} L</span></div>
-              <div className="flex justify-between rounded-xl bg-slate-900/60 px-4 py-3"><span className="text-slate-400">Total Amount</span><span className="font-black text-white">{formatMoney(summary.amount)}</span></div>
-              <div className="flex justify-between rounded-xl bg-slate-900/60 px-4 py-3"><span className="text-slate-400">Total Payable</span><span className="font-black text-amber-400">{formatMoney(summary.payable)}</span></div>
-              <div className="flex justify-between rounded-xl bg-slate-900/60 px-4 py-3"><span className="text-slate-400">Total Paid</span><span className="font-black text-emerald-400">{formatMoney(summary.paid)}</span></div>
-              <div className="flex justify-between rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3"><span className="text-slate-300 font-bold">Remaining Balance</span><span className="font-black text-rose-400">{formatMoney(summary.balance)}</span></div>
-              <div className="flex justify-between rounded-xl bg-slate-900/60 px-4 py-3"><span className="text-slate-400">Initial Stock / Total Diesel</span><span className="font-black text-white">{formatDiesel(INITIAL_DIESEL_STOCK)} L</span></div>
-            </div>
+            {/* Middle - Me tika witharak scroll wenawa */}
+            <div className="flex-1 overflow-y-auto px-6 py-4">
+              <div className="space-y-2.5 text-sm">
+                <div className="flex justify-between rounded-xl bg-slate-900/60 px-4 py-3"><span className="text-slate-400">Diesel Used</span><span className="font-black text-cyan-400">{formatDiesel(summary.diesel)} L</span></div>
+                <div className="flex justify-between rounded-xl bg-slate-900/60 px-4 py-3"><span className="text-slate-400">Total Amount</span><span className="font-black text-white">{formatMoney(summary.amount)}</span></div>
+                <div className="flex justify-between rounded-xl bg-slate-900/60 px-4 py-3"><span className="text-slate-400">Total Payable</span><span className="font-black text-amber-400">{formatMoney(summary.payable)}</span></div>
+                <div className="flex justify-between rounded-xl bg-slate-900/60 px-4 py-3"><span className="text-slate-400">Total Paid</span><span className="font-black text-emerald-400">{formatMoney(summary.paid)}</span></div>
+                <div className="flex justify-between rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3"><span className="text-slate-300 font-bold">Remaining Balance</span><span className="font-black text-rose-400">{formatMoney(summary.balance)}</span></div>
+                <div className="flex justify-between rounded-xl bg-slate-900/60 px-4 py-3"><span className="text-slate-400">Initial Stock / Total Diesel</span><span className="font-black text-white">{formatDiesel(INITIAL_DIESEL_STOCK)} L</span></div>
+              </div>
 
-            {/* Machine walin */}
-            <div className="mt-5">
-              <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500 mb-2">By Machine</p>
-              <div className="max-h-56 overflow-y-auto space-y-2">
-                {machineSummary.map(([machine, m]) => (
-                  <div key={machine} className="flex items-center justify-between rounded-xl border border-slate-800 bg-[#070a12] px-4 py-3">
-                    <div><p className="font-bold text-white text-sm">{machine}</p><p className="text-[11px] text-slate-500">{m.count} records • {formatDiesel(m.diesel)} L</p></div>
-                    <div className="text-right"><p className="font-black text-white text-sm">{formatMoney(m.amount)}</p><p className="text-[11px] text-emerald-400">Paid {formatMoney(m.paid)} • Bal {formatMoney(m.balance)}</p></div>
-                  </div>
-                ))}
-                {machineSummary.length === 0 && <p className="text-center text-slate-500 text-xs py-4">No records</p>}
+              <div className="mt-5">
+                <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500 mb-2">By Machine</p>
+                <div className="space-y-2">
+                  {machineSummary.map(([machine, m]) => (
+                    <div key={machine} className="flex items-center justify-between rounded-xl border border-slate-800 bg-[#070a12] px-4 py-3">
+                      <div><p className="font-bold text-white text-sm">{machine}</p><p className="text-[11px] text-slate-500">{m.count} records • {formatDiesel(m.diesel)} L</p></div>
+                      <div className="text-right"><p className="font-black text-white text-sm">{formatMoney(m.amount)}</p><p className="text-[11px] text-emerald-400">Paid {formatMoney(m.paid)} • Bal {formatMoney(m.balance)}</p></div>
+                    </div>
+                  ))}
+                  {machineSummary.length === 0 && <p className="text-center text-slate-500 text-xs py-4">No records</p>}
+                </div>
               </div>
             </div>
 
-            <div className="mt-5 flex gap-2">
-              <button onClick={() => setShowSummary(false)} className="flex-1 rounded-xl bg-cyan-500 py-3 text-xs font-black uppercase tracking-wider text-slate-950 hover:bg-cyan-400">Close</button>
-              <button onClick={() => window.print()} className="rounded-xl border border-slate-700 px-5 py-3 text-xs font-bold text-slate-300 hover:bg-slate-800">Print</button>
+            {/* Footer - Fix - Hamadama penawa */}
+            <div className="flex gap-2 border-t border-slate-800 px-6 py-4 shrink-0 bg-[#0d1527]">
+              <button type="button" onClick={() => setShowSummary(false)} className="flex-1 rounded-xl bg-cyan-500 py-3 text-xs font-black uppercase tracking-wider text-slate-950 hover:bg-cyan-400">Close</button>
+              <button type="button" onClick={() => window.print()} className="rounded-xl border border-slate-700 px-5 py-3 text-xs font-bold text-slate-300 hover:bg-slate-800">Print</button>
             </div>
+
           </div>
         </div>
       )}
