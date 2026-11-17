@@ -316,7 +316,9 @@ export default function BreakerSummaryPage() {
                 </table>
                 </div>
               )}
-            </div>            
+            </div>
+
+            
           </>
         )}
       </div>
