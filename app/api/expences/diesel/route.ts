@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db"; 
+import { db } from "@/lib/db";
 
 export async function GET(request: NextRequest) {
   try {
     const branchId = new URL(request.url).searchParams.get("branch_id");
     if (!branchId) return NextResponse.json({ error: "branch_id is required" }, { status: 400 });
 
+    // ✅ ALL MACHINES - machine filter ekak NA
+    // Breaker / Crusher / Excavator / Lorry - okkoma enawa
     const [expenses] = await db.execute(
       `SELECT id, branch_id, DATE_FORMAT(date, '%Y-%m-%d') AS date, machine, diesel, amount, payable, paid
        FROM diesel_expenses WHERE branch_id =? ORDER BY date DESC, id DESC`, [branchId]

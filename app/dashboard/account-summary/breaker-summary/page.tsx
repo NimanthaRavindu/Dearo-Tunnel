@@ -101,8 +101,8 @@ export default function BreakerSummaryPage() {
     return true;
   }), [otherExpenses, branchFilter, search]);
 
-  // ✅ FIX - DIESEL = ALL MACHINES
-  // Me thana machine filter ekak NA - breaker / crusher / excavator / lorry / okkoma gananawa
+  // ✅ DIESEL = ALL MACHINES - machine filter ekak NA
+  // Breaker / Crusher / Excavator / Lorry / okkoma gananawa
   // Filter wenne Branch witharak - Date filter eka passe wenama apply wenawa
   const allMachinesDieselAll = useMemo(() => (dieselRows || []).filter(r => {
     if (!r) return false;
@@ -118,6 +118,7 @@ export default function BreakerSummaryPage() {
   const breakerIncomeTotal = useMemo(() => breakerIncomeAll.reduce((t, r) => t + numeric(r.total_payable ?? r.amount), 0), [breakerIncomeAll]);
 
   // ✅ Card eke amount eka = Hema machines wala Diesel payable wala ekathuwa
+  // Okkoma branches + Okkoma dates
   const dieselQtyAll = useMemo(() => allMachinesDieselAll.reduce((t, r) => t + numeric(r.diesel ?? r.qty ?? r.quantity ?? r.liters), 0), [allMachinesDieselAll]);
   const dieselTotal = useMemo(() => allMachinesDieselAll.reduce((t, r) => t + numeric(r.payable ?? r.total_payable ?? r.amount), 0), [allMachinesDieselAll]);
 
