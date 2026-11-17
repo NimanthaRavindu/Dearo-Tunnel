@@ -2,7 +2,7 @@
 
 import React, { use, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle,ArrowLeft,Calendar,FileText,RefreshCw,Search,ShieldCheck,User,X} from "lucide-react";
+import { AlertCircle, ArrowLeft, Calendar, FileText, RefreshCw, Search, ShieldCheck, User, X, Trash2, AlertTriangle, Loader2, CheckCircle2 } from "lucide-react";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -48,10 +48,7 @@ export default function ViewSalaryExpensesPage({
 }: PageProps) {
   const router = useRouter();
   const routeParams = use(params);
-
-  const branchId = routeParams?.id
-    ? decodeURIComponent(routeParams.id)
-    : "";
+  const branchId = routeParams?.id ? decodeURIComponent(routeParams.id) : "";
 
   const [data, setData] = useState<SalaryEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,56 +56,62 @@ export default function ViewSalaryExpensesPage({
   const [search, setSearch] = useState("");
   const [showSummary, setShowSummary] = useState(false);
   const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
-  useEffect(() => {
-    if (!branchId || branchId === "[id]") {
+  // ✅ DELETE states
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const fetchSalaryLogs = async () => {
+    if (!branchId || branchId === "[id]") { setLoading(false); return; }
+    try {
+      setLoading(true);
+      setError("");
+      const response = await fetch(
+        `/api/expences/salary?branchId=${encodeURIComponent(branchId)}`,
+        { cache: "no-store" },
+      );
+      if (!response.ok) throw new Error("Failed to load salary expenses.");
+      const result = await response.json();
+      setData(Array.isArray(result) ? result : result.data || result.rows || []);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Unable to load salary expenses.");
+      setData([]);
+    } finally {
       setLoading(false);
-      return;
     }
+  };
 
-    const fetchSalaryLogs = async () => {
-      try {
-        setLoading(true);
-        setError("");
+  useEffect(() => { fetchSalaryLogs(); }, [branchId]);
 
-        const response = await fetch(
-          `/api/expences/salary?branchId=${encodeURIComponent(branchId)}`,
-          { cache: "no-store" },
-        );
-
-        if (!response.ok) {
-          throw new Error("Failed to load salary expenses.");
-        }
-
-        const result = await response.json();
-
-        setData(
-          Array.isArray(result)
-            ? result
-            : result.data || result.rows || [],
-        );
-      } catch (requestError) {
-        setError(
-          requestError instanceof Error
-            ? requestError.message
-            : "Unable to load salary expenses.",
-        );
-        setData([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchSalaryLogs();
-  }, [branchId]);
+  // ✅ DELETE - Confirm eken passe DB eken delete wenawa
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    try {
+      setIsDeleting(true);
+      setError("");
+      const res = await fetch(
+        `/api/expences/salary?id=${encodeURIComponent(deleteId)}&branchId=${encodeURIComponent(branchId)}`,
+        { method: "DELETE", cache: "no-store" }
+      );
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok || result.success === false) throw new Error(result.error || "Failed to delete salary record.");
+      setDeleteId(null);
+      setSuccessMessage("Salary record deleted successfully.");
+      window.setTimeout(() => setSuccessMessage(""), 3000);
+      await fetchSalaryLogs();
+    } catch (err: any) {
+      setError(err.message || "Failed to delete salary record.");
+      setDeleteId(null);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const filteredData = useMemo(() => {
     const query = search.trim().toLowerCase();
-
     return data.filter((item) => {
-      const matchesDate =
-        !selectedDate || entryDate(item) === selectedDate;
-
+      const matchesDate = !selectedDate || entryDate(item) === selectedDate;
       const matchesSearch =
         !query ||
         [
@@ -122,7 +125,6 @@ export default function ViewSalaryExpensesPage({
         ].some((value) =>
           String(value ?? "").toLowerCase().includes(query),
         );
-
       return matchesDate && matchesSearch;
     });
   }, [data, selectedDate, search]);
@@ -130,12 +132,9 @@ export default function ViewSalaryExpensesPage({
   const summary = useMemo<SalarySummary>(() => {
     return filteredData.reduce<SalarySummary>(
       (total, item) => ({
-        payable:
-          total.payable + Number(item.total_payable || 0),
-        paid:
-          total.paid + Number(item.total_paid || 0),
-        balance:
-          total.balance + Number(item.balance || 0),
+        payable: total.payable + Number(item.total_payable || 0),
+        paid: total.paid + Number(item.total_paid || 0),
+        balance: total.balance + Number(item.balance || 0),
       }),
       EMPTY_SALARY_SUMMARY,
     );
@@ -145,6 +144,8 @@ export default function ViewSalaryExpensesPage({
     setSelectedDate("");
     setSearch("");
   };
+
+  const deleteItem = data.find((x) => String(x.id) === String(deleteId));
 
   return (
     <main className="min-h-screen bg-[#070a12] p-4 text-slate-300 antialiased md:p-6 lg:p-8">
@@ -158,12 +159,10 @@ export default function ViewSalaryExpensesPage({
             >
               <ArrowLeft size={16} />
             </button>
-
             <div>
               <h1 className="font-mono text-sm font-bold uppercase tracking-wider text-slate-100">
                 Salary Expenditure Ledger
               </h1>
-
               <p className="mt-1 text-[10px] uppercase text-slate-500">
                 Scope Node ID: {branchId}
               </p>
@@ -173,20 +172,16 @@ export default function ViewSalaryExpensesPage({
           <div className="flex flex-col gap-2 sm:flex-row">
             <div className="relative">
               <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-
               <input
                 type="date"
                 value={selectedDate}
-                onChange={(event) =>
-                  setSelectedDate(event.target.value)
-                }
+                onChange={(event) => setSelectedDate(event.target.value)}
                 className="rounded-lg border border-slate-800 bg-slate-50 py-2 pl-9 pr-3 text-xs text-slate-900 outline-none focus:border-amber-500"
               />
             </div>
 
             <div className="relative">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-
               <input
                 type="search"
                 value={search}
@@ -227,6 +222,12 @@ export default function ViewSalaryExpensesPage({
           </div>
         </header>
 
+        {successMessage && (
+          <div className="mb-5 flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm text-emerald-400">
+            <CheckCircle2 size={16} /> {successMessage}
+          </div>
+        )}
+
         {error && (
           <div className="mb-5 rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-400">
             {error}
@@ -234,23 +235,9 @@ export default function ViewSalaryExpensesPage({
         )}
 
         <section className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <SummaryCard
-            title="Total Payable"
-            value={money(summary.payable)}
-            color="amber"
-          />
-
-          <SummaryCard
-            title="Total Paid"
-            value={money(summary.paid)}
-            color="emerald"
-          />
-
-          <SummaryCard
-            title="Outstanding Balance"
-            value={money(summary.balance)}
-            color="rose"
-          />
+          <SummaryCard title="Total Payable" value={money(summary.payable)} color="amber" />
+          <SummaryCard title="Total Paid" value={money(summary.paid)} color="emerald" />
+          <SummaryCard title="Outstanding Balance" value={money(summary.balance)} color="rose" />
         </section>
 
         <section className="overflow-hidden rounded-xl border border-slate-900 bg-slate-900/10 shadow-2xl">
@@ -270,89 +257,52 @@ export default function ViewSalaryExpensesPage({
 
               <tbody className="divide-y divide-slate-900/40 text-[11px]">
                 {loading ? (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className="p-12 text-center text-slate-500"
-                    >
-                      Loading salary records...
-                    </td>
-                  </tr>
+                  <tr><td colSpan={7} className="p-12 text-center text-slate-500">Loading salary records...</td></tr>
                 ) : filteredData.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className="p-12 text-center text-slate-600"
-                    >
-                      <AlertCircle size={18} className="mx-auto mb-2" />
-                      No salary records found.
-                    </td>
-                  </tr>
+                  <tr><td colSpan={7} className="p-12 text-center text-slate-600"><AlertCircle size={18} className="mx-auto mb-2" />No salary records found.</td></tr>
                 ) : (
                   filteredData.map((item, index) => {
                     const balance = Number(item.balance || 0);
                     const settled = balance <= 0;
-
                     return (
-                      <tr
-                        key={item.id ?? index}
-                        className="transition hover:bg-slate-900/30"
-                      >
+                      <tr key={item.id ?? index} className="transition hover:bg-slate-900/30">
                         <td className="p-4">
                           <div className="flex items-center gap-2 font-semibold text-slate-200">
                             <User size={13} className="text-slate-600" />
-
-                            {item.employee_name ||
-                              `ID: ${item.employee_id || "UNKNOWN"}`}
+                            {item.employee_name || `ID: ${item.employee_id || "UNKNOWN"}`}
                           </div>
                         </td>
-
-                        <td className="p-4 text-slate-400">
-                          {item.reason || "Monthly salary payout"}
-                        </td>
-
-                        <td className="p-4 text-right text-slate-300">
-                          {money(item.total_payable)}
-                        </td>
-
-                        <td className="p-4 text-right text-emerald-400">
-                          {money(item.total_paid)}
-                        </td>
-
+                        <td className="p-4 text-slate-400">{item.reason || "Monthly salary payout"}</td>
+                        <td className="p-4 text-right text-slate-300">{money(item.total_payable)}</td>
+                        <td className="p-4 text-right text-emerald-400">{money(item.total_paid)}</td>
                         <td className="p-4 text-right">
                           {settled ? (
-                            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-[9px] font-bold text-emerald-400">
-                              <ShieldCheck size={10} />
-                              SETTLED
-                            </span>
+                            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-[9px] font-bold text-emerald-400"><ShieldCheck size={10} />SETTLED</span>
                           ) : (
-                            <span className="font-bold text-amber-400">
-                              {money(balance)}
-                            </span>
+                            <span className="font-bold text-amber-400">{money(balance)}</span>
                           )}
                         </td>
-
                         <td className="whitespace-nowrap p-4 text-slate-300">
                           <Calendar size={12} className="mr-2 inline text-slate-100" />
-
                           {entryDate(item) || "-"}
                         </td>
-
                         <td className="p-4 text-center">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              router.push(
-                                `/dashboard/branches/${encodeURIComponent(
-                                  branchId,
-                                )}/view-expences/salary/${item.id}`,
-                              )
-                            }
-                            className="rounded border border-purple-500/20 bg-purple-500/10 px-2 py-1 text-[10px] font-bold text-purple-400 transition hover:bg-purple-600 hover:text-white"
-                          >
-                            <FileText size={11} className="mr-1 inline" />
-                            View Summary
-                          </button>
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => router.push(`/dashboard/branches/${encodeURIComponent(branchId)}/view-expences/salary/${item.id}`)}
+                              className="rounded border border-purple-500/20 bg-purple-500/10 px-2 py-1 text-[10px] font-bold text-purple-400 transition hover:bg-purple-600 hover:text-white"
+                            >
+                              <FileText size={11} className="mr-1 inline" />View Summary
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeleteId(String(item.id))}
+                              className="inline-flex items-center gap-1 rounded border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] font-bold text-red-400 transition hover:bg-red-600 hover:text-white"
+                            >
+                              <Trash2 size={11} />Delete
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -363,25 +313,10 @@ export default function ViewSalaryExpensesPage({
               {!loading && filteredData.length > 0 && (
                 <tfoot>
                   <tr className="border-t border-slate-800 bg-slate-950/70 font-bold">
-                    <td
-                      colSpan={2}
-                      className="p-4 text-slate-400"
-                    >
-                      Filtered Total
-                    </td>
-
-                    <td className="p-4 text-right text-amber-400">
-                      {money(summary.payable)}
-                    </td>
-
-                    <td className="p-4 text-right text-emerald-400">
-                      {money(summary.paid)}
-                    </td>
-
-                    <td className="p-4 text-right text-rose-400">
-                      {money(summary.balance)}
-                    </td>
-
+                    <td colSpan={2} className="p-4 text-slate-400">Filtered Total</td>
+                    <td className="p-4 text-right text-amber-400">{money(summary.payable)}</td>
+                    <td className="p-4 text-right text-emerald-400">{money(summary.paid)}</td>
+                    <td className="p-4 text-right text-rose-400">{money(summary.balance)}</td>
                     <td colSpan={2} />
                   </tr>
                 </tfoot>
@@ -403,6 +338,29 @@ export default function ViewSalaryExpensesPage({
           onClose={() => setShowSummary(false)}
         />
       )}
+
+      {/* ✅ DELETE Confirm Modal */}
+      {deleteId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm" onClick={() => !isDeleting && setDeleteId(null)}>
+          <div className="w-full max-w-sm rounded-2xl border border-red-500/40 bg-[#0d1527] p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3">
+              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-red-500/15 text-red-400"><AlertTriangle size={20} /></span>
+              <div><p className="font-black text-white uppercase">Delete Salary Record?</p><p className="text-[11px] text-slate-400">Me action eka undo karanna ba.</p></div>
+            </div>
+            {deleteItem && (
+              <div className="rounded-xl bg-slate-950 border border-slate-800 p-3 text-[11px] space-y-1">
+                <p>Employee: <b className="text-white">{deleteItem.employee_name || `ID: ${deleteItem.employee_id}`}</b></p>
+                <p>Date: <b className="text-white">{entryDate(deleteItem) || "-"}</b> • Payable: <b className="text-amber-400">LKR {money(deleteItem.total_payable)}</b> • Paid: <b className="text-emerald-400">LKR {money(deleteItem.total_paid)}</b></p>
+                <p>Reason: <span className="text-slate-300">{deleteItem.reason || "-"}</span></p>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <button onClick={() => setDeleteId(null)} disabled={isDeleting} className="flex-1 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold text-white">Cancel</button>
+              <button onClick={handleDelete} disabled={isDeleting} className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-500 rounded-xl font-bold text-white flex items-center justify-center gap-2 disabled:opacity-50">{isDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />} Yes, Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
@@ -421,16 +379,10 @@ function SummaryCard({
     emerald: "text-emerald-400",
     rose: "text-rose-400",
   };
-
   return (
     <div className="rounded-xl border border-slate-800 bg-[#0d1527] p-5">
-      <p className="text-[10px] uppercase tracking-wider text-slate-500">
-        {title}
-      </p>
-
-      <p className={`mt-3 text-xl font-black ${colors[color]}`}>
-        {value}
-      </p>
+      <p className="text-[10px] uppercase tracking-wider text-slate-500">{title}</p>
+      <p className={`mt-3 text-xl font-black ${colors[color]}`}>{value}</p>
     </div>
   );
 }
@@ -451,39 +403,15 @@ function SummaryModal({
       <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-[#0d1527] p-6">
         <div className="mb-5 flex items-center justify-between border-b border-slate-800 pb-4">
           <div>
-            <h2 className="font-mono text-lg font-bold uppercase text-white">
-              {title}
-            </h2>
-
-            <p className="mt-1 text-xs text-slate-500">
-              {count} records
-            </p>
+            <h2 className="font-mono text-lg font-bold uppercase text-white">{title}</h2>
+            <p className="mt-1 text-xs text-slate-500">{count} records</p>
           </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-slate-500 transition hover:text-white"
-            aria-label="Close summary"
-          >
-            <X size={18} />
-          </button>
+          <button type="button" onClick={onClose} className="text-slate-500 transition hover:text-white" aria-label="Close summary"><X size={18} /></button>
         </div>
-
         <div className="grid gap-3 sm:grid-cols-2">
-          <SummaryCard
-            title="Records"
-            value={String(count)}
-            color="amber"
-          />
-
+          <SummaryCard title="Records" value={String(count)} color="amber" />
           {values.map(([label, value]) => (
-            <SummaryCard
-              key={label}
-              title={label}
-              value={value}
-              color="emerald"
-            />
+            <SummaryCard key={label} title={label} value={value} color="emerald" />
           ))}
         </div>
       </div>

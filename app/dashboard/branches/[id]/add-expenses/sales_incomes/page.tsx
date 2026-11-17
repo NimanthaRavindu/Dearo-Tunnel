@@ -141,12 +141,7 @@ function SalesIncomesContent() {
       setErrorMessage("");
       const response = await fetch(`/api/expences/sales-incomes?branch_id=${encodeURIComponent(branchId)}`, { method: "GET", cache: "no-store" });
       const result = await response.json();
-      if (!response.ok || !result.success) {
-        if (result.error === "Internal Server Error.") {
-          throw new Error("DB Error: sales_incomes table eke 'paid' column eka na. phpMyAdmin eke ALTER TABLE sales_incomes ADD COLUMN paid DECIMAL(10,2) DEFAULT 0 AFTER credit; run karanna.");
-        }
-        throw new Error(result.error || "Failed to fetch sales incomes.");
-      }
+      if (!response.ok || !result.success) throw new Error(result.error || "Failed to fetch sales incomes.");
       setIncomes(result.data || []);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Failed to load sales income records.");
@@ -248,7 +243,6 @@ function SalesIncomesContent() {
       const res = await fetch(`/api/expences/sales-incomes?id=${encodeURIComponent(deleteId)}`, { method: "DELETE" });
       const result = await res.json();
       if (!res.ok || !result.success) throw new Error(result.error || "Failed to delete");
-      // Edit karana eka delete karoth form eka clear karanawa
       if (editingId === deleteId) handleCancelEdit();
       setDeleteId(null);
       setSuccessMessage("Entry deleted successfully.");
@@ -264,14 +258,8 @@ function SalesIncomesContent() {
   };
 
   const handleOpenCreditPage = () => {
-    if (!formData.name.trim()) {
-      setErrorMessage("First enter Product Name, then Add Credit.");
-      return;
-    }
-    if (calculatedAmount <= 0) {
-      setErrorMessage("First enter Unit Price and Quantity.");
-      return;
-    }
+    if (!formData.name.trim()) { setErrorMessage("First enter Product Name, then Add Credit."); return; }
+    if (calculatedAmount <= 0) { setErrorMessage("First enter Unit Price and Quantity."); return; }
     const q = new URLSearchParams({
       bill_number: formData.bill_number.trim() || "",
       product_name: formData.name.trim(),
@@ -299,8 +287,7 @@ function SalesIncomesContent() {
     const credit = calculatedCredit;
 
     if (!branchId || !name || !formData.date || !formData.unit_price || !formData.quantity) {
-      setErrorMessage("Please complete Name, Date, Unit Price and Quantity.");
-      return;
+      setErrorMessage("Please complete Name, Date, Unit Price and Quantity."); return;
     }
     if (discount < 0) { setErrorMessage("Discount cannot be less than 0."); return; }
     if (discount > amount) { setErrorMessage("Discount cannot be greater than Amount."); return; }
@@ -317,12 +304,7 @@ function SalesIncomesContent() {
         body: JSON.stringify({ id: editingId, branch_id: branchId, bill_number: bill_number || null, name, date: formData.date, unit_price, quantity, amount, discount, paid, credit }),
       });
       const result = await response.json();
-      if (!response.ok || !result.success) {
-        if (result.error === "Internal Server Error.") {
-          throw new Error("DB Error: API eke PUT / DELETE na. Pahala API code eka danna.");
-        }
-        throw new Error(result.error || (isEdit ? "Failed to update sales income." : "Failed to save sales income."));
-      }
+      if (!response.ok || !result.success) throw new Error(result.error || (isEdit ? "Failed to update sales income." : "Failed to save sales income."));
       setFormData({ bill_number: "", name: "", date: getToday(), unit_price: "", quantity: "", discount: "", paid: "" });
       setEditingId(null);
       setSuccessMessage(isEdit ? `Updated: Amount LKR ${amount.toFixed(2)} | Discount LKR ${discount.toFixed(2)} | Paid LKR ${paid.toFixed(2)} | Credit LKR ${credit.toFixed(2)}` : `Saved: Amount LKR ${amount.toFixed(2)} | Discount LKR ${discount.toFixed(2)} | Payable LKR ${calculatedPayable.toFixed(2)} | Paid LKR ${paid.toFixed(2)} | Credit LKR ${credit.toFixed(2)}`);
@@ -490,7 +472,6 @@ function SalesIncomesContent() {
           )}
         </div>
 
-        {/* Credit table - kalin wage, wenas na */}
         <div className="p-6 rounded-2xl bg-[#0d1527]/40 border border-amber-500/20 shadow-2xl space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
@@ -543,7 +524,6 @@ function SalesIncomesContent() {
         </div>
       </div>
 
-      {/* ✅ DELETE Confirm Modal */}
       {deleteId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => !isDeleting && setDeleteId(null)}>
           <div className="w-full max-w-sm rounded-2xl bg-[#0d1527] border border-red-500/40 p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
