@@ -3,7 +3,7 @@
 import React, { Suspense, useEffect, useState, useMemo } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Calendar, CheckCircle2, DollarSign, FileText, Loader2, Plus, X, Hash, Tag, Eye, Receipt, BadgePercent, CreditCard, Search, User, Phone, Car } from "lucide-react";
+import { ArrowLeft, Calendar, CheckCircle2, DollarSign, FileText, Loader2, Plus, X, Hash, Tag, Eye, Receipt, BadgePercent, CreditCard, Search, User, Phone, Car, Pencil, Trash2, AlertTriangle } from "lucide-react";
 
 interface SalesIncomeItem {
   id: string;
@@ -97,6 +97,11 @@ function SalesIncomesContent() {
   const [creditSearch, setCreditSearch] = useState("");
   const [showCredits, setShowCredits] = useState(true);
 
+  // ✅ EDIT + DELETE states
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const [formData, setFormData] = useState<SalesIncomeFormData>({
     bill_number: "",
     name: "",
@@ -107,32 +112,16 @@ function SalesIncomesContent() {
     paid: "",
   });
 
-  // ✅ Amount = Unit Price x Quantity
   const calculatedAmount = useMemo(() => {
     const up = Number(formData.unit_price) || 0;
     const qty = Number(formData.quantity) || 0;
     return up * qty;
   }, [formData.unit_price, formData.quantity]);
 
-  // ✅ Discount - User type karana eka - Wenama column ekak
-  const calculatedDiscount = useMemo(() => {
-    return Number(formData.discount || 0);
-  }, [formData.discount]);
-
-  // ✅ Payable = Amount - Discount
-  const calculatedPayable = useMemo(() => {
-    return Math.max(0, calculatedAmount - calculatedDiscount);
-  }, [calculatedAmount, calculatedDiscount]);
-
-  // ✅ Paid - User type karana eka - Wenama column ekak
-  const calculatedPaid = useMemo(() => {
-    return Number(formData.paid || 0);
-  }, [formData.paid]);
-
-  // ✅ Credit = Payable - Paid - Wenama column ekak - Ithuru gana
-  const calculatedCredit = useMemo(() => {
-    return Math.max(0, calculatedPayable - calculatedPaid);
-  }, [calculatedPayable, calculatedPaid]);
+  const calculatedDiscount = useMemo(() => Number(formData.discount || 0), [formData.discount]);
+  const calculatedPayable = useMemo(() => Math.max(0, calculatedAmount - calculatedDiscount), [calculatedAmount, calculatedDiscount]);
+  const calculatedPaid = useMemo(() => Number(formData.paid || 0), [formData.paid]);
+  const calculatedCredit = useMemo(() => Math.max(0, calculatedPayable - calculatedPaid), [calculatedPayable, calculatedPaid]);
 
   const filteredIncomes = incomes.filter((item) => {
     const matchDate = filterDate ? item.date.slice(0, 10) === filterDate : true;
@@ -140,13 +129,11 @@ function SalesIncomesContent() {
     return matchDate && matchName;
   });
 
-  // ✅ Total tika - Okkoma wen wenama
   const totalAmount = filteredIncomes.reduce((total, item) => total + Number(item.amount || 0), 0);
   const totalDiscount = filteredIncomes.reduce((total, item) => total + Number(item.discount ?? 0), 0);
   const totalPaid = filteredIncomes.reduce((total, item) => total + Number(item.paid ?? 0), 0);
   const totalCredit = filteredIncomes.reduce((total, item) => total + Number(item.credit ?? 0), 0);
 
-  // ✅ FIXED - Backend error eka hariyatama pennanawa
   const fetchSalesIncomes = async () => {
     if (!branchId) return;
     try {
@@ -231,6 +218,51 @@ function SalesIncomesContent() {
     setErrorMessage("");
   };
 
+  // ✅ EDIT - Row eke data form ekata load karanawa
+  const handleEdit = (item: SalesIncomeItem) => {
+    setEditingId(String(item.id));
+    setFormData({
+      bill_number: item.bill_number || item.billNumber || "",
+      name: item.name || "",
+      date: String(item.date || "").slice(0, 10) || getToday(),
+      unit_price: String(item.unit_price ?? ""),
+      quantity: String(item.quantity ?? ""),
+      discount: String(item.discount ?? ""),
+      paid: String(item.paid ?? ""),
+    });
+    setErrorMessage("");
+    setSuccessMessage("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setFormData({ bill_number: "", name: "", date: getToday(), unit_price: "", quantity: "", discount: "", paid: "" });
+  };
+
+  // ✅ DELETE - Confirm popup eken passe
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    try {
+      setIsDeleting(true);
+      const res = await fetch(`/api/expences/sales-incomes?id=${encodeURIComponent(deleteId)}`, { method: "DELETE" });
+      const result = await res.json();
+      if (!res.ok || !result.success) throw new Error(result.error || "Failed to delete");
+      // Edit karana eka delete karoth form eka clear karanawa
+      if (editingId === deleteId) handleCancelEdit();
+      setDeleteId(null);
+      setSuccessMessage("Entry deleted successfully.");
+      window.setTimeout(() => setSuccessMessage(""), 3000);
+      await fetchSalesIncomes();
+      await fetchCredits();
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to delete entry");
+      setDeleteId(null);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const handleOpenCreditPage = () => {
     if (!formData.name.trim()) {
       setErrorMessage("First enter Product Name, then Add Credit.");
@@ -254,6 +286,7 @@ function SalesIncomesContent() {
     router.push(`/dashboard/branches/${branchId}/add-expenses/sales_incomes/credit?${q.toString()}`);
   };
 
+  // ✅ SUBMIT - Editing nam PUT, nathnam POST
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const bill_number = formData.bill_number.trim();
@@ -277,20 +310,22 @@ function SalesIncomesContent() {
     try {
       setIsSubmitting(true);
       setErrorMessage("");
+      const isEdit = !!editingId;
       const response = await fetch("/api/expences/sales-incomes", {
-        method: "POST",
+        method: isEdit ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ branch_id: branchId, bill_number: bill_number || null, name, date: formData.date, unit_price, quantity, amount, discount, paid, credit }),
+        body: JSON.stringify({ id: editingId, branch_id: branchId, bill_number: bill_number || null, name, date: formData.date, unit_price, quantity, amount, discount, paid, credit }),
       });
       const result = await response.json();
       if (!response.ok || !result.success) {
         if (result.error === "Internal Server Error.") {
-          throw new Error("DB Error: sales_incomes table eke 'paid' column eka na. phpMyAdmin eke ALTER TABLE sales_incomes ADD COLUMN paid DECIMAL(10,2) DEFAULT 0 AFTER credit; run karanna.");
+          throw new Error("DB Error: API eke PUT / DELETE na. Pahala API code eka danna.");
         }
-        throw new Error(result.error || "Failed to save sales income.");
+        throw new Error(result.error || (isEdit ? "Failed to update sales income." : "Failed to save sales income."));
       }
       setFormData({ bill_number: "", name: "", date: getToday(), unit_price: "", quantity: "", discount: "", paid: "" });
-      setSuccessMessage(`Saved: Amount LKR ${amount.toFixed(2)} | Discount LKR ${discount.toFixed(2)} | Payable LKR ${calculatedPayable.toFixed(2)} | Paid LKR ${paid.toFixed(2)} | Credit LKR ${credit.toFixed(2)}`);
+      setEditingId(null);
+      setSuccessMessage(isEdit ? `Updated: Amount LKR ${amount.toFixed(2)} | Discount LKR ${discount.toFixed(2)} | Paid LKR ${paid.toFixed(2)} | Credit LKR ${credit.toFixed(2)}` : `Saved: Amount LKR ${amount.toFixed(2)} | Discount LKR ${discount.toFixed(2)} | Payable LKR ${calculatedPayable.toFixed(2)} | Paid LKR ${paid.toFixed(2)} | Credit LKR ${credit.toFixed(2)}`);
       window.setTimeout(() => setSuccessMessage(""), 4000);
       await fetchSalesIncomes();
       await fetchCredits();
@@ -321,6 +356,7 @@ function SalesIncomesContent() {
   };
 
   const clearFilters = () => { setFilterDate(""); setFilterName(""); setCreditSearch(""); };
+  const deleteItem = incomes.find((x) => String(x.id) === String(deleteId));
 
   return (
     <div className="min-h-screen bg-[#070a12] text-slate-100 p-6 sm:p-10 flex flex-col items-center relative overflow-hidden font-mono text-xs">
@@ -339,8 +375,11 @@ function SalesIncomesContent() {
         {successMessage && (<div className="flex items-center gap-2 bg-emerald-950/40 border border-emerald-500/40 px-4 py-3 rounded-xl text-emerald-400"><CheckCircle2 size={16} /><span>{successMessage}</span></div>)}
         {errorMessage && (<div className="flex items-center justify-between gap-3 bg-red-950/40 border border-red-500/40 px-4 py-3 rounded-xl text-red-400"><span>{errorMessage}</span><button type="button" onClick={() => setErrorMessage("")} className="hover:text-red-200"><X size={15} /></button></div>)}
 
-        <div className="p-6 rounded-2xl bg-[#0d1527]/60 border border-slate-800 shadow-2xl">
-          <h2 className="text-xs font-bold uppercase tracking-widest text-slate-200 mb-4 flex items-center gap-2"><Plus size={14} className="text-red-400" />Add New Sales Income Entry</h2>
+        <div className={`p-6 rounded-2xl border shadow-2xl ${editingId ? "bg-amber-950/20 border-amber-500/40" : "bg-[#0d1527]/60 border-slate-800"}`}>
+          <h2 className="text-xs font-bold uppercase tracking-widest text-slate-200 mb-4 flex items-center gap-2">
+            {editingId ? <><Pencil size={14} className="text-amber-400" /> Edit Sales Income Entry - ID #{editingId}</> : <><Plus size={14} className="text-red-400" /> Add New Sales Income Entry</>}
+          </h2>
+          {editingId && <p className="mb-4 px-3 py-2 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-[11px]">Edit mode - Data tika change karala Update Entry click karanna. Cancel karanna nam Cancel Edit click karanna.</p>}
           <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Receipt size={12} />Bill Number</label><input type="text" name="bill_number" value={formData.bill_number} onChange={handleInputChange} placeholder="Ex: B-001" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
             <div className="space-y-1.5">
@@ -368,8 +407,9 @@ function SalesIncomesContent() {
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><DollarSign size={12} />Paid (LKR)</label><input type="number" step="0.01" min="0" name="paid" value={formData.paid} onChange={handleInputChange} placeholder="0.00" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><CreditCard size={12} />Credit (LKR) - Auto</label><div className="w-full px-3.5 py-2.5 bg-slate-900/80 border border-amber-500/30 rounded-xl text-amber-400 font-black text-sm">LKR {calculatedCredit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
             <div className="sm:col-span-2 lg:col-span-4 flex justify-end gap-2 mt-2">
+              {editingId && <button type="button" onClick={handleCancelEdit} className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl transition-all flex items-center gap-2"><X size={14} /><span>Cancel Edit</span></button>}
               <button type="button" onClick={handleOpenCreditPage} className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-amber-500/20 active:scale-95"><CreditCard size={14} /><span>Add Credit</span></button>
-              <button type="submit" disabled={isSubmitting} className="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-red-600/20 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">{isSubmitting ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}<span>{isSubmitting ? "Saving..." : "Save Income Entry"}</span></button>
+              <button type="submit" disabled={isSubmitting} className={`px-5 py-2.5 text-white font-bold rounded-xl transition-all flex items-center gap-2 shadow-lg active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${editingId ? "bg-amber-600 hover:bg-amber-500 shadow-amber-600/20" : "bg-red-600 hover:bg-red-500 shadow-red-600/20"}`}>{isSubmitting ? <Loader2 size={14} className="animate-spin" /> : editingId ? <Pencil size={14} /> : <Plus size={14} />}<span>{isSubmitting ? (editingId ? "Updating..." : "Saving...") : editingId ? "Update Entry" : "Save Income Entry"}</span></button>
             </div>
           </form>
         </div>
@@ -407,11 +447,12 @@ function SalesIncomesContent() {
                   {filteredIncomes.map((item) => {
                     const billNo = item.bill_number || item.billNumber || "-";
                     const creditRec = getCreditByBill(billNo);
+                    const isEditingRow = String(editingId) === String(item.id);
                     return (
-                      <tr key={item.id} className="hover:bg-slate-900/70 transition-colors">
+                      <tr key={item.id} className={`hover:bg-slate-900/70 transition-colors ${isEditingRow ? "bg-amber-500/10" : ""}`}>
                         <td className="py-3 px-4 font-bold text-slate-200">{billNo}</td>
                         <td className="py-3 px-4 font-bold text-slate-200">{item.name}</td>
-                        <td className="py-3 px-4 text-slate-400">{item.date?.slice(0,10)}</td>
+                        <td className="py-3 px-4 text-slate-400">{item.date?.slice(0, 10)}</td>
                         <td className="py-3 px-4 text-right text-slate-300">LKR {Number(item.unit_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                         <td className="py-3 px-4 text-right text-slate-300">{Number(item.quantity || 0)}</td>
                         <td className="py-3 px-4 text-right font-black text-red-400">LKR {Number(item.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
@@ -425,14 +466,20 @@ function SalesIncomesContent() {
                               <p className="text-[10px] text-slate-400 flex items-center gap-1"><Phone size={10} /> {creditRec.contact_number}</p>
                               <p className="text-[10px] text-slate-400 flex items-center gap-1"><Car size={10} /> {creditRec.vehicle_number}</p>
                             </div>
-                          ) : (
-                            <span className="text-slate-600">-</span>
-                          )}
+                          ) : (<span className="text-slate-600">-</span>)}
                         </td>
                         <td className="py-3 px-4 text-center">
-                          <Link href={`/dashboard/branches/${branchId}/add-expenses/sales_incomes/${item.id}`} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 border border-slate-700 text-slate-300 rounded-lg text-[10px] font-black uppercase hover:bg-white hover:text-black transition-all">
-                            <Eye size={12}/> View Summary
-                          </Link>
+                          <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                            <Link href={`/dashboard/branches/${branchId}/add-expenses/sales_incomes/${item.id}`} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-900 border border-slate-700 text-slate-300 rounded-lg text-[10px] font-black uppercase hover:bg-white hover:text-black transition-all">
+                              <Eye size={12} /> View
+                            </Link>
+                            <button onClick={() => handleEdit(item)} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-600/20 border border-blue-500/40 text-blue-300 rounded-lg text-[10px] font-black uppercase hover:bg-blue-600 hover:text-white transition-all">
+                              <Pencil size={12} /> Edit
+                            </button>
+                            <button onClick={() => setDeleteId(String(item.id))} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-red-600/20 border border-red-500/40 text-red-300 rounded-lg text-[10px] font-black uppercase hover:bg-red-600 hover:text-white transition-all">
+                              <Trash2 size={12} /> Delete
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -443,6 +490,7 @@ function SalesIncomesContent() {
           )}
         </div>
 
+        {/* Credit table - kalin wage, wenas na */}
         <div className="p-6 rounded-2xl bg-[#0d1527]/40 border border-amber-500/20 shadow-2xl space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
@@ -455,7 +503,6 @@ function SalesIncomesContent() {
               <button onClick={handleOpenCreditPage} className="px-3 py-2 bg-amber-500 text-black font-bold rounded-xl flex items-center gap-1.5"><Plus size={13} /> Add Credit</button>
             </div>
           </div>
-
           {showCredits && (
             filteredCredits.length === 0 ? (
               <div className="py-10 text-center text-slate-500">No credit records yet. {filterDate ? `Date: ${filterDate}` : "Use Add Credit button above."}</div>
@@ -495,6 +542,28 @@ function SalesIncomesContent() {
           )}
         </div>
       </div>
+
+      {/* ✅ DELETE Confirm Modal */}
+      {deleteId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => !isDeleting && setDeleteId(null)}>
+          <div className="w-full max-w-sm rounded-2xl bg-[#0d1527] border border-red-500/40 p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3">
+              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-red-500/15 text-red-400"><AlertTriangle size={20} /></span>
+              <div><p className="font-black text-white uppercase">Delete Entry?</p><p className="text-[11px] text-slate-400">Me action eka undo karanna ba.</p></div>
+            </div>
+            {deleteItem && (
+              <div className="rounded-xl bg-slate-950 border border-slate-800 p-3 text-[11px] space-y-1">
+                <p>Bill: <b className="text-white">{deleteItem.bill_number || deleteItem.billNumber || "-"}</b> • {deleteItem.name}</p>
+                <p>Date: <b className="text-white">{String(deleteItem.date).slice(0, 10)}</b> • Amount: <b className="text-red-400">LKR {Number(deleteItem.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</b></p>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <button onClick={() => setDeleteId(null)} disabled={isDeleting} className="flex-1 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold">Cancel</button>
+              <button onClick={handleDelete} disabled={isDeleting} className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-500 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50">{isDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />} Yes, Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

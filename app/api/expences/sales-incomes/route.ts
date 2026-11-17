@@ -12,6 +12,7 @@ interface SalesIncomeRequestBody {
   unit_price?: number | string;
   quantity?: number | string;
   date?: string;
+  id?: string | number;
 }
 
 function extractBranchId(request: Request): string | null {
@@ -47,7 +48,6 @@ async function getPriceFromDB(name: string, branchId: string | null): Promise<nu
   } catch { return null; }
 }
 
-// ✅ FIX - Rathu ira ain karala - paid column eka DB eke thiyenawada balanawa
 let hasPaidColumn: boolean | null = null;
 async function checkPaidColumn(): Promise<boolean> {
   if (hasPaidColumn !== null) return hasPaidColumn;
@@ -55,10 +55,9 @@ async function checkPaidColumn(): Promise<boolean> {
     const [rows]: any = await db.query(`SHOW COLUMNS FROM sales_incomes LIKE 'paid'`);
     hasPaidColumn = rows && rows.length > 0;
   } catch { hasPaidColumn = false; }
-  return hasPaidColumn ?? false; // ✅ Me line eka thamai fix eka - null nam false
+  return hasPaidColumn ?? false;
 }
 
-// ✅ Row ekak normalize karanawa - paid thibboth eka, nathnam parana widiyata
 function normalizeRow(r: any) {
   const amount = Number(r.amount || 0);
   const discount = Number(r.discount ?? 0);
@@ -68,7 +67,6 @@ function normalizeRow(r: any) {
     paid = Number(r.paid || 0);
     credit = Number(r.credit ?? 0);
   } else {
-    // Parana DB - paid column eka na, credit column eke thiyenne Paid
     paid = Number(r.credit || 0);
     credit = Math.max(0, amount - discount - paid);
   }
@@ -93,7 +91,6 @@ export async function GET(request: Request) {
     const hasPaid = await checkPaidColumn();
     const paidSelect = hasPaid ? "s.paid," : "NULL as paid,";
 
-    // --- SUMMARY MODE ---
     if (isSummary) {
       if (isDetailed || recordId) {
         const where: string[] = [];
@@ -190,7 +187,6 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: true, grandTotal, grandCredit, grandDiscount, grandPaid, data }, { status: 200 });
     }
 
-    // --- NORMAL BRANCH FETCH ---
     if (!branchId) {
       return NextResponse.json({ success: false, error: "Branch ID is missing." }, { status: 400 });
     }
@@ -281,7 +277,6 @@ export async function POST(request: Request) {
       insertQuery = `INSERT INTO sales_incomes (branch_id, bill_number, name, unit_price, quantity, amount, credit, paid, discount, date) VALUES (?,?,?,?,?,?,?,?,?,?)`;
       insertParams = [branchId, bill_number || null, name, unit_price, quantity, amount, credit, paid, discount, date];
     } else {
-      // ✅ Parana DB - paid column eka na, credit column ekata paid danawa
       insertQuery = `INSERT INTO sales_incomes (branch_id, bill_number, name, unit_price, quantity, amount, credit, discount, date) VALUES (?,?,?,?,?,?,?,?,?)`;
       insertParams = [branchId, bill_number || null, name, unit_price, quantity, amount, paid, credit, date];
     }
@@ -293,15 +288,76 @@ export async function POST(request: Request) {
   }
 }
 
+// ✅ ALUTH - PUT : Database eke row eka EDIT karanawa
+export async function PUT(request: Request) {
+  try {
+    const body: SalesIncomeRequestBody = await request.json();
+    const id = body.id ? String(body.id) : null;
+    const bill_number = typeof body.bill_number === "string" ? body.bill_number.trim() : "";
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    const date = typeof body.date === "string" ? body.date : "";
+    const branchId = body.branch_id !== undefined && body.branch_id !== null ? String(body.branch_id) : extractBranchId(request);
+
+    let unit_price = Number(body.unit_price ?? 0);
+    const quantity = Number(body.quantity ?? 0);
+    if ((!Number.isFinite(unit_price) || unit_price <= 0) && name) {
+      const dbPrice = await getPriceFromDB(name, branchId);
+      if (dbPrice != null) unit_price = dbPrice;
+    }
+    let amount = Number(body.amount);
+    if (!Number.isFinite(amount) || amount === 0) amount = unit_price * quantity;
+    const discount = Number(body.discount ?? 0);
+    const paid = Number(body.paid ?? 0);
+    let credit = Number(body.credit);
+    if (!Number.isFinite(credit)) credit = Math.max(0, amount - discount - paid);
+
+    if (!id) return NextResponse.json({ success: false, error: "ID is required for update." }, { status: 400 });
+    if (!name || !date) return NextResponse.json({ success: false, error: "Missing required fields: name, date." }, { status: 400 });
+    if (!isValidDate(date)) return NextResponse.json({ success: false, error: "Invalid date format. Use YYYY-MM-DD." }, { status: 400 });
+    if (!Number.isFinite(unit_price) || unit_price < 0) return NextResponse.json({ success: false, error: "Unit price must be valid." }, { status: 400 });
+    if (!Number.isFinite(quantity) || quantity <= 0) return NextResponse.json({ success: false, error: "Quantity must be > 0." }, { status: 400 });
+    if (!Number.isFinite(amount) || amount < 0) return NextResponse.json({ success: false, error: "Amount must be valid." }, { status: 400 });
+    if (!Number.isFinite(discount) || discount < 0 || discount > amount) return NextResponse.json({ success: false, error: "Discount cannot be greater than Amount." }, { status: 400 });
+    if (!Number.isFinite(paid) || paid < 0 || paid > amount - discount) return NextResponse.json({ success: false, error: "Paid cannot be greater than Amount - Discount." }, { status: 400 });
+    if (!Number.isFinite(credit) || credit < 0) return NextResponse.json({ success: false, error: "Credit must be valid." }, { status: 400 });
+
+    const hasPaid = await checkPaidColumn();
+    let updateQuery: string;
+    let updateParams: any[];
+    if (hasPaid) {
+      updateQuery = `UPDATE sales_incomes SET branch_id=?, bill_number=?, name=?, unit_price=?, quantity=?, amount=?, credit=?, paid=?, discount=?, date=? WHERE id=?`;
+      updateParams = [branchId, bill_number || null, name, unit_price, quantity, amount, credit, paid, discount, date, id];
+    } else {
+      // Parana DB - paid column eka na, credit column ekata paid danawa
+      updateQuery = `UPDATE sales_incomes SET branch_id=?, bill_number=?, name=?, unit_price=?, quantity=?, amount=?, credit=?, discount=?, date=? WHERE id=?`;
+      updateParams = [branchId, bill_number || null, name, unit_price, quantity, amount, paid, discount, date, id];
+    }
+    const [result]: any = await db.query(updateQuery, updateParams);
+    if (result.affectedRows === 0) return NextResponse.json({ success: false, error: "Sales income record not found." }, { status: 404 });
+    return NextResponse.json({ success: true, message: "Sales income updated successfully." }, { status: 200 });
+  } catch (error) {
+    console.error("Database update error:", error);
+    return NextResponse.json({ success: false, error: "Internal Server Error." }, { status: 500 });
+  }
+}
+
+// ✅ FIX - DELETE : id witharakin weda karanawa, branch_id awoth ekatath check karanawa
 export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
     const requestedBranchId = searchParams.get("branch_id");
     const branchId = requestedBranchId || extractBranchId(request);
-    if (!id || !branchId) return NextResponse.json({ success: false, error: "Income ID and Branch ID are required." }, { status: 400 });
-    const deleteQuery = `DELETE FROM sales_incomes WHERE id =? AND branch_id =?`;
-    const [result]: any = await db.query(deleteQuery, [id, branchId]);
+
+    if (!id) return NextResponse.json({ success: false, error: "Income ID is required." }, { status: 400 });
+
+    let deleteQuery = `DELETE FROM sales_incomes WHERE id =?`;
+    let deleteParams: any[] = [id];
+    if (branchId) {
+      deleteQuery += ` AND branch_id =?`;
+      deleteParams.push(branchId);
+    }
+    const [result]: any = await db.query(deleteQuery, deleteParams);
     if (result.affectedRows === 0) return NextResponse.json({ success: false, error: "Sales income record not found." }, { status: 404 });
     return NextResponse.json({ success: true, message: "Sales income deleted successfully." }, { status: 200 });
   } catch (error) {
