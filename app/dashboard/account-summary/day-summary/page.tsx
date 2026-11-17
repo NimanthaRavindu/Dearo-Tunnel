@@ -170,7 +170,7 @@ export default function DaySummaryPage() {
         <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/[0.06] bg-[#0B1226] p-4">
           <div className="flex items-center gap-2"><Calendar size={14} className="text-slate-400" />
             <select value={date} onChange={e => setDate(e.target.value)} className="rounded-xl bg-slate-950 px-3 py-2.5 text-slate-200 ring-1 ring-white/10 focus:outline-none">
-              <option value="all">All Dates - Okkoma Data</option>
+              <option value="all">All Dates</option>
               {allDates.map(d => <option key={d} value={d}>{d}</option>)}
             </select>
             <input type="date" value={date === "all" ? "" : date} onChange={e => setDate(e.target.value || "all")} className="rounded-xl bg-slate-950 px-3 py-2.5 text-slate-200 ring-1 ring-white/10 focus:outline-none focus:ring-emerald-500/50" />
