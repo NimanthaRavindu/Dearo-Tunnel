@@ -146,6 +146,7 @@ function SalesIncomesContent() {
   const totalPaid = filteredIncomes.reduce((total, item) => total + Number(item.paid ?? 0), 0);
   const totalCredit = filteredIncomes.reduce((total, item) => total + Number(item.credit ?? 0), 0);
 
+  // ✅ FIXED - Backend error eka hariyatama pennanawa
   const fetchSalesIncomes = async () => {
     if (!branchId) return;
     try {
@@ -153,7 +154,12 @@ function SalesIncomesContent() {
       setErrorMessage("");
       const response = await fetch(`/api/expences/sales-incomes?branch_id=${encodeURIComponent(branchId)}`, { method: "GET", cache: "no-store" });
       const result = await response.json();
-      if (!response.ok || !result.success) throw new Error(result.error || "Failed to fetch sales incomes.");
+      if (!response.ok || !result.success) {
+        if (result.error === "Internal Server Error.") {
+          throw new Error("DB Error: sales_incomes table eke 'paid' column eka na. phpMyAdmin eke ALTER TABLE sales_incomes ADD COLUMN paid DECIMAL(10,2) DEFAULT 0 AFTER credit; run karanna.");
+        }
+        throw new Error(result.error || "Failed to fetch sales incomes.");
+      }
       setIncomes(result.data || []);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Failed to load sales income records.");
@@ -277,7 +283,12 @@ function SalesIncomesContent() {
         body: JSON.stringify({ branch_id: branchId, bill_number: bill_number || null, name, date: formData.date, unit_price, quantity, amount, discount, paid, credit }),
       });
       const result = await response.json();
-      if (!response.ok || !result.success) throw new Error(result.error || "Failed to save sales income.");
+      if (!response.ok || !result.success) {
+        if (result.error === "Internal Server Error.") {
+          throw new Error("DB Error: sales_incomes table eke 'paid' column eka na. phpMyAdmin eke ALTER TABLE sales_incomes ADD COLUMN paid DECIMAL(10,2) DEFAULT 0 AFTER credit; run karanna.");
+        }
+        throw new Error(result.error || "Failed to save sales income.");
+      }
       setFormData({ bill_number: "", name: "", date: getToday(), unit_price: "", quantity: "", discount: "", paid: "" });
       setSuccessMessage(`Saved: Amount LKR ${amount.toFixed(2)} | Discount LKR ${discount.toFixed(2)} | Payable LKR ${calculatedPayable.toFixed(2)} | Paid LKR ${paid.toFixed(2)} | Credit LKR ${credit.toFixed(2)}`);
       window.setTimeout(() => setSuccessMessage(""), 4000);
