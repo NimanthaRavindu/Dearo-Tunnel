@@ -1,59 +1,54 @@
 import { NextRequest, NextResponse } from "next/server";
-import {db} from "@/lib/db";
+import { db } from "@/lib/db";
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    
 
-    const { branchId, employeeId, reason,date, totalPayable, totalPaid } = body;
+    const { branchId, employeeId, reason, date, totalPayable, totalPaid } = body;
 
     if (!branchId || branchId === "[id]" || branchId.includes("LOADING") || !date) {
       return NextResponse.json(
-        { error: "EXECUTION FAULT: Invalid or uninitialized Branch ID context." }, 
+        { error: "EXECUTION FAULT: Invalid or uninitialized Branch ID context." },
         { status: 400 }
       );
     }
 
     if (!employeeId) {
       return NextResponse.json(
-        { error: "EXECUTION FAULT: Targeted employee vector is missing." }, 
+        { error: "EXECUTION FAULT: Targeted employee vector is missing." },
         { status: 400 }
       );
     }
 
     const payable = parseFloat(totalPayable || 0);
     const paid = parseFloat(totalPaid || 0);
-    const balance = payable - paid; 
-
+    const balance = payable - paid;
 
     await db.query(
-      `INSERT INTO salary_expenses 
-        (branch_id, employee_id, reason,expense_date,total_payable, total_paid, balance) 
-       VALUES (?, ?, ?,?,?, ?, ?)` ,
+      `INSERT INTO salary_expenses
+        (branch_id, employee_id, reason, expense_date, total_payable, total_paid, balance)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
-        Number(branchId), 
-        Number(employeeId), 
+        Number(branchId),
+        Number(employeeId),
         reason || "Monthly structural salary payout",
-        date, 
-        payable, 
-        paid, 
+        date,
+        payable,
+        paid,
         balance
       ]
     );
 
-   
     return NextResponse.json({ success: true, message: "Ledger ingested successfully" }, { status: 201 });
 
   } catch (error: any) {
-
     console.error("CRITICAL DATABASE WRITE FAULT:", error);
-    
     return NextResponse.json(
-      { 
-        error: "INTERNAL_SERVER_MATRIX_FAULT", 
-        details: error?.message || "Check SQL constraints or table structure" 
-      }, 
+      {
+        error: "INTERNAL_SERVER_MATRIX_FAULT",
+        details: error?.message || "Check SQL constraints or table structure"
+      },
       { status: 500 }
     );
   }
@@ -71,9 +66,8 @@ export async function GET(request: Request) {
       );
     }
 
-    
     const [salaryLogs]: any = await db.query(
-      `SELECT 
+      `SELECT
         s.id AS id,
         s.branch_id,
         s.employee_id,
@@ -96,6 +90,52 @@ export async function GET(request: Request) {
     console.error("Database connection or column mapping fault:", error);
     return NextResponse.json(
       { error: "Internal Server Error: Critical matrix retrieval failure" },
+      { status: 500 }
+    );
+  }
+}
+
+// ✅ ALUTH - DELETE : Salary record eka DB eken delete karanawa
+export async function DELETE(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get("id");
+    const branchId = searchParams.get("branchId") || searchParams.get("branch_id");
+
+    if (!id) {
+      return NextResponse.json(
+        { success: false, error: "Salary record ID is required." },
+        { status: 400 }
+      );
+    }
+
+    // ✅ Table eka salary_expenses - Oya GET eke thiyena eka ma thamai
+    let q = `DELETE FROM salary_expenses WHERE id = ?`;
+    const params: any[] = [id];
+
+    // branchId awoth ekatath check karanawa - wena branch ekaka record ekak delete wena eka nawaththanawa
+    if (branchId) {
+      q += ` AND branch_id = ?`;
+      params.push(Number(branchId));
+    }
+
+    const [result]: any = await db.query(q, params);
+
+    if (result.affectedRows === 0) {
+      return NextResponse.json(
+        { success: false, error: "Salary record not found." },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json(
+      { success: true, message: "Salary record deleted successfully." },
+      { status: 200 }
+    );
+  } catch (error: any) {
+    console.error("Database delete error:", error);
+    return NextResponse.json(
+      { success: false, error: "Internal Server Error.", details: error?.message },
       { status: 500 }
     );
   }
