@@ -28,7 +28,6 @@ const fetchJSON = async (url: string) => {
 };
 
 export default function BreakerSummaryPage() {
-  // ✅ FIX 1 - Default "all" - Date filter apply wela na
   const [date, setDate] = useState("all");
   const [branchFilter, setBranchFilter] = useState("all");
   const [search, setSearch] = useState("");
@@ -90,7 +89,6 @@ export default function BreakerSummaryPage() {
   const getBranchKey = (r: any) => String(r._branchId || r.branch_id || r.branchId || "");
   const getDateStr = (r: any) => String(r.expense_date || r.date || "").slice(0, 10);
   const isBranch = (r: any) => branchFilter === "all" || getBranchKey(r) === branchFilter;
-  // ✅ FIX 2 - "all" nam okkoma, date ekak thoruwoth eka witharak
   const isDate = (r: any) => date === "all" || getDateStr(r) === date;
   const branchOptions = useMemo(() => branches.map((b: any) => ({ id: String(b.id), name: b.branch_name || `Branch ${b.id}` })), [branches]);
   const dateLabel = date === "all" ? "All Dates" : date;
@@ -103,7 +101,10 @@ export default function BreakerSummaryPage() {
     return true;
   }), [otherExpenses, branchFilter, search]);
 
-  const breakerDieselAll = useMemo(() => (dieselRows || []).filter(r => {
+  // ✅ FIX - DIESEL = ALL MACHINES
+  // Me thana machine filter ekak NA - breaker / crusher / excavator / lorry / okkoma gananawa
+  // Filter wenne Branch witharak - Date filter eka passe wenama apply wenawa
+  const allMachinesDieselAll = useMemo(() => (dieselRows || []).filter(r => {
     if (!r) return false;
     return isBranch(r);
   }), [dieselRows, branchFilter]);
@@ -115,26 +116,30 @@ export default function BreakerSummaryPage() {
   }), [salaryRows, branchFilter]);
 
   const breakerIncomeTotal = useMemo(() => breakerIncomeAll.reduce((t, r) => t + numeric(r.total_payable ?? r.amount), 0), [breakerIncomeAll]);
-  const dieselQtyAll = useMemo(() => breakerDieselAll.reduce((t, r) => t + numeric(r.diesel ?? r.qty ?? r.quantity ?? r.liters), 0), [breakerDieselAll]);
-  const dieselTotal = useMemo(() => breakerDieselAll.reduce((t, r) => t + numeric(r.payable ?? r.total_payable ?? r.amount), 0), [breakerDieselAll]);
+
+  // ✅ Card eke amount eka = Hema machines wala Diesel payable wala ekathuwa
+  const dieselQtyAll = useMemo(() => allMachinesDieselAll.reduce((t, r) => t + numeric(r.diesel ?? r.qty ?? r.quantity ?? r.liters), 0), [allMachinesDieselAll]);
+  const dieselTotal = useMemo(() => allMachinesDieselAll.reduce((t, r) => t + numeric(r.payable ?? r.total_payable ?? r.amount), 0), [allMachinesDieselAll]);
+
   const salaryTotal = useMemo(() => breakerSalaryAll.reduce((t, r) => t + numeric(r.total_payable ?? r.amount ?? r.salary), 0), [breakerSalaryAll]);
   const totalUsed = dieselTotal + salaryTotal;
   const balance = breakerIncomeTotal - totalUsed;
   const balancePositive = balance >= 0;
 
   const breakerIncomeDate = useMemo(() => breakerIncomeAll.filter(r => isDate(r)), [breakerIncomeAll, date]);
-  const breakerDieselDate = useMemo(() => breakerDieselAll.filter(r => isDate(r)), [breakerDieselAll, date]);
+
+  // ✅ Table eke Date filter ekata passe thama Diesel eka - Date + Branch walin
+  const allMachinesDieselDate = useMemo(() => allMachinesDieselAll.filter(r => isDate(r)), [allMachinesDieselAll, date]);
   const breakerSalaryDate = useMemo(() => breakerSalaryAll.filter(r => isDate(r)), [breakerSalaryAll, date]);
 
   const incomeDateTotal = useMemo(() => breakerIncomeDate.reduce((t, r) => t + numeric(r.total_payable ?? r.amount), 0), [breakerIncomeDate]);
-  const dieselDateTotal = useMemo(() => breakerDieselDate.reduce((t, r) => t + numeric(r.payable ?? r.total_payable ?? r.amount), 0), [breakerDieselDate]);
+  const dieselDateTotal = useMemo(() => allMachinesDieselDate.reduce((t, r) => t + numeric(r.payable ?? r.total_payable ?? r.amount), 0), [allMachinesDieselDate]);
   const salaryDateTotal = useMemo(() => breakerSalaryDate.reduce((t, r) => t + numeric(r.total_payable ?? r.amount ?? r.salary), 0), [breakerSalaryDate]);
   const balanceDateTotal = incomeDateTotal - dieselDateTotal - salaryDateTotal;
   const balanceDatePositive = balanceDateTotal >= 0;
 
   const summaryRows = useMemo(() => {
     const map = new Map<string, { key: string, branchId: string, branchName: string, date: string, income: number, diesel: number, dieselQty: number, salary: number, incomeCount: number, dieselCount: number, salaryCount: number }>();
-    // ✅ FIX 3 - All Dates nam Date + Branch walin group karanawa
     const getRow = (r: any) => {
       const d = getDateStr(r);
       const key = date === "all" ? `${d}|${getBranchKey(r)}` : getBranchKey(r);
@@ -142,10 +147,12 @@ export default function BreakerSummaryPage() {
       return map.get(key)!;
     };
     breakerIncomeDate.forEach(r => { const row = getRow(r); row.income += numeric(r.total_payable ?? r.amount); row.incomeCount += 1; row.branchName = getBranchName(r); });
-    breakerDieselDate.forEach(r => { const row = getRow(r); row.diesel += numeric(r.payable ?? r.total_payable ?? r.amount); row.dieselQty += numeric(r.diesel ?? r.qty ?? r.quantity); row.dieselCount += 1; row.branchName = getBranchName(r); });
+    // ✅ Table eke DIESEL column eka = E Date + E Branch eke HEMA MACHINES wala Diesel ekathuwa
+    // Income eka nathnamuth Diesel row ekak hadenawa - e nisa Date ekak miss wenne na
+    allMachinesDieselDate.forEach(r => { const row = getRow(r); row.diesel += numeric(r.payable ?? r.total_payable ?? r.amount); row.dieselQty += numeric(r.diesel ?? r.qty ?? r.quantity); row.dieselCount += 1; row.branchName = getBranchName(r); });
     breakerSalaryDate.forEach(r => { const row = getRow(r); row.salary += numeric(r.total_payable ?? r.amount ?? r.salary); row.salaryCount += 1; row.branchName = getBranchName(r); });
     return Array.from(map.values()).map(r => ({ ...r, balance: r.income - r.diesel - r.salary })).sort((a, b) => String(b.date).localeCompare(String(a.date)) || b.income - a.income);
-  }, [breakerIncomeDate, breakerDieselDate, breakerSalaryDate, date]);
+  }, [breakerIncomeDate, allMachinesDieselDate, breakerSalaryDate, date]);
 
   const allEntriesRaw = useMemo(() => {
     const list: any[] = [];
@@ -186,7 +193,7 @@ export default function BreakerSummaryPage() {
   const resetTopFilter = () => { setDate("all"); setBranchFilter("all"); };
 
   const exportCSV = () => {
-    const head = "Date,Branch,Income,Diesel,Operator Salary,Balance";
+    const head = "Date,Branch,Income,Diesel (All Machines),Operator Salary,Balance";
     const body = [
       ...summaryRows.map(r => [r.date, `"${r.branchName}"`, r.income, r.diesel, r.salary, r.balance].join(",")),
       `Total ${dateLabel},,${incomeDateTotal},${dieselDateTotal},${salaryDateTotal},${balanceDateTotal}`
@@ -211,7 +218,7 @@ export default function BreakerSummaryPage() {
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/30"><Banknote size={18} /></span>
               Breaker Summary
             </h1>
-            <p className="mt-1 text-slate-400">Cards - Total (All Dates) • Summary - {dateLabel} • All Entries - Filter nathnam okkoma penawa</p>
+            <p className="mt-1 text-slate-400">Cards - Total (All Dates) • Summary - {dateLabel} • Diesel = All Machines (All Branches + All Dates)</p>
           </div>
           <div className="flex gap-2">
             <button onClick={fetchAll} className="rounded-xl bg-amber-500 px-4 py-2.5 font-bold text-black hover:bg-amber-400">Refresh</button>
@@ -245,14 +252,15 @@ export default function BreakerSummaryPage() {
                 <p className="mt-1 text-[10px] text-slate-500">{breakerIncomeAll.length} records • All Dates</p>
                 <div className="mt-3 border-t border-white/[0.06] pt-3 space-y-1 text-[11px]">
                   <p className="flex justify-between text-slate-400"><span>Other - Breker (Total)</span><span className="font-black text-white">{fmt(breakerIncomeTotal)}</span></p>
-                  <p className="flex justify-between text-slate-400"><span>Diesel (Total)</span><span className="font-bold text-blue-400">- {fmt(dieselTotal)}</span></p>
+                  <p className="flex justify-between text-slate-400"><span>Diesel - All Machines (Total)</span><span className="font-bold text-blue-400">- {fmt(dieselTotal)}</span></p>
                   <p className="flex justify-between text-slate-400"><span>Operator Salary (Total)</span><span className="font-bold text-violet-400">- {fmt(salaryTotal)}</span></p>
                 </div>
               </div>
               <div className="rounded-2xl border border-white/[0.06] bg-[#0B1226] p-5">
-                <div className="flex items-center justify-between"><p className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">Breaker Diesel • Total</p><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/15 text-blue-400"><Fuel size={15} /></span></div>
+                <div className="flex items-center justify-between"><p className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">All Machines Diesel • Total</p><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/15 text-blue-400"><Fuel size={15} /></span></div>
                 <p className="mt-3 text-2xl font-black text-blue-400">{fmt(dieselTotal)}</p>
-                <p className="mt-1 text-[10px] text-slate-500">{dieselQtyAll.toLocaleString()} L • {breakerDieselAll.length} records • All Dates</p>
+                <p className="mt-1 text-[10px] text-slate-500">{dieselQtyAll.toLocaleString()} L • {allMachinesDieselAll.length} records • All Dates • All Branches • All Machines</p>
+                <p className="mt-2 text-[10px] text-blue-300/80">Breaker witharak newei - Diesel expenses wala hema machine ekema payable ekathuwa</p>
               </div>
               <div className="rounded-2xl border border-white/[0.06] bg-[#0B1226] p-5">
                 <div className="flex items-center justify-between"><p className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">Operator Salary • Total</p><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/15 text-violet-400"><Users size={15} /></span></div>
@@ -270,14 +278,14 @@ export default function BreakerSummaryPage() {
               <p className="text-[10px] font-black tracking-widest text-amber-400 uppercase mb-3">Calculation • Total (All Dates)</p>
               <div className="flex flex-wrap items-center gap-2 text-sm font-bold">
                 <span className="rounded-lg bg-emerald-500/10 px-3 py-2 text-emerald-400 ring-1 ring-emerald-500/20">Income {fmt(breakerIncomeTotal)}</span><span className="text-slate-500">−</span>
-                <span className="rounded-lg bg-slate-950 px-3 py-2 ring-1 ring-white/10">( Diesel {fmt(dieselTotal)} <span className="text-slate-500">+</span> Salary {fmt(salaryTotal)} )</span><span className="text-slate-500">=</span>
+                <span className="rounded-lg bg-slate-950 px-3 py-2 ring-1 ring-white/10">( All Machines Diesel {fmt(dieselTotal)} <span className="text-slate-500">+</span> Salary {fmt(salaryTotal)} )</span><span className="text-slate-500">=</span>
                 <span className={`rounded-lg px-3 py-2 ring-1 ${balancePositive ? "bg-emerald-500/15 text-emerald-400 ring-emerald-500/30" : "bg-red-500/15 text-red-400 ring-red-500/30"}`}>Balance {fmt(balance)}</span>
               </div>
             </div>
 
             <div className="rounded-2xl border border-emerald-500/20 bg-[#0B1226] p-5">
               <h3 className="flex items-center gap-2 font-bold uppercase tracking-wider"><Receipt size={14} className="text-emerald-400" /> Breaker Summary • {dateLabel}</h3>
-              <p className="text-[10px] text-slate-500 mt-1">{date === "all" ? "Filter nathnam - Okkoma dates tika Date + Branch walin group karala penawa" : "Date + Branch Filter Only"} • Balance = Income - (Diesel + Operator Salary)</p>
+              <p className="text-[10px] text-slate-500 mt-1">Diesel column eka = E Date + E Branch eke HEMA MACHINES wala Diesel payable ekathuwa • Balance = Income - (All Machines Diesel + Operator Salary)</p>
               {summaryRows.length === 0 ? <p className="py-8 text-center text-slate-500">Me date / branch ekata Breker data na.</p> : (
                 <div className="overflow-x-auto">
                 <table className="mt-4 w-full text-left min-w-[720px]">
@@ -286,7 +294,7 @@ export default function BreakerSummaryPage() {
                       <th className="py-3">Date</th>
                       <th className="py-3">Branch</th>
                       <th className="py-3 text-right">Income</th>
-                      <th className="py-3 text-right">Diesel</th>
+                      <th className="py-3 text-right">Diesel (All Machines)</th>
                       <th className="py-3 text-right">Operator Salary</th>
                       <th className="py-3 text-right">Balance</th>
                     </tr>
@@ -295,7 +303,7 @@ export default function BreakerSummaryPage() {
                     {summaryRows.map(r => (
                       <tr key={r.key} className="border-b border-white/[0.04]">
                         <td className="py-3 font-bold whitespace-nowrap">{r.date}</td>
-                        <td className="py-3"><p className="font-bold flex items-center gap-2"><Building2 size={13} className="text-cyan-400" /> {r.branchName}</p><p className="text-[10px] text-slate-500">{r.incomeCount} income • {r.dieselCount} diesel • {r.salaryCount} salary</p></td>
+                        <td className="py-3"><p className="font-bold flex items-center gap-2"><Building2 size={13} className="text-cyan-400" /> {r.branchName}</p><p className="text-[10px] text-slate-500">{r.incomeCount} income • {r.dieselCount} diesel (all machines) • {r.salaryCount} salary</p></td>
                         <td className="py-3 text-right font-black text-emerald-400">{fmt(r.income)}</td>
                         <td className="py-3 text-right font-bold text-blue-400">{fmt(r.diesel)}<p className="text-[10px] font-normal text-slate-500">{r.dieselQty.toLocaleString()} L</p></td>
                         <td className="py-3 text-right font-bold text-violet-400">{fmt(r.salary)}</td>
@@ -317,8 +325,6 @@ export default function BreakerSummaryPage() {
                 </div>
               )}
             </div>
-
-            
           </>
         )}
       </div>
