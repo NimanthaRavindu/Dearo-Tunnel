@@ -98,16 +98,15 @@ export default function DieselExpensesPage() {
   const formPaid = numberValue(paid);
   const formBalance = Math.max(0, formPayable - formPaid);
 
+  // ✅ FIX - Card wala agayan
+  // Kalin: Diesel Used / Total Amount card walath Remaining value eka pennuwe -> 0.00 pennuwa
+  // Dan: Used = Used + Form eke type karana tika, Remaining = Initial - Used
+  // Type karaddi ma Used wadi wenawa, Remaining adu wenawa - oyage kalin live effect eka ehema ma thiyenawa
   const displayTotalDiesel = initialDieselStock;
-  const baseDieselRemaining = Math.max(0, initialDieselStock - activeDieselUsed);
-  const baseAmountRemaining = Math.max(0, initialTotalAmount - activePayable);
-  const liveDieselRemaining = Math.max(0, initialDieselStock - activeDieselUsed - formDiesel);
-  const liveAmountRemaining = Math.max(0, initialTotalAmount - activePayable - formPayable);
-
-  const displayDieselUsed = formDiesel > 0? liveDieselRemaining : baseDieselRemaining;
-  const displayTotalAmount = formPayable > 0? liveAmountRemaining : baseAmountRemaining;
-  const displayRemainingDiesel = formDiesel > 0? liveDieselRemaining : baseDieselRemaining;
-  const displayRemainingBalance = displayTotalAmount;
+  const displayDieselUsed = activeDieselUsed + formDiesel;
+  const displayTotalAmount = activePayable + formPayable;
+  const displayRemainingDiesel = Math.max(0, initialDieselStock - displayDieselUsed);
+  const displayRemainingBalance = Math.max(0, initialTotalAmount - displayTotalAmount);
 
   const clearFilters = () => { setFilterDate(""); setFilterMachine(""); };
 
@@ -245,10 +244,10 @@ export default function DieselExpensesPage() {
           {isInitialSet && <p className="mt-3 text-xs text-green-400">✓ Initial: {initialDieselStock} L / Rs. {initialTotalAmount.toLocaleString()} | Used: {totalUsedDiesel} L</p>}
         </section>
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <SummaryCard title="Diesel Used" subtitle={isFiltered ? `Filtered: ${fDiesel}L` : "Diesel Qty type karaddi adu"} value={`${formatNumber(displayDieselUsed)} L`} icon={<Droplets size={22}/>} color="cyan"/>
-          <SummaryCard title="Total Amount" subtitle={isFiltered ? `Filtered payable` : "Payable type karaddi adu"} value={`Rs. ${formatNumber(displayTotalAmount)}`} icon={<Wallet size={22}/>} color="blue"/>
+          <SummaryCard title="Diesel Used" subtitle={isFiltered ? `Filtered: ${fDiesel}L` : "Total used + Form eke type karana tika"} value={`${formatNumber(displayDieselUsed)} L`} icon={<Droplets size={22}/>} color="cyan"/>
+          <SummaryCard title="Total Amount" subtitle={isFiltered ? `Filtered payable` : "Total payable + Form eke type karana tika"} value={`Rs. ${formatNumber(displayTotalAmount)}`} icon={<Wallet size={22}/>} color="blue"/>
           <SummaryCard title="Remaining Diesel" subtitle="Initial - Used - Form (minus na)" value={`${formatNumber(displayRemainingDiesel)} L`} icon={<Droplets size={22}/>} color="orange"/>
-          <SummaryCard title="Remaining Balance" subtitle="= Total Amount (samana)" value={`Rs. ${formatNumber(displayRemainingBalance)}`} icon={<CreditCard size={22}/>} color="green"/>
+          <SummaryCard title="Remaining Balance" subtitle="Initial Amount - Used Amount" value={`Rs. ${formatNumber(displayRemainingBalance)}`} icon={<CreditCard size={22}/>} color="green"/>
           <SummaryCard title="Total Diesel" subtitle="Initial stock" value={`${formatNumber(displayTotalDiesel)} L`} icon={<AlertCircle size={22}/>} color="red"/>
         </section>
         <section className="rounded-3xl border border-slate-700/80 bg-slate-900 overflow-hidden">
