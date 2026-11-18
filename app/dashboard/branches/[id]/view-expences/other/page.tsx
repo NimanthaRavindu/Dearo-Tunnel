@@ -1,7 +1,7 @@
 "use client";
 import React, { use, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle,ArrowLeft,Calendar,FileText,RefreshCw,Search,ShieldCheck,Tag,Wallet,X} from "lucide-react";
+import { AlertCircle,ArrowLeft,Calendar,FileText,RefreshCw,Search,ShieldCheck,Tag,Wallet,X, Trash2, AlertTriangle, Loader2, CheckCircle2, Pencil, Save } from "lucide-react";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -29,6 +29,16 @@ interface OtherSummary {
   paid: number;
   balance: number;
 }
+
+// ✅ Row Edit - HEMA DETAILS ekakma
+type RowEditData = {
+  expense_type: string;
+  reason: string;
+  total_payable: string;
+  total_paid: string;
+  balance: string;
+  expense_date: string;
+};
 
 const EMPTY_SUMMARY: OtherSummary = {
   payable: 0,
@@ -65,11 +75,23 @@ export default function ViewOtherExpensesPage({
   const [branchName, setBranchName] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
   const [categoryFilter, setCategoryFilter] = useState("ALL");
   const [selectedDate, setSelectedDate] = useState("");
   const [search, setSearch] = useState("");
   const [showSummary, setShowSummary] = useState(false);
+
+  // ✅ INLINE EDIT - Row eka thulama
+  const [editingRowId, setEditingRowId] = useState<string | null>(null);
+  const [rowEditData, setRowEditData] = useState<RowEditData>({
+    expense_type: "", reason: "", total_payable: "", total_paid: "", balance: "", expense_date: "",
+  });
+  const [isRowSaving, setIsRowSaving] = useState(false);
+
+  // ✅ DELETE
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const loadData = async () => {
     if (!branchId || branchId === "[id]") {
@@ -138,6 +160,122 @@ export default function ViewOtherExpensesPage({
     loadData();
   }, [branchId]);
 
+  // ✅ DELETE
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    try {
+      setIsDeleting(true);
+      setError("");
+      const res = await fetch(
+        `/api/expences/other?id=${encodeURIComponent(deleteId)}&branchId=${encodeURIComponent(branchId)}`,
+        { method: "DELETE", cache: "no-store" }
+      );
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok || result.success === false) throw new Error(result.error || "Failed to delete record.");
+      if (editingRowId === deleteId) handleCancelRowEdit();
+      setDeleteId(null);
+      setSuccessMessage("Other expense record deleted successfully.");
+      window.setTimeout(() => setSuccessMessage(""), 3000);
+      await loadData();
+    } catch (err: any) {
+      setError(err.message || "Failed to delete record.");
+      setDeleteId(null);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // ✅ INLINE EDIT - Row eka thulama
+  const emptyRowEdit = (): RowEditData => ({
+    expense_type: "", reason: "", total_payable: "", total_paid: "", balance: "", expense_date: "",
+  });
+
+  const handleEditRow = (item: OtherExpense) => {
+    setEditingRowId(String(item.id));
+    setRowEditData({
+      expense_type: item.expense_type || item.reason || "",
+      reason: item.reason || item.expense_type || "",
+      total_payable: String(item.total_payable ?? ""),
+      total_paid: String(item.total_paid ?? ""),
+      balance: String(item.balance ?? Math.max(0, numeric(item.total_payable) - numeric(item.total_paid))),
+      expense_date: expenseDate(item) || new Date().toISOString().split("T")[0],
+    });
+    setError(""); setSuccessMessage("");
+  };
+
+  const handleCancelRowEdit = () => {
+    setEditingRowId(null);
+    setRowEditData(emptyRowEdit());
+  };
+
+  const handleRowInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setRowEditData((prev) => {
+      const next = { ...prev, [name]: value };
+      if (name === "total_payable" || name === "total_paid") {
+        const payable = Number(name === "total_payable" ? value : prev.total_payable) || 0;
+        const paid = Number(name === "total_paid" ? value : prev.total_paid) || 0;
+        next.balance = String(Math.max(0, payable - paid));
+      }
+      if (name === "expense_type") {
+        next.reason = value;
+      }
+      return next;
+    });
+    setError("");
+  };
+
+  // ✅ Row eke thulama Save - API eke PUT ekata yawanawa
+  const handleSaveRow = async () => {
+    if (!editingRowId) return;
+    const expense_type = rowEditData.expense_type.trim();
+    const reason = rowEditData.reason.trim() || expense_type;
+    const total_payable = Number(rowEditData.total_payable);
+    const total_paid = Number(rowEditData.total_paid);
+    const balance = Number(rowEditData.balance);
+    const expense_date = rowEditData.expense_date;
+
+    if (!expense_type) { setError("Classification / Expense Type eka danna ona."); return; }
+    if (!expense_date) { setError("Date eka danna ona."); return; }
+    if (total_payable < 0 || total_paid < 0) { setError("Payable / Paid 0 ta wada adu karanna ba."); return; }
+    if (total_paid > total_payable) { setError("Total Paid, Total Payable ta wada wadi karanna ba."); return; }
+
+    try {
+      setIsRowSaving(true); setError("");
+      const res = await fetch("/api/expences/other", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingRowId,
+          branchId: branchId,
+          branch_id: branchId,
+          expense_type,
+          expenseType: expense_type,
+          classification_reason: expense_type,
+          reason,
+          total_payable,
+          total_paid,
+          balance,
+          expense_date,
+          date: expense_date,
+          expenseDate: expense_date,
+        }),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok || result.success === false) throw new Error(result.error || result.details || "Failed to update record.");
+      setEditingRowId(null);
+      setRowEditData(emptyRowEdit());
+      setSuccessMessage(`Updated: ${expense_type} | Payable ${money(total_payable)} | Paid ${money(total_paid)} | Balance ${money(balance)}`);
+      window.setTimeout(() => setSuccessMessage(""), 4000);
+      await loadData();
+    } catch (err: any) {
+      console.error("Save other expense error:", err);
+      setError(err.message || "Failed to update record.");
+    } finally {
+      setIsRowSaving(false);
+    }
+  };
+
   const filteredData = useMemo(() => {
     const query = search.trim().toLowerCase();
 
@@ -191,6 +329,9 @@ export default function ViewOtherExpensesPage({
     setSelectedDate("");
     setSearch("");
   };
+
+  const deleteItem = data.find((x) => String(x.id) === String(deleteId));
+  const inputCls = "w-full px-2 py-2 bg-slate-950 border border-amber-500/50 rounded-lg text-slate-100 text-xs focus:border-amber-400 focus:outline-none";
 
   return (
     <main className="min-h-screen bg-[#070a12] p-4 font-sans text-slate-300 antialiased md:p-6 lg:p-8">
@@ -303,6 +444,12 @@ export default function ViewOtherExpensesPage({
           </div>
         </header>
 
+        {successMessage && (
+          <div className="mb-5 flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm text-emerald-400">
+            <CheckCircle2 size={16} /> {successMessage}
+          </div>
+        )}
+
         {error && (
           <div className="mb-5 flex items-center justify-between rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-400">
             <span>{error}</span>
@@ -377,7 +524,53 @@ export default function ViewOtherExpensesPage({
                   filteredData.map((item, index) => {
                     const balance = numeric(item.balance);
                     const settled = balance <= 0;
+                    const isEditingRow = String(editingRowId) === String(item.id);
 
+                    // ✅ EDIT MODE - HEMA DETAILS EKAKMA ROW EKE THULAMA
+                    if (isEditingRow) {
+                      return (
+                        <tr key={item.id ?? index} className="bg-amber-500/10 border-2 border-amber-500/40 align-top">
+                          <td className="p-2">
+                            <div className="flex flex-col gap-1.5 min-w-[170px]">
+                              <select name="expense_type" value={rowEditData.expense_type} onChange={handleRowInputChange} className={inputCls}>
+                                <option value="">Select Type</option>
+                                <option value="Food">Food</option>
+                                <option value="Agriculture">Agriculture</option>
+                                <option value="Water">Water</option>
+                                <option value="Electricity">Electricity</option>
+                                <option value="Petty Cash">Petty Cash</option>
+                                <option value="Monthly Rental">Monthly Rental</option>
+                                <option value="Chemical Float">Chemical Float</option>
+                                <option value="Construction Repair">Construction Repair</option>
+                                <option value="Loading Expenses">Loading Expenses</option>
+                                <option value="Breker Expenses">Breker Expenses</option>
+                                <option value="Other Expenses">Other Expenses</option>
+                                {rowEditData.expense_type && !["Food","Agriculture","Water","Electricity","Petty Cash","Monthly Rental","Chemical Float","Construction Repair","Loading Expenses","Breker Expenses","Other Expenses"].includes(rowEditData.expense_type) && (
+                                  <option value={rowEditData.expense_type}>{rowEditData.expense_type}</option>
+                                )}
+                              </select>
+                              <input name="reason" value={rowEditData.reason} onChange={handleRowInputChange} className={inputCls} placeholder="Reason / Note" />
+                            </div>
+                          </td>
+                          <td className="p-2"><input type="number" step="0.01" name="total_payable" value={rowEditData.total_payable} onChange={handleRowInputChange} className={inputCls} /></td>
+                          <td className="p-2"><input type="number" step="0.01" name="total_paid" value={rowEditData.total_paid} onChange={handleRowInputChange} className={inputCls} /></td>
+                          <td className="p-2"><input type="number" step="0.01" name="balance" value={rowEditData.balance} onChange={handleRowInputChange} className={inputCls} /></td>
+                          <td className="p-2"><input type="date" name="expense_date" value={rowEditData.expense_date} onChange={handleRowInputChange} className={inputCls} /></td>
+                          <td className="p-2 text-center">
+                            <div className="flex flex-col gap-1.5 min-w-[110px]">
+                              <button type="button" onClick={handleSaveRow} disabled={isRowSaving} className="inline-flex items-center justify-center gap-1 rounded bg-emerald-600 px-2 py-2 text-[10px] font-bold text-white hover:bg-emerald-500 disabled:opacity-50">
+                                {isRowSaving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Save
+                              </button>
+                              <button type="button" onClick={handleCancelRowEdit} disabled={isRowSaving} className="inline-flex items-center justify-center gap-1 rounded bg-slate-700 px-2 py-2 text-[10px] font-bold text-white hover:bg-slate-600">
+                                <X size={12} /> Cancel
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    // ✅ NORMAL ROW - Oyage kalin code eka ehema ma
                     return (
                       <tr
                         key={item.id?? index}
@@ -422,20 +615,37 @@ export default function ViewOtherExpensesPage({
                         </td>
 
                         <td className="p-4 text-center">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              router.push(
-                                `/dashboard/branches/${encodeURIComponent(
-                                  branchId,
-                                )}/view-expences/other/${item.id}`,
-                              )
-                            }
-                            className="rounded border border-purple-500/20 bg-purple-500/10 px-2 py-1 text-[10px] font-bold text-purple-400 transition hover:bg-purple-600 hover:text-white"
-                          >
-                            <FileText size={11} className="mr-1 inline" />
-                            View Summary
-                          </button>
+                          <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                router.push(
+                                  `/dashboard/branches/${encodeURIComponent(
+                                    branchId,
+                                  )}/view-expences/other/${item.id}`,
+                                )
+                              }
+                              className="rounded border border-purple-500/20 bg-purple-500/10 px-2 py-1 text-[10px] font-bold text-purple-400 transition hover:bg-purple-600 hover:text-white"
+                            >
+                              <FileText size={11} className="mr-1 inline" />
+                              View Summary
+                            </button>
+                            {/* ✅ Edit - Row eka thulama */}
+                            <button
+                              type="button"
+                              onClick={() => handleEditRow(item)}
+                              className="inline-flex items-center gap-1 rounded border border-blue-500/30 bg-blue-500/10 px-2 py-1 text-[10px] font-bold text-blue-400 transition hover:bg-blue-600 hover:text-white"
+                            >
+                              <Pencil size={11} />Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeleteId(String(item.id))}
+                              className="inline-flex items-center gap-1 rounded border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] font-bold text-red-400 transition hover:bg-red-600 hover:text-white"
+                            >
+                              <Trash2 size={11} />Delete
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -482,6 +692,29 @@ export default function ViewOtherExpensesPage({
           ]}
           onClose={() => setShowSummary(false)}
         />
+      )}
+
+      {/* ✅ DELETE Confirm Modal */}
+      {deleteId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm" onClick={() => !isDeleting && setDeleteId(null)}>
+          <div className="w-full max-w-sm rounded-2xl border border-red-500/40 bg-[#0d1527] p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3">
+              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-red-500/15 text-red-400"><AlertTriangle size={20} /></span>
+              <div><p className="font-black text-white uppercase">Delete Record?</p><p className="text-[11px] text-slate-400">Me action eka undo karanna ba.</p></div>
+            </div>
+            {deleteItem && (
+              <div className="rounded-xl bg-slate-950 border border-slate-800 p-3 text-[11px] space-y-1">
+                <p>Type: <b className="text-white">{deleteItem.expense_type || deleteItem.reason || "-"}</b></p>
+                <p>Date: <b className="text-white">{expenseDate(deleteItem) || "-"}</b> • Payable: <b className="text-amber-400">LKR {money(deleteItem.total_payable)}</b> • Paid: <b className="text-emerald-400">LKR {money(deleteItem.total_paid)}</b></p>
+                <p>Reason: <span className="text-slate-300">{deleteItem.reason || "-"}</span></p>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <button onClick={() => setDeleteId(null)} disabled={isDeleting} className="flex-1 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold text-white">Cancel</button>
+              <button onClick={handleDelete} disabled={isDeleting} className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-500 rounded-xl font-bold text-white flex items-center justify-center gap-2 disabled:opacity-50">{isDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />} Yes, Delete</button>
+            </div>
+          </div>
+        </div>
       )}
     </main>
   );
