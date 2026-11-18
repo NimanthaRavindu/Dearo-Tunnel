@@ -28,27 +28,13 @@ interface SalesIncomeFormData {
   unit_price: string;
   quantity: string;
   paid: string;
-  // ✅ Discount ain - Amount - Paid walin auto hadenawa
 }
 
-interface ProductPrice {
-  product_name: string;
-  unit_price: number | null;
-  category: string;
-}
-
+interface ProductPrice { product_name: string; unit_price: number | null; category: string; }
 interface CreditRecord {
-  id: string;
-  bill_number: string;
-  product_name: string;
-  customer_name: string;
-  contact_number: string;
-  promise_date: string;
-  vehicle_number: string;
-  credit_amount: number;
-  total_amount: number;
-  paid_amount: number;
-  created_date: string;
+  id: string; bill_number: string; product_name: string; customer_name: string;
+  contact_number: string; promise_date: string; vehicle_number: string;
+  credit_amount: number; total_amount: number; paid_amount: number; created_date: string;
 }
 
 const FALLBACK_PRICES: ProductPrice[] = [
@@ -71,16 +57,13 @@ const FALLBACK_PRICES: ProductPrice[] = [
   { product_name: "Leeks", unit_price: null, category: "vegetable" },
 ];
 
-function getToday(): string {
-  return new Date().toISOString().split("T")[0];
-}
+function getToday(): string { return new Date().toISOString().split("T")[0]; }
 
 function SalesIncomesContent() {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
   const branchId = params?.id as string;
-
   const selectedSalesId = searchParams.get("selected_sales_id");
   const selectedCapitalId = searchParams.get("selected_capital_id");
 
@@ -92,22 +75,15 @@ function SalesIncomesContent() {
   const [errorMessage, setErrorMessage] = useState("");
   const [filterDate, setFilterDate] = useState("");
   const [filterName, setFilterName] = useState("");
-
   const [credits, setCredits] = useState<CreditRecord[]>([]);
   const [creditSearch, setCreditSearch] = useState("");
   const [showCredits, setShowCredits] = useState(true);
-
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const [formData, setFormData] = useState<SalesIncomeFormData>({
-    bill_number: "",
-    name: "",
-    date: getToday(),
-    unit_price: "",
-    quantity: "",
-    paid: "",
+    bill_number: "", name: "", date: getToday(), unit_price: "", quantity: "", paid: "",
   });
 
   const calculatedAmount = useMemo(() => {
@@ -116,13 +92,10 @@ function SalesIncomesContent() {
     return up * qty;
   }, [formData.unit_price, formData.quantity]);
 
-  // ✅ FIX - Paid eka athin gahanawa
   const calculatedPaid = useMemo(() => Number(formData.paid || 0), [formData.paid]);
-  // ✅ FIX - Discount = Amount - Paid - Amount ekei Paid ekei wenasata
-  const calculatedDiscount = useMemo(() => Math.max(0, calculatedAmount - calculatedPaid), [calculatedAmount, calculatedPaid]);
-  // Payable = Paid (Credit na nisa)
+  // ✅ Discount = Amount - Paid witharak - Credit eka adu karanne na
+  const calculatedDiscountForm = useMemo(() => Math.max(0, calculatedAmount - calculatedPaid), [calculatedAmount, calculatedPaid]);
   const calculatedPayable = useMemo(() => calculatedPaid, [calculatedPaid]);
-  // ✅ Form eke Credit na nisa 0
   const calculatedCredit = useMemo(() => 0, []);
 
   const filteredIncomes = incomes.filter((item) => {
@@ -131,29 +104,16 @@ function SalesIncomesContent() {
     return matchDate && matchName;
   });
 
-  const totalAmount = filteredIncomes.reduce((total, item) => total + Number(item.amount || 0), 0);
-  const totalDiscount = filteredIncomes.reduce((total, item) => total + Number(item.discount ?? 0), 0);
-  const totalPaid = filteredIncomes.reduce((total, item) => total + Number(item.paid ?? 0), 0);
-
   const fetchSalesIncomes = async () => {
     if (!branchId) return;
     try {
-      setIsLoading(true);
-      setErrorMessage("");
+      setIsLoading(true); setErrorMessage("");
       const response = await fetch(`/api/expences/sales-incomes?branch_id=${encodeURIComponent(branchId)}`, { method: "GET", cache: "no-store" });
       const result = await response.json();
-      if (!response.ok || !result.success) {
-        if (result.error === "Internal Server Error.") {
-          throw new Error("DB Error: sales_incomes table eke 'paid' column eka na. phpMyAdmin eke ALTER TABLE sales_incomes ADD COLUMN paid DECIMAL(10,2) DEFAULT 0 AFTER credit; run karanna.");
-        }
-        throw new Error(result.error || "Failed to fetch sales incomes.");
-      }
+      if (!response.ok || !result.success) throw new Error(result.error || "Failed to fetch sales incomes.");
       setIncomes(result.data || []);
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Failed to load sales income records.");
-    } finally {
-      setIsLoading(false);
-    }
+    } catch (error) { setErrorMessage(error instanceof Error ? error.message : "Failed to load sales income records."); }
+    finally { setIsLoading(false); }
   };
 
   const fetchCredits = async () => {
@@ -180,6 +140,21 @@ function SalesIncomesContent() {
     if (!billNo || billNo === "-") return undefined;
     return credits.find((c) => String(c.bill_number || "").trim().toLowerCase() === String(billNo).trim().toLowerCase());
   };
+
+  // ✅ Uda table eke Credit eka = Yata table eke credit_amount (nayata ganna mudala)
+  const getCreditAmountForItem = (item: SalesIncomeItem) => {
+    const billNo = item.bill_number || item.billNumber || "-";
+    const rec = getCreditByBill(billNo);
+    if (rec) return Number(rec.credit_amount || 0);
+    return Number(item.credit || 0);
+  };
+
+  // ✅ Totals
+  const totalAmount = filteredIncomes.reduce((total, item) => total + Number(item.amount || 0), 0);
+  const totalPaid = filteredIncomes.reduce((total, item) => total + Number(item.paid ?? 0), 0);
+  const totalCreditTop = filteredIncomes.reduce((total, item) => total + getCreditAmountForItem(item), 0);
+  // ✅ Discount = Amount - Paid witharak - Credit eka adu karanne na
+  const totalDiscount = Math.max(0, totalAmount - totalPaid);
 
   const filteredCredits = useMemo(() => {
     let list = credits;
@@ -211,11 +186,7 @@ function SalesIncomesContent() {
 
   const handleNameChange = (value: string) => {
     const found = products.find((p) => p.product_name.toLowerCase() === value.toLowerCase());
-    setFormData((prev) => ({
-      ...prev,
-      name: value,
-      unit_price: found && found.unit_price != null ? String(found.unit_price) : "",
-    }));
+    setFormData((prev) => ({ ...prev, name: value, unit_price: found && found.unit_price != null ? String(found.unit_price) : "" }));
     setErrorMessage("");
   };
 
@@ -228,10 +199,8 @@ function SalesIncomesContent() {
       unit_price: String(item.unit_price ?? ""),
       quantity: String(item.quantity ?? ""),
       paid: String(item.paid ?? ""),
-      // ✅ Edit ekedi Discount load karanne na - Amount - Paid walin auto hadenawa
     });
-    setErrorMessage("");
-    setSuccessMessage("");
+    setErrorMessage(""); setSuccessMessage("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -248,28 +217,16 @@ function SalesIncomesContent() {
       const result = await res.json();
       if (!res.ok || !result.success) throw new Error(result.error || "Failed to delete");
       if (editingId === deleteId) handleCancelEdit();
-      setDeleteId(null);
-      setSuccessMessage("Entry deleted successfully.");
+      setDeleteId(null); setSuccessMessage("Entry deleted successfully.");
       window.setTimeout(() => setSuccessMessage(""), 3000);
-      await fetchSalesIncomes();
-      await fetchCredits();
-    } catch (err: any) {
-      setErrorMessage(err.message || "Failed to delete entry");
-      setDeleteId(null);
-    } finally {
-      setIsDeleting(false);
-    }
+      await fetchSalesIncomes(); await fetchCredits();
+    } catch (err: any) { setErrorMessage(err.message || "Failed to delete entry"); setDeleteId(null); }
+    finally { setIsDeleting(false); }
   };
 
   const handleOpenCreditPage = () => {
-    if (!formData.name.trim()) {
-      setErrorMessage("First enter Product Name, then Add Credit.");
-      return;
-    }
-    if (calculatedAmount <= 0) {
-      setErrorMessage("First enter Unit Price and Quantity.");
-      return;
-    }
+    if (!formData.name.trim()) { setErrorMessage("First enter Product Name, then Add Credit."); return; }
+    if (calculatedAmount <= 0) { setErrorMessage("First enter Unit Price and Quantity."); return; }
     const q = new URLSearchParams({
       bill_number: formData.bill_number.trim() || "",
       product_name: formData.name.trim(),
@@ -279,7 +236,7 @@ function SalesIncomesContent() {
       credit_amount: String(calculatedCredit),
       quantity: formData.quantity,
       unit_price: formData.unit_price,
-      discount: String(calculatedDiscount),
+      discount: String(calculatedDiscountForm),
     });
     router.push(`/dashboard/branches/${branchId}/add-expenses/sales_incomes/credit?${q.toString()}`);
   };
@@ -290,22 +247,20 @@ function SalesIncomesContent() {
     const name = formData.name.trim();
     const unit_price = Number(formData.unit_price);
     const quantity = Number(formData.quantity);
-    // ✅ Discount = Amount - Paid
-    const discount = calculatedDiscount;
     const paid = calculatedPaid;
     const amount = calculatedAmount;
+    // ✅ Discount = Amount - Paid witharak
+    const discount = calculatedDiscountForm;
     const credit = 0;
 
     if (!branchId || !name || !formData.date || !formData.unit_price || !formData.quantity) {
-      setErrorMessage("Please complete Name, Date, Unit Price and Quantity.");
-      return;
+      setErrorMessage("Please complete Name, Date, Unit Price and Quantity."); return;
     }
     if (paid < 0) { setErrorMessage("Paid cannot be less than 0."); return; }
     if (paid > amount) { setErrorMessage("Paid cannot be greater than Amount."); return; }
 
     try {
-      setIsSubmitting(true);
-      setErrorMessage("");
+      setIsSubmitting(true); setErrorMessage("");
       const isEdit = !!editingId;
       const response = await fetch("/api/expences/sales-incomes", {
         method: isEdit ? "PUT" : "POST",
@@ -313,23 +268,14 @@ function SalesIncomesContent() {
         body: JSON.stringify({ id: editingId, branch_id: branchId, bill_number: bill_number || null, name, date: formData.date, unit_price, quantity, amount, discount, paid, credit }),
       });
       const result = await response.json();
-      if (!response.ok || !result.success) {
-        if (result.error === "Internal Server Error.") {
-          throw new Error("DB Error: API eke PUT / DELETE na. Pahala API code eka danna.");
-        }
-        throw new Error(result.error || (isEdit ? "Failed to update sales income." : "Failed to save sales income."));
-      }
+      if (!response.ok || !result.success) throw new Error(result.error || (isEdit ? "Failed to update sales income." : "Failed to save sales income."));
       setFormData({ bill_number: "", name: "", date: getToday(), unit_price: "", quantity: "", paid: "" });
       setEditingId(null);
       setSuccessMessage(isEdit ? `Updated: Amount LKR ${amount.toFixed(2)} | Paid LKR ${paid.toFixed(2)} | Discount LKR ${discount.toFixed(2)}` : `Saved: Amount LKR ${amount.toFixed(2)} | Paid LKR ${paid.toFixed(2)} | Discount LKR ${discount.toFixed(2)}`);
       window.setTimeout(() => setSuccessMessage(""), 4000);
-      await fetchSalesIncomes();
-      await fetchCredits();
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Failed to save sales income.");
-    } finally {
-      setIsSubmitting(false);
-    }
+      await fetchSalesIncomes(); await fetchCredits();
+    } catch (error) { setErrorMessage(error instanceof Error ? error.message : "Failed to save sales income."); }
+    finally { setIsSubmitting(false); }
   };
 
   const handleDeleteCredit = async (id: string) => {
@@ -339,9 +285,7 @@ function SalesIncomesContent() {
       const result = await res.json();
       if (!res.ok || !result.success) throw new Error(result.error || "Failed to delete");
       await fetchCredits();
-    } catch (err: any) {
-      setErrorMessage(err.message || "Failed to delete credit");
-    }
+    } catch (err: any) { setErrorMessage(err.message || "Failed to delete credit"); }
   };
 
   const handleBack = () => {
@@ -398,10 +342,8 @@ function SalesIncomesContent() {
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Tag size={12} />Unit Price (LKR) - Auto</label><input type="number" step="0.01" min="0" name="unit_price" value={formData.unit_price} onChange={handleInputChange} required placeholder="Auto / Manual" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Hash size={12} />Quantity</label><input type="number" step="0.01" min="0.01" name="quantity" value={formData.quantity} onChange={handleInputChange} required placeholder="0" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><DollarSign size={12} />Amount (LKR) - Auto</label><div className="w-full px-3.5 py-2.5 bg-slate-900/80 border border-slate-800 rounded-xl text-emerald-400 font-black text-sm">LKR {calculatedAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
-            {/* ✅ Paid eka athin gahanawa */}
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><DollarSign size={12} />Paid (LKR)</label><input type="number" step="0.01" min="0" name="paid" value={formData.paid} onChange={handleInputChange} placeholder="0.00" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
-            {/* ✅ Discount = Amount - Paid - Auto, athin gahanna ba */}
-            <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><BadgePercent size={12} />Discount (LKR) - Auto = Amount - Paid</label><div className="w-full px-3.5 py-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400 font-black text-sm">LKR {calculatedDiscount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
+            <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><BadgePercent size={12} />Discount (LKR) - Auto = Amount - Paid</label><div className="w-full px-3.5 py-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400 font-black text-sm">LKR {calculatedDiscountForm.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
             <div className="sm:col-span-2 lg:col-span-4 flex justify-end gap-2 mt-2">
               {editingId && <button type="button" onClick={handleCancelEdit} className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl transition-all flex items-center gap-2"><X size={14} /><span>Cancel Edit</span></button>}
               <button type="button" onClick={handleOpenCreditPage} className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-amber-500/20 active:scale-95"><CreditCard size={14} /><span>Add Credit</span></button>
@@ -427,21 +369,25 @@ function SalesIncomesContent() {
           </div>
 
           {!isLoading && filteredIncomes.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Amount</p><p className="mt-1 text-lg font-black text-red-400">LKR {totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
               <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Paid</p><p className="mt-1 text-lg font-black text-emerald-400">LKR {totalPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
-              <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4"><p className="text-[10px] uppercase tracking-wider text-amber-400">Total Discount = Amount - Paid</p><p className="mt-1 text-lg font-black text-amber-400">LKR {totalDiscount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4"><p className="text-[10px] uppercase tracking-wider text-amber-400">Total Credit - Nayata Ganna Mudala</p><p className="mt-1 text-lg font-black text-amber-400">LKR {totalCreditTop.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
+              <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Discount = Amount - Paid</p><p className="mt-1 text-lg font-black text-amber-400">LKR {totalDiscount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
             </div>
           )}
 
           {isLoading ? <div className="py-16 text-center flex flex-col items-center justify-center space-y-2"><Loader2 size={24} className="text-red-500 animate-spin" /><p className="text-slate-400">Loading branch entries...</p></div> : filteredIncomes.length === 0 ? <div className="py-16 text-center text-slate-500">{filterDate || filterName ? `No records found ${filterName ? `for "${filterName}"` : ""} ${filterDate ? `on ${filterDate}` : ""}.` : "No sales income records found for this branch."}</div> : (
             <div className="overflow-x-auto rounded-xl border border-slate-800 bg-[#090e1a]/50">
               <table className="w-full text-left border-collapse">
-                <thead><tr className="border-b border-slate-800 bg-slate-900/60 text-[10px] font-bold text-slate-400 uppercase tracking-wider"><th className="py-3 px-4">Bill No</th><th className="py-3 px-4">Name</th><th className="py-3 px-4">Date</th><th className="py-3 px-4 text-right">Unit Price</th><th className="py-3 px-4 text-right">Qty</th><th className="py-3 px-4 text-right">Amount (LKR)</th><th className="py-3 px-4 text-right">Paid (LKR)</th><th className="py-3 px-4 text-right">Discount (LKR)</th><th className="py-3 px-4">Credit Customer</th><th className="py-3 px-4 text-center">Action</th></tr></thead>
+                <thead><tr className="border-b border-slate-800 bg-slate-900/60 text-[10px] font-bold text-slate-400 uppercase tracking-wider"><th className="py-3 px-4">Bill No</th><th className="py-3 px-4">Name</th><th className="py-3 px-4">Date</th><th className="py-3 px-4 text-right">Unit Price</th><th className="py-3 px-4 text-right">Qty</th><th className="py-3 px-4 text-right">Amount (LKR)</th><th className="py-3 px-4 text-right">Paid (LKR)</th><th className="py-3 px-4 text-right">Credit (LKR)</th><th className="py-3 px-4 text-right">Discount (LKR)</th><th className="py-3 px-4">Credit Customer</th><th className="py-3 px-4 text-center">Action</th></tr></thead>
                 <tbody className="divide-y divide-slate-800/50 text-xs">
                   {filteredIncomes.map((item) => {
                     const billNo = item.bill_number || item.billNumber || "-";
                     const creditRec = getCreditByBill(billNo);
+                    const creditAmt = getCreditAmountForItem(item);
+                    // ✅ Row Discount = Amount - Paid witharak - Credit adu karanne na
+                    const rowDiscount = Math.max(0, Number(item.amount || 0) - Number(item.paid || 0));
                     const isEditingRow = String(editingId) === String(item.id);
                     return (
                       <tr key={item.id} className={`hover:bg-slate-900/70 transition-colors ${isEditingRow ? "bg-amber-500/10" : ""}`}>
@@ -452,7 +398,8 @@ function SalesIncomesContent() {
                         <td className="py-3 px-4 text-right text-slate-300">{Number(item.quantity || 0)}</td>
                         <td className="py-3 px-4 text-right font-black text-red-400">LKR {Number(item.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                         <td className="py-3 px-4 text-right font-black text-emerald-400">LKR {Number(item.paid ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                        <td className="py-3 px-4 text-right font-black text-amber-400">LKR {Number(item.discount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                        <td className="py-3 px-4 text-right font-black text-amber-400">LKR {creditAmt.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                        <td className="py-3 px-4 text-right font-black text-amber-400">LKR {rowDiscount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                         <td className="py-3 px-4">
                           {creditRec ? (
                             <div>
