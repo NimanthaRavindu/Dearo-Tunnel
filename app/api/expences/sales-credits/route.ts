@@ -37,14 +37,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Missing required credit fields" }, { status: 400 });
     }
 
-    // ✅ NEW: Credit Amount validation - 0 nam save wenne na
     if (!credit_amount || Number(credit_amount) <= 0) {
       return NextResponse.json({ success: false, error: "Credit Amount is required and must be > 0" }, { status: 400 });
     }
 
     const id = `CR-${Date.now()}`;
-
-    // ✅ FIX: created_date null nam ada date eka danawa
     const finalCreatedDate = created_date || new Date().toISOString().split("T")[0];
 
     await db.query(
@@ -60,7 +57,7 @@ export async function POST(req: NextRequest) {
         contact_number,
         promise_date,
         vehicle_number.toUpperCase(),
-        Number(credit_amount), // ✅ Credit Page eke form eken ena Credit Amount eka
+        Number(credit_amount),
         Number(total_amount || 0),
         Number(paid_amount || 0),
         finalCreatedDate,
@@ -79,6 +76,85 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, data: rows[0] });
   } catch (e: any) {
     console.error("POST sales-credits error:", e);
+    return NextResponse.json({ success: false, error: e.message }, { status: 500 });
+  }
+}
+
+// ✅ NEW - PUT - Inline Edit eke Credit Customer eka update karanna
+export async function PUT(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const {
+      id, branch_id, bill_number, product_name, customer_name,
+      contact_number, promise_date, vehicle_number,
+      credit_amount, total_amount, paid_amount, created_date,
+    } = body;
+
+    if (!id) {
+      return NextResponse.json({ success: false, error: "id required" }, { status: 400 });
+    }
+
+    const existing: any = await db.query(
+      `SELECT * FROM sales_credits WHERE id = ?`,
+      [id]
+    );
+    const existingRows = Array.isArray(existing) ? existing[0] : (existing?.rows ?? existing ?? []);
+    const old = existingRows?.[0];
+    if (!old) {
+      return NextResponse.json({ success: false, error: "Credit record not found" }, { status: 404 });
+    }
+
+    const finalCustomerName = customer_name?.trim() ? customer_name.trim() : old.customer_name;
+    const finalContact = contact_number?.trim() ? contact_number.trim() : old.contact_number;
+    const finalVehicle = vehicle_number?.trim() ? vehicle_number.trim().toUpperCase() : old.vehicle_number;
+    const finalPromiseDate = promise_date || old.promise_date;
+    const finalBill = bill_number !== undefined ? (bill_number || null) : old.bill_number;
+    const finalProduct = product_name !== undefined ? (product_name || null) : old.product_name;
+    const finalCredit = credit_amount !== undefined ? Number(credit_amount) : Number(old.credit_amount || 0);
+    const finalTotal = total_amount !== undefined ? Number(total_amount) : Number(old.total_amount || 0);
+    const finalPaid = paid_amount !== undefined ? Number(paid_amount) : Number(old.paid_amount || 0);
+    const finalCreated = created_date || old.created_date;
+
+    await db.query(
+      `UPDATE sales_credits SET
+        bill_number = ?,
+        product_name = ?,
+        customer_name = ?,
+        contact_number = ?,
+        promise_date = ?,
+        vehicle_number = ?,
+        credit_amount = ?,
+        total_amount = ?,
+        paid_amount = ?,
+        created_date = ?
+       WHERE id = ?`,
+      [
+        finalBill,
+        finalProduct,
+        finalCustomerName,
+        finalContact,
+        finalPromiseDate,
+        finalVehicle,
+        finalCredit,
+        finalTotal,
+        finalPaid,
+        finalCreated,
+        id,
+      ]
+    );
+
+    const updated: any = await db.query(
+      `SELECT id, branch_id, bill_number, product_name, customer_name, contact_number,
+              DATE_FORMAT(promise_date, '%Y-%m-%d') as promise_date,
+              vehicle_number, credit_amount, total_amount, paid_amount,
+              DATE_FORMAT(created_date, '%Y-%m-%d') as created_date, created_at
+       FROM sales_credits WHERE id = ?`,
+      [id]
+    );
+    const rows = Array.isArray(updated) ? updated[0] : (updated?.rows ?? updated ?? []);
+    return NextResponse.json({ success: true, data: rows[0] });
+  } catch (e: any) {
+    console.error("PUT sales-credits error:", e);
     return NextResponse.json({ success: false, error: e.message }, { status: 500 });
   }
 }

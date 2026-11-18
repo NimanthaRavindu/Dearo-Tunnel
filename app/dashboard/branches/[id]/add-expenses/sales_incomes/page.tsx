@@ -3,7 +3,7 @@
 import React, { Suspense, useEffect, useState, useMemo } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Calendar, CheckCircle2, DollarSign, FileText, Loader2, Plus, X, Hash, Tag, Eye, Receipt, BadgePercent, CreditCard, Search, User, Phone, Car, Pencil, Trash2, AlertTriangle, Check, Save } from "lucide-react";
+import { ArrowLeft, Calendar, CheckCircle2, DollarSign, FileText, Loader2, Plus, X, Hash, Tag, Eye, Receipt, BadgePercent, CreditCard, Search, User, Phone, Car, Pencil, Trash2, AlertTriangle, Save } from "lucide-react";
 
 interface SalesIncomeItem {
   id: string;
@@ -22,22 +22,26 @@ interface SalesIncomeItem {
 }
 
 interface SalesIncomeFormData {
-  bill_number: string;
-  name: string;
-  date: string;
-  unit_price: string;
-  quantity: string;
-  paid: string;
+  bill_number: string; name: string; date: string;
+  unit_price: string; quantity: string; paid: string;
 }
 
-// ✅ Inline edit ekata wena form ekak
+// ✅ Row Edit - HEMA DETAILS ekakma
 interface RowEditData {
   bill_number: string;
   name: string;
   date: string;
   unit_price: string;
   quantity: string;
+  amount: string;
   paid: string;
+  credit: string;
+  discount: string;
+  customer_name: string;
+  contact_number: string;
+  vehicle_number: string;
+  promise_date: string;
+  credit_id: string;
 }
 
 interface ProductPrice { product_name: string; unit_price: number | null; category: string; }
@@ -89,11 +93,13 @@ function SalesIncomesContent() {
   const [creditSearch, setCreditSearch] = useState("");
   const [showCredits, setShowCredits] = useState(true);
 
-  // ✅ Inline Edit - Uda form eke Edit na, Row eke thulama Edit
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
-  const [rowEditData, setRowEditData] = useState<RowEditData>({ bill_number: "", name: "", date: "", unit_price: "", quantity: "", paid: "" });
+  const [rowEditData, setRowEditData] = useState<RowEditData>({
+    bill_number: "", name: "", date: "", unit_price: "", quantity: "",
+    amount: "", paid: "", credit: "", discount: "",
+    customer_name: "", contact_number: "", vehicle_number: "", promise_date: "", credit_id: "",
+  });
   const [isRowSaving, setIsRowSaving] = useState(false);
-
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -106,21 +112,11 @@ function SalesIncomesContent() {
     const qty = Number(formData.quantity) || 0;
     return up * qty;
   }, [formData.unit_price, formData.quantity]);
-
   const calculatedPaid = useMemo(() => Number(formData.paid || 0), [formData.paid]);
+  // ✅ Discount = Amount - Paid witharak
   const calculatedDiscountForm = useMemo(() => Math.max(0, calculatedAmount - calculatedPaid), [calculatedAmount, calculatedPaid]);
   const calculatedPayable = useMemo(() => calculatedPaid, [calculatedPaid]);
   const calculatedCredit = useMemo(() => 0, []);
-
-  // ✅ Row Edit eke Amount / Discount - Row eka thulama auto
-  const rowCalculatedAmount = useMemo(() => {
-    const up = Number(rowEditData.unit_price) || 0;
-    const qty = Number(rowEditData.quantity) || 0;
-    return up * qty;
-  }, [rowEditData.unit_price, rowEditData.quantity]);
-  const rowCalculatedPaid = useMemo(() => Number(rowEditData.paid || 0), [rowEditData.paid]);
-  // ✅ Discount = Amount - Paid witharak
-  const rowCalculatedDiscount = useMemo(() => Math.max(0, rowCalculatedAmount - rowCalculatedPaid), [rowCalculatedAmount, rowCalculatedPaid]);
 
   const filteredIncomes = incomes.filter((item) => {
     const matchDate = filterDate ? item.date.slice(0, 10) === filterDate : true;
@@ -211,28 +207,53 @@ function SalesIncomesContent() {
     setErrorMessage("");
   };
 
-  // ✅ INLINE EDIT - Row eka thulama edit karanna
+  const emptyRowEdit = (): RowEditData => ({
+    bill_number: "", name: "", date: "", unit_price: "", quantity: "",
+    amount: "", paid: "", credit: "", discount: "",
+    customer_name: "", contact_number: "", vehicle_number: "", promise_date: "", credit_id: "",
+  });
+
   const handleEditRow = (item: SalesIncomeItem) => {
+    const billNo = item.bill_number || item.billNumber || "";
+    const creditRec = getCreditByBill(billNo);
+    const creditAmt = creditRec ? Number(creditRec.credit_amount || 0) : Number(item.credit || 0);
+    const discountVal = Math.max(0, Number(item.amount || 0) - Number(item.paid || 0));
     setEditingRowId(String(item.id));
     setRowEditData({
-      bill_number: item.bill_number || item.billNumber || "",
+      bill_number: billNo,
       name: item.name || "",
       date: String(item.date || "").slice(0, 10) || getToday(),
       unit_price: String(item.unit_price ?? ""),
       quantity: String(item.quantity ?? ""),
+      amount: String(item.amount ?? ""),
       paid: String(item.paid ?? ""),
+      credit: String(creditAmt),
+      discount: String(discountVal),
+      customer_name: creditRec?.customer_name || "",
+      contact_number: creditRec?.contact_number || "",
+      vehicle_number: creditRec?.vehicle_number || "",
+      promise_date: creditRec ? String(creditRec.promise_date || "").slice(0, 10) : "",
+      credit_id: creditRec ? String(creditRec.id) : "",
     });
     setErrorMessage(""); setSuccessMessage("");
   };
 
   const handleCancelRowEdit = () => {
     setEditingRowId(null);
-    setRowEditData({ bill_number: "", name: "", date: "", unit_price: "", quantity: "", paid: "" });
+    setRowEditData(emptyRowEdit());
   };
 
   const handleRowInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setRowEditData((prev) => ({ ...prev, [name]: value }));
+    setRowEditData((prev) => {
+      const next = { ...prev, [name]: value };
+      if (name === "unit_price" || name === "quantity") {
+        const up = Number(name === "unit_price" ? value : prev.unit_price) || 0;
+        const qty = Number(name === "quantity" ? value : prev.quantity) || 0;
+        if (up > 0 && qty > 0) next.amount = String(up * qty);
+      }
+      return next;
+    });
     setErrorMessage("");
   };
 
@@ -245,34 +266,82 @@ function SalesIncomesContent() {
     }));
   };
 
-  // ✅ Row eke thulama Save
   const handleSaveRow = async () => {
     if (!editingRowId) return;
     const bill_number = rowEditData.bill_number.trim();
     const name = rowEditData.name.trim();
     const unit_price = Number(rowEditData.unit_price);
     const quantity = Number(rowEditData.quantity);
-    const paid = rowCalculatedPaid;
-    const amount = rowCalculatedAmount;
-    const discount = rowCalculatedDiscount;
+    const amount = Number(rowEditData.amount);
+    const paid = Number(rowEditData.paid);
+    const credit = Number(rowEditData.credit);
+    const discount = Number(rowEditData.discount);
 
     if (!name || !rowEditData.date || !rowEditData.unit_price || !rowEditData.quantity) {
       setErrorMessage("Please complete Name, Date, Unit Price and Quantity."); return;
     }
     if (paid < 0) { setErrorMessage("Paid cannot be less than 0."); return; }
     if (paid > amount) { setErrorMessage("Paid cannot be greater than Amount."); return; }
+    if (credit > 0 && !rowEditData.customer_name.trim()) {
+      setErrorMessage("Credit > 0 nam Customer Name eka danna ona."); return;
+    }
 
     try {
       setIsRowSaving(true); setErrorMessage("");
       const response = await fetch("/api/expences/sales-incomes", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: editingRowId, branch_id: branchId, bill_number: bill_number || null, name, date: rowEditData.date, unit_price, quantity, amount, discount, paid, credit: 0 }),
+        body: JSON.stringify({ id: editingRowId, branch_id: branchId, bill_number: bill_number || null, name, date: rowEditData.date, unit_price, quantity, amount, discount, paid, credit }),
       });
       const result = await response.json();
       if (!response.ok || !result.success) throw new Error(result.error || "Failed to update sales income.");
+
+      if (rowEditData.credit_id) {
+        const cres = await fetch("/api/expences/sales-credits", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: rowEditData.credit_id,
+            branch_id: branchId,
+            bill_number: bill_number || null,
+            product_name: name,
+            customer_name: rowEditData.customer_name.trim(),
+            contact_number: rowEditData.contact_number.trim(),
+            vehicle_number: rowEditData.vehicle_number.trim(),
+            promise_date: rowEditData.promise_date || null,
+            credit_amount: credit,
+            total_amount: amount,
+            paid_amount: paid,
+            created_date: rowEditData.date,
+          }),
+        });
+        const cresult = await cres.json().catch(() => ({}));
+        if (!cres.ok || (cresult && cresult.success === false)) throw new Error(cresult.error || "Failed to update credit record.");
+      } else if (credit > 0 && rowEditData.customer_name.trim()) {
+        const cres = await fetch("/api/expences/sales-credits", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            branch_id: branchId,
+            bill_number: bill_number || null,
+            product_name: name,
+            customer_name: rowEditData.customer_name.trim(),
+            contact_number: rowEditData.contact_number.trim(),
+            vehicle_number: rowEditData.vehicle_number.trim(),
+            promise_date: rowEditData.promise_date || null,
+            credit_amount: credit,
+            total_amount: amount,
+            paid_amount: paid,
+            created_date: rowEditData.date,
+          }),
+        });
+        const cresult = await cres.json().catch(() => ({}));
+        if (!cres.ok || (cresult && cresult.success === false)) throw new Error(cresult.error || "Failed to create credit record.");
+      }
+
       setEditingRowId(null);
-      setSuccessMessage(`Updated: Bill ${bill_number} | Amount LKR ${amount.toFixed(2)} | Paid LKR ${paid.toFixed(2)} | Discount LKR ${discount.toFixed(2)}`);
+      setRowEditData(emptyRowEdit());
+      setSuccessMessage(`Updated: Bill ${bill_number} | Amount LKR ${amount.toFixed(2)} | Paid LKR ${paid.toFixed(2)} | Credit LKR ${credit.toFixed(2)} | Discount LKR ${discount.toFixed(2)}`);
       window.setTimeout(() => setSuccessMessage(""), 4000);
       await fetchSalesIncomes(); await fetchCredits();
     } catch (error) { setErrorMessage(error instanceof Error ? error.message : "Failed to update."); }
@@ -383,7 +452,6 @@ function SalesIncomesContent() {
         {successMessage && (<div className="flex items-center gap-2 bg-emerald-950/40 border border-emerald-500/40 px-4 py-3 rounded-xl text-emerald-400"><CheckCircle2 size={16} /><span>{successMessage}</span></div>)}
         {errorMessage && (<div className="flex items-center justify-between gap-3 bg-red-950/40 border border-red-500/40 px-4 py-3 rounded-xl text-red-400"><span>{errorMessage}</span><button type="button" onClick={() => setErrorMessage("")} className="hover:text-red-200"><X size={15} /></button></div>)}
 
-        {/* ✅ Uda Form eka - Aluth entry ekata witharak, Edit ekata na */}
         <div className="p-6 rounded-2xl border shadow-2xl bg-[#0d1527]/60 border-slate-800">
           <h2 className="text-xs font-bold uppercase tracking-widest text-slate-200 mb-4 flex items-center gap-2"><Plus size={14} className="text-red-400" /> Add New Sales Income Entry</h2>
           <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -419,7 +487,7 @@ function SalesIncomesContent() {
 
         <div className="p-6 rounded-2xl bg-[#0d1527]/40 border border-slate-800 shadow-2xl space-y-4">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <div><h2 className="text-xs font-bold uppercase tracking-widest text-slate-200">Registered Sales Incomes Ledger</h2><p className="text-[10px] text-slate-500 mt-1">{filteredIncomes.length} records found {editingRowId && <span className="text-amber-400 font-bold">• Editing Row #{editingRowId} - Row eka thulama edit karanna</span>}</p></div>
+            <div><h2 className="text-xs font-bold uppercase tracking-widest text-slate-200">Registered Sales Incomes Ledger</h2><p className="text-[10px] text-slate-500 mt-1">{filteredIncomes.length} records found {editingRowId && <span className="text-amber-400 font-bold">• Editing Row #{editingRowId} - Hema details ekakma row eka thulama edit karanna</span>}</p></div>
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-2">
                 <Search size={14} className="text-slate-400" />
@@ -454,21 +522,26 @@ function SalesIncomesContent() {
                     const rowDiscount = Math.max(0, Number(item.amount || 0) - Number(item.paid || 0));
                     const isEditingRow = String(editingRowId) === String(item.id);
 
-                    // ✅ EDIT MODE - Row eka thulama input wenawa
                     if (isEditingRow) {
                       return (
-                        <tr key={item.id} className="bg-amber-500/10 border-2 border-amber-500/40">
+                        <tr key={item.id} className="bg-amber-500/10 border-2 border-amber-500/40 align-top">
                           <td className="py-3 px-2"><input name="bill_number" value={rowEditData.bill_number} onChange={handleRowInputChange} className={inputCls} placeholder="B-001" /></td>
                           <td className="py-3 px-2"><input list="row-product-list" value={rowEditData.name} onChange={(e) => handleRowNameChange(e.target.value)} className={inputCls} placeholder="Name" /><datalist id="row-product-list">{products.map((p) => <option key={p.product_name} value={p.product_name} />)}</datalist></td>
                           <td className="py-3 px-2"><input type="date" name="date" value={rowEditData.date} onChange={handleRowInputChange} className={inputCls} /></td>
                           <td className="py-3 px-2"><input type="number" step="0.01" name="unit_price" value={rowEditData.unit_price} onChange={handleRowInputChange} className={inputCls} /></td>
                           <td className="py-3 px-2"><input type="number" step="0.01" name="quantity" value={rowEditData.quantity} onChange={handleRowInputChange} className={inputCls} /></td>
-                          <td className="py-3 px-2 text-right font-black text-red-400">LKR {rowCalculatedAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                          <td className="py-3 px-2"><input type="number" step="0.01" name="amount" value={rowEditData.amount} onChange={handleRowInputChange} className={inputCls} /></td>
                           <td className="py-3 px-2"><input type="number" step="0.01" name="paid" value={rowEditData.paid} onChange={handleRowInputChange} className={inputCls} /></td>
-                          <td className="py-3 px-2 text-right font-black text-amber-400">LKR {creditAmt.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                          <td className="py-3 px-2 text-right font-black text-amber-400">LKR {rowCalculatedDiscount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                          <td className="py-3 px-2"><input type="number" step="0.01" name="credit" value={rowEditData.credit} onChange={handleRowInputChange} className={inputCls} /></td>
+                          <td className="py-3 px-2"><input type="number" step="0.01" name="discount" value={rowEditData.discount} onChange={handleRowInputChange} className={inputCls} /></td>
                           <td className="py-3 px-2">
-                            {creditRec ? (<div><p className="font-bold text-amber-300 flex items-center gap-1"><User size={11} /> {creditRec.customer_name}</p><p className="text-[10px] text-slate-400">{creditRec.contact_number}</p></div>) : (<span className="text-slate-600">-</span>)}
+                            <div className="space-y-1.5 min-w-[160px]">
+                              <input name="customer_name" value={rowEditData.customer_name} onChange={handleRowInputChange} className={inputCls} placeholder="Customer Name" />
+                              <input name="contact_number" value={rowEditData.contact_number} onChange={handleRowInputChange} className={inputCls} placeholder="Contact - 077..." />
+                              <input name="vehicle_number" value={rowEditData.vehicle_number} onChange={handleRowInputChange} className={inputCls} placeholder="Vehicle - EP..." />
+                              <input type="date" name="promise_date" value={rowEditData.promise_date} onChange={handleRowInputChange} className={inputCls} title="Promise Date" />
+                              <p className="text-[9px] text-slate-500">Promise Date</p>
+                            </div>
                           </td>
                           <td className="py-3 px-2 text-center">
                             <div className="flex flex-col gap-1.5">
@@ -480,7 +553,6 @@ function SalesIncomesContent() {
                       );
                     }
 
-                    // ✅ NORMAL ROW
                     return (
                       <tr key={item.id} className="hover:bg-slate-900/70 transition-colors">
                         <td className="py-3 px-4 font-bold text-slate-200">{billNo}</td>
@@ -506,7 +578,6 @@ function SalesIncomesContent() {
                             <Link href={`/dashboard/branches/${branchId}/add-expenses/sales_incomes/${item.id}`} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-900 border border-slate-700 text-slate-300 rounded-lg text-[10px] font-black uppercase hover:bg-white hover:text-black transition-all">
                               <Eye size={12} /> View
                             </Link>
-                            {/* ✅ Edit click kalama e row eka thulama edit wenawa, uda form ekata yanne na */}
                             <button onClick={() => handleEditRow(item)} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-600/20 border border-blue-500/40 text-blue-300 rounded-lg text-[10px] font-black uppercase hover:bg-blue-600 hover:text-white transition-all">
                               <Pencil size={12} /> Edit
                             </button>
