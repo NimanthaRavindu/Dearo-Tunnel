@@ -1,6 +1,6 @@
 "use client";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { AlertCircle, ArrowLeft, Droplets, Fuel, Plus, RefreshCw, Trash2, Wallet, PackagePlus, Save, CreditCard, Filter, X, Calendar } from "lucide-react";
+import { AlertCircle, ArrowLeft, Droplets, Fuel, Plus, RefreshCw, Trash2, Wallet, PackagePlus, Save, CreditCard, Filter, X, Calendar, AlertTriangle, CheckCircle2, Pencil, Loader2 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 
 type DieselExpense = { id: number; branch_id: string; date: string; machine: string; diesel: number | string; amount: number | string; payable: number | string; paid: number | string; };
@@ -9,6 +9,15 @@ const machines = ["Komatsu","CAT","JCB","Excavator","Loader","Backhoe Loader","W
 const inputClass = "h-12 w-full rounded-xl border border-slate-600/80 bg-slate-800/80 px-4 text-sm text-white outline-none transition placeholder:text-slate-500 hover:border-slate-500 focus:border-cyan-400 focus:ring-4 focus:ring-cyan-500/10";
 const numberValue = (v: any) => Number(v || 0);
 const formatNumber = (v: any) => Number(v || 0).toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+type RowEditData = {
+  date: string;
+  machine: string;
+  diesel: string;
+  payable: string;
+  paid: string;
+  balance: string;
+};
 
 export default function DieselExpensesPage() {
   const params = useParams(); const router = useRouter();
@@ -20,10 +29,22 @@ export default function DieselExpensesPage() {
   const [isInitialSet, setIsInitialSet] = useState(false);
   const [selectedMachine, setSelectedMachine] = useState(""); const [otherMachine, setOtherMachine] = useState("");
   const [date, setDate] = useState(""); const [diesel, setDiesel] = useState(""); const [payable, setPayable] = useState(""); const [paid, setPaid] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+  const [rowError, setRowError] = useState("");
   
   // FILTER - SINGLE DATE ONLY
   const [filterDate, setFilterDate] = useState(""); 
   const [filterMachine, setFilterMachine] = useState("");
+
+  const [editingRowId, setEditingRowId] = useState<number | null>(null);
+  const [rowEditData, setRowEditData] = useState<RowEditData>({
+    date: "", machine: "", diesel: "", payable: "", paid: "", balance: "",
+  });
+  const [isRowSaving, setIsRowSaving] = useState(false);
+
+  // ✅ DELETE - Modal
+  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const loadExpenses = async () => {
     if (!branchId) return;
@@ -54,7 +75,6 @@ export default function DieselExpensesPage() {
     } catch (e) { alert((e as Error).message); } finally { setSavingInitial(false); }
   };
 
-  // FILTER LOGIC - EKA DATE EKIN WITHARAK
   const filteredExpenses = useMemo(() => {
     return expenses.filter(item => {
       const d = item.date?.slice(0, 10); // YYYY-MM-DD
@@ -103,7 +123,109 @@ export default function DieselExpensesPage() {
       resetForm(); await loadExpenses();
     } catch (err) { alert((err as Error).message); } finally { setSaving(false); }
   };
-  const handleDelete = async (id: number) => { if (!confirm("Delete?")) return; const res = await fetch(`/api/expences/diesel?id=${id}`, { method: "DELETE" }); if (res.ok) await loadExpenses(); };
+
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    try {
+      setIsDeleting(true); setRowError("");
+      const res = await fetch(`/api/expences/diesel?id=${deleteId}&branch_id=${encodeURIComponent(branchId)}&branchId=${encodeURIComponent(branchId)}`, { method: "DELETE", cache: "no-store" });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok || result.success === false) throw new Error(result.error || result.details || "Failed to delete record.");
+      if (editingRowId === deleteId) handleCancelRowEdit();
+      setDeleteId(null);
+      setSuccessMessage("Diesel expense record deleted successfully.");
+      window.setTimeout(() => setSuccessMessage(""), 3000);
+      await loadExpenses();
+    } catch (err: any) {
+      setRowError(err.message || "Failed to delete record.");
+      setDeleteId(null);
+    } finally { setIsDeleting(false); }
+  };
+
+  const emptyRowEdit = (): RowEditData => ({
+    date: "", machine: "", diesel: "", payable: "", paid: "", balance: "",
+  });
+
+  const handleEditRow = (item: DieselExpense) => {
+    setEditingRowId(item.id);
+    setRowEditData({
+      date: String(item.date || "").slice(0, 10) || new Date().toISOString().split("T")[0],
+      machine: item.machine || "",
+      diesel: String(item.diesel ?? ""),
+      payable: String(item.payable ?? item.amount ?? ""),
+      paid: String(item.paid ?? ""),
+      balance: String(Math.max(0, numberValue(item.payable ?? item.amount) - numberValue(item.paid))),
+    });
+    setRowError(""); setSuccessMessage("");
+  };
+
+  const handleCancelRowEdit = () => {
+    setEditingRowId(null);
+    setRowEditData(emptyRowEdit());
+  };
+
+  const handleRowInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setRowEditData((prev) => {
+      const next = { ...prev, [name]: value };
+      // ✅ Payable / Paid wenas kalama Balance auto suggest karanawa - eth athin wenas karannath puluwan
+      if (name === "payable" || name === "paid") {
+        const payableVal = Number(name === "payable" ? value : prev.payable) || 0;
+        const paidVal = Number(name === "paid" ? value : prev.paid) || 0;
+        next.balance = String(Math.max(0, payableVal - paidVal));
+      }
+      return next;
+    });
+    setRowError("");
+  };
+
+  const handleSaveRow = async () => {
+    if (!editingRowId) return;
+    const machine = rowEditData.machine.trim();
+    const dateVal = rowEditData.date;
+    const dieselVal = Number(rowEditData.diesel);
+    const payableVal = Number(rowEditData.payable);
+    const paidVal = Number(rowEditData.paid);
+    const balanceVal = Number(rowEditData.balance);
+
+    if (!machine) { setRowError("Machine eka danna ona."); return; }
+    if (!dateVal) { setRowError("Date eka danna ona."); return; }
+    if (dieselVal < 0 || payableVal < 0 || paidVal < 0) { setRowError("Diesel / Payable / Paid 0 ta wada adu karanna ba."); return; }
+    if (paidVal > payableVal) { setRowError("Paid, Payable ta wada wadi karanna ba."); return; }
+
+    try {
+      setIsRowSaving(true); setRowError("");
+      const res = await fetch("/api/expences/diesel", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingRowId,
+          branchId: branchId,
+          branch_id: branchId,
+          date: dateVal,
+          machine,
+          diesel: dieselVal,
+          amount: payableVal,
+          payable: payableVal,
+          paid: paidVal,
+          balance: balanceVal,
+        }),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok || result.success === false) throw new Error(result.error || result.details || "Failed to update record.");
+      setEditingRowId(null);
+      setRowEditData(emptyRowEdit());
+      setSuccessMessage(`Updated: ${machine} | ${formatNumber(dieselVal)} L | Payable Rs. ${formatNumber(payableVal)} | Paid Rs. ${formatNumber(paidVal)} | Balance Rs. ${formatNumber(balanceVal)}`);
+      window.setTimeout(() => setSuccessMessage(""), 4000);
+      await loadExpenses();
+    } catch (err: any) {
+      console.error("Save diesel error:", err);
+      setRowError(err.message || "Failed to update record.");
+    } finally { setIsRowSaving(false); }
+  };
+
+  const deleteItem = expenses.find((x) => x.id === deleteId);
+  const rowInputCls = "w-full h-10 px-2 py-2 bg-slate-950 border border-amber-500/50 rounded-lg text-white text-xs focus:border-amber-400 focus:outline-none";
 
   return (
     <main className="min-h-screen bg-slate-950 p-4 text-white md:p-6">
@@ -147,15 +269,16 @@ export default function DieselExpensesPage() {
           </form>
         </section>
 
-        {/* RECORDS WITH SINGLE DATE FILTER */}
         <section className="rounded-3xl border border-slate-700/80 bg-slate-900 overflow-hidden">
           <div className="p-5 border-b border-slate-700/80 space-y-4">
             <div className="flex justify-between items-center">
               <h2 className="font-bold">Records</h2>
               <span className="text-sm bg-slate-800 px-3 py-1 rounded-xl">{filteredExpenses.length} / {expenses.length} Records</span>
             </div>
+
+            {successMessage && (<div className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400"><CheckCircle2 size={16} /> {successMessage}</div>)}
+            {rowError && (<div className="flex items-center justify-between rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400"><span>{rowError}</span><button type="button" onClick={() => setRowError("")} className="font-bold underline">Close</button></div>)}
             
-            {/* FILTER BAR - EKA DATE EKAI MACHINE EKAI WITHARAK */}
             <div className="flex flex-wrap gap-3 p-3 rounded-2xl bg-slate-800/50 border border-slate-700/50">
               <div className="flex items-center gap-2">
                 <Filter size={14} className="text-slate-400"/>
@@ -180,9 +303,61 @@ export default function DieselExpensesPage() {
             </div>
           </div>
 
-          <div className="overflow-x-auto"><table className="w-full min-w-[900px]"><thead className="bg-slate-800/80"><tr className="text-xs text-slate-400 uppercase"><th className="px-5 py-4 text-left">Date</th><th className="px-5 py-4 text-left">Machine</th><th className="px-5 py-4 text-right">Diesel</th><th className="px-5 py-4 text-right">Payable</th><th className="px-5 py-4 text-right">Paid</th><th className="px-5 py-4 text-right">Balance</th><th className="px-5 py-4 text-center">Action</th></tr></thead><tbody>{filteredExpenses.length===0 ? <tr><td colSpan={7} className="px-5 py-10 text-center text-sm text-slate-500">No records for {filterDate} {filterMachine} - filter clear karala balanna</td></tr> : filteredExpenses.map(item => { const p = numberValue(item.payable); const pd = numberValue(item.paid); return <tr key={item.id} className="border-b border-slate-800 hover:bg-slate-800/40"><td className="px-5 py-4 text-sm">{item.date?.slice(0, 10)}</td><td className="px-5 py-4 font-semibold">{item.machine}</td><td className="px-5 py-4 text-right">{formatNumber(item.diesel)}</td><td className="px-5 py-4 text-right font-bold text-blue-400">Rs. {formatNumber(p)}</td><td className="px-5 py-4 text-right font-bold text-green-400">Rs. {formatNumber(pd)}</td><td className="px-5 py-4 text-right font-bold text-red-400">Rs. {formatNumber(Math.max(0, p - pd))}</td><td className="px-5 py-4 text-center"><button onClick={() => handleDelete(item.id)} className="h-9 w-9 inline-flex items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20"><Trash2 size={16}/></button></td></tr> })}</tbody></table></div>
+          <div className="overflow-x-auto"><table className="w-full min-w-[900px]"><thead className="bg-slate-800/80"><tr className="text-xs text-slate-400 uppercase"><th className="px-5 py-4 text-left">Date</th><th className="px-5 py-4 text-left">Machine</th><th className="px-5 py-4 text-right">Diesel</th><th className="px-5 py-4 text-right">Payable</th><th className="px-5 py-4 text-right">Paid</th><th className="px-5 py-4 text-right">Balance</th><th className="px-5 py-4 text-center">Action</th></tr></thead><tbody>{filteredExpenses.length===0 ? <tr><td colSpan={7} className="px-5 py-10 text-center text-sm text-slate-500">No records for {filterDate} {filterMachine} - filter clear karala balanna</td></tr> : filteredExpenses.map(item => {
+            const p = numberValue(item.payable); const pd = numberValue(item.paid);
+            const isEditingRow = editingRowId === item.id;
+
+            if (isEditingRow) {
+              return (
+                <tr key={item.id} className="border-b border-amber-500/40 bg-amber-500/10 align-top">
+                  <td className="px-2 py-2"><input type="date" name="date" value={rowEditData.date} onChange={handleRowInputChange} className={rowInputCls} /></td>
+                  <td className="px-2 py-2">
+                    <select name="machine" value={rowEditData.machine} onChange={handleRowInputChange} className={rowInputCls}>
+                      <option value="">Select Machine</option>
+                      {machines.map((m) => (<option key={m} value={m}>{m}</option>))}
+                      {rowEditData.machine && !machines.includes(rowEditData.machine) && (<option value={rowEditData.machine}>{rowEditData.machine}</option>)}
+                    </select>
+                  </td>
+                  <td className="px-2 py-2"><input type="number" step="0.01" name="diesel" value={rowEditData.diesel} onChange={handleRowInputChange} className={rowInputCls} /></td>
+                  <td className="px-2 py-2"><input type="number" step="0.01" name="payable" value={rowEditData.payable} onChange={handleRowInputChange} className={rowInputCls} /></td>
+                  <td className="px-2 py-2"><input type="number" step="0.01" name="paid" value={rowEditData.paid} onChange={handleRowInputChange} className={rowInputCls} /></td>
+                  <td className="px-2 py-2"><input type="number" step="0.01" name="balance" value={rowEditData.balance} onChange={handleRowInputChange} className={rowInputCls} /></td>
+                  <td className="px-2 py-2 text-center">
+                    <div className="flex flex-col gap-1.5 min-w-[110px]">
+                      <button type="button" onClick={handleSaveRow} disabled={isRowSaving} className="inline-flex items-center justify-center gap-1 rounded-lg bg-emerald-600 px-2 py-2 text-[11px] font-bold text-white hover:bg-emerald-500 disabled:opacity-50">{isRowSaving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Save</button>
+                      <button type="button" onClick={handleCancelRowEdit} disabled={isRowSaving} className="inline-flex items-center justify-center gap-1 rounded-lg bg-slate-700 px-2 py-2 text-[11px] font-bold text-white hover:bg-slate-600"><X size={12} /> Cancel</button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            }
+
+            return <tr key={item.id} className="border-b border-slate-800 hover:bg-slate-800/40"><td className="px-5 py-4 text-sm">{item.date?.slice(0, 10)}</td><td className="px-5 py-4 font-semibold">{item.machine}</td><td className="px-5 py-4 text-right">{formatNumber(item.diesel)}</td><td className="px-5 py-4 text-right font-bold text-blue-400">Rs. {formatNumber(p)}</td><td className="px-5 py-4 text-right font-bold text-green-400">Rs. {formatNumber(pd)}</td><td className="px-5 py-4 text-right font-bold text-red-400">Rs. {formatNumber(Math.max(0, p - pd))}</td><td className="px-5 py-4 text-center"><div className="flex items-center justify-center gap-1.5"><button onClick={() => handleEditRow(item)} className="h-9 w-9 inline-flex items-center justify-center rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20" title="Edit"><Pencil size={16}/></button><button onClick={() => setDeleteId(item.id)} className="h-9 w-9 inline-flex items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20" title="Delete"><Trash2 size={16}/></button></div></td></tr>
+          })}</tbody></table></div>
         </section>
       </div>
+
+      {/* ✅ DELETE Confirm Modal */}
+      {deleteId !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm" onClick={() => !isDeleting && setDeleteId(null)}>
+          <div className="w-full max-w-sm rounded-2xl border border-red-500/40 bg-[#0d1527] p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3">
+              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-red-500/15 text-red-400"><AlertTriangle size={20} /></span>
+              <div><p className="font-black text-white uppercase">Delete Record?</p><p className="text-[11px] text-slate-400">Me action eka undo karanna ba.</p></div>
+            </div>
+            {deleteItem && (
+              <div className="rounded-xl bg-slate-950 border border-slate-800 p-3 text-[11px] space-y-1 text-slate-300">
+                <p>Machine: <b className="text-white">{deleteItem.machine || "-"}</b> • Date: <b className="text-white">{String(deleteItem.date || "").slice(0, 10)}</b></p>
+                <p>Diesel: <b className="text-cyan-400">{formatNumber(deleteItem.diesel)} L</b> • Payable: <b className="text-amber-400">Rs. {formatNumber(deleteItem.payable)}</b> • Paid: <b className="text-emerald-400">Rs. {formatNumber(deleteItem.paid)}</b></p>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <button onClick={() => setDeleteId(null)} disabled={isDeleting} className="flex-1 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold text-white">Cancel</button>
+              <button onClick={handleDelete} disabled={isDeleting} className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-500 rounded-xl font-bold text-white flex items-center justify-center gap-2 disabled:opacity-50">{isDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />} Yes, Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
