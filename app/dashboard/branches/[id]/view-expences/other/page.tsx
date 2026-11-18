@@ -280,7 +280,6 @@ export default function ViewOtherExpensesPage({
     const query = search.trim().toLowerCase();
 
     return data.filter((item) => {
-      // FIX: expense_type saha reason dekama check karanawa
       const type = String(item.expense_type || "").toLowerCase();
       const reason = String(item.reason || "").toLowerCase();
       const filterLower = categoryFilter.toLowerCase();
@@ -384,7 +383,7 @@ export default function ViewOtherExpensesPage({
               <option value="Construction Repair">Construction Repair</option>
               <option value="Loading Expenses">Loading Expenses</option>
               <option value="Breker Expenses">Breker Expenses</option>
-              <option value="Other Expenses">Other Payments</option>
+              <option value="Other Payments">Other Payments</option>
             </select>
 
             <div className="relative">
