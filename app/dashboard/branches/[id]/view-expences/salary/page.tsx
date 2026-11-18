@@ -28,6 +28,7 @@ type SalarySummary = {
 
 // ✅ Row Edit - HEMA DETAILS ekakma
 type RowEditData = {
+  employee_id:string;
   employee_name: string;
   reason: string;
   total_payable: string;
@@ -71,7 +72,7 @@ export default function ViewSalaryExpensesPage({
   // ✅ INLINE EDIT - Row eka thulama
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [rowEditData, setRowEditData] = useState<RowEditData>({
-    employee_name: "", reason: "", total_payable: "", total_paid: "", balance: "", expense_date: "",
+      employee_id:"",employee_name: "", reason: "", total_payable: "", total_paid: "", balance: "", expense_date: "",
   });
   const [isRowSaving, setIsRowSaving] = useState(false);
 
@@ -101,7 +102,7 @@ export default function ViewSalaryExpensesPage({
 
   useEffect(() => { fetchSalaryLogs(); }, [branchId]);
 
-  // ✅ DELETE - Confirm eken passe DB eken delete wenawa
+
   const handleDelete = async () => {
     if (!deleteId) return;
     try {
@@ -128,12 +129,13 @@ export default function ViewSalaryExpensesPage({
 
   // ✅ INLINE EDIT - Row eka thulama edit karanna - Hema details ekakma load karanawa
   const emptyRowEdit = (): RowEditData => ({
-    employee_name: "", reason: "", total_payable: "", total_paid: "", balance: "", expense_date: "",
+    employee_id:"",employee_name: "", reason: "", total_payable: "", total_paid: "", balance: "", expense_date: "",
   });
 
   const handleEditRow = (item: SalaryEntry) => {
     setEditingRowId(String(item.id));
     setRowEditData({
+      employee_id:String(item.employee_id ?? ""),
       employee_name: item.employee_name || "",
       reason: item.reason || "Monthly salary payout",
       total_payable: String(item.total_payable ?? ""),
@@ -175,6 +177,7 @@ export default function ViewSalaryExpensesPage({
     const expense_date = rowEditData.expense_date;
 
     if (!employee_name) { setError("Employee Name eka danna ona."); return; }
+    if (!rowEditData.employee_id){setError("Employee ID missing.");return;}
     if (!reason) { setError("Classification Reason eka danna ona."); return; }
     if (!expense_date) { setError("Date eka danna ona."); return; }
     if (total_payable < 0 || total_paid < 0) { setError("Payable / Paid 0 ta wada adu karanna ba."); return; }
@@ -188,6 +191,8 @@ export default function ViewSalaryExpensesPage({
         body: JSON.stringify({
           id: editingRowId,
           branchId: branchId,
+          employee_id:rowEditData.employee_id,
+          employeeId:rowEditData.employee_id,
           branch_id: branchId,
           employee_name,
           reason,
