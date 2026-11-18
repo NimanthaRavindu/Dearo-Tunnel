@@ -2,7 +2,7 @@
 
 import React, { use, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, ArrowLeft, Calendar, FileText, RefreshCw, Search, ShieldCheck, User, X, Trash2, AlertTriangle, Loader2, CheckCircle2 } from "lucide-react";
+import { AlertCircle, ArrowLeft, Calendar, FileText, RefreshCw, Search, ShieldCheck, User, X, Trash2, AlertTriangle, Loader2, CheckCircle2, Pencil, Save } from "lucide-react";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -24,6 +24,16 @@ type SalarySummary = {
   payable: number;
   paid: number;
   balance: number;
+};
+
+// ✅ Row Edit - HEMA DETAILS ekakma
+type RowEditData = {
+  employee_name: string;
+  reason: string;
+  total_payable: string;
+  total_paid: string;
+  balance: string;
+  expense_date: string;
 };
 
 const EMPTY_SALARY_SUMMARY: SalarySummary = {
@@ -57,6 +67,13 @@ export default function ViewSalaryExpensesPage({
   const [showSummary, setShowSummary] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+
+  // ✅ INLINE EDIT - Row eka thulama
+  const [editingRowId, setEditingRowId] = useState<string | null>(null);
+  const [rowEditData, setRowEditData] = useState<RowEditData>({
+    employee_name: "", reason: "", total_payable: "", total_paid: "", balance: "", expense_date: "",
+  });
+  const [isRowSaving, setIsRowSaving] = useState(false);
 
   // ✅ DELETE states
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -96,6 +113,7 @@ export default function ViewSalaryExpensesPage({
       );
       const result = await res.json().catch(() => ({}));
       if (!res.ok || result.success === false) throw new Error(result.error || "Failed to delete salary record.");
+      if (editingRowId === deleteId) handleCancelRowEdit();
       setDeleteId(null);
       setSuccessMessage("Salary record deleted successfully.");
       window.setTimeout(() => setSuccessMessage(""), 3000);
@@ -105,6 +123,92 @@ export default function ViewSalaryExpensesPage({
       setDeleteId(null);
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  // ✅ INLINE EDIT - Row eka thulama edit karanna - Hema details ekakma load karanawa
+  const emptyRowEdit = (): RowEditData => ({
+    employee_name: "", reason: "", total_payable: "", total_paid: "", balance: "", expense_date: "",
+  });
+
+  const handleEditRow = (item: SalaryEntry) => {
+    setEditingRowId(String(item.id));
+    setRowEditData({
+      employee_name: item.employee_name || "",
+      reason: item.reason || "Monthly salary payout",
+      total_payable: String(item.total_payable ?? ""),
+      total_paid: String(item.total_paid ?? ""),
+      balance: String(item.balance ?? Math.max(0, Number(item.total_payable || 0) - Number(item.total_paid || 0))),
+      expense_date: entryDate(item) || new Date().toISOString().split("T")[0],
+    });
+    setError(""); setSuccessMessage("");
+  };
+
+  const handleCancelRowEdit = () => {
+    setEditingRowId(null);
+    setRowEditData(emptyRowEdit());
+  };
+
+  const handleRowInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setRowEditData((prev) => {
+      const next = { ...prev, [name]: value };
+      // ✅ Payable / Paid wenas kalama Balance auto suggest karanawa - eth athin wenas karannath puluwan
+      if (name === "total_payable" || name === "total_paid") {
+        const payable = Number(name === "total_payable" ? value : prev.total_payable) || 0;
+        const paid = Number(name === "total_paid" ? value : prev.total_paid) || 0;
+        next.balance = String(Math.max(0, payable - paid));
+      }
+      return next;
+    });
+    setError("");
+  };
+
+  // ✅ Row eke thulama Save
+  const handleSaveRow = async () => {
+    if (!editingRowId) return;
+    const employee_name = rowEditData.employee_name.trim();
+    const reason = rowEditData.reason.trim();
+    const total_payable = Number(rowEditData.total_payable);
+    const total_paid = Number(rowEditData.total_paid);
+    const balance = Number(rowEditData.balance);
+    const expense_date = rowEditData.expense_date;
+
+    if (!employee_name) { setError("Employee Name eka danna ona."); return; }
+    if (!reason) { setError("Classification Reason eka danna ona."); return; }
+    if (!expense_date) { setError("Date eka danna ona."); return; }
+    if (total_payable < 0 || total_paid < 0) { setError("Payable / Paid 0 ta wada adu karanna ba."); return; }
+    if (total_paid > total_payable) { setError("Total Paid, Total Payable ta wada wadi karanna ba."); return; }
+
+    try {
+      setIsRowSaving(true); setError("");
+      const res = await fetch("/api/expences/salary", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingRowId,
+          branchId: branchId,
+          branch_id: branchId,
+          employee_name,
+          reason,
+          total_payable,
+          total_paid,
+          balance,
+          expense_date,
+          date: expense_date,
+        }),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok || result.success === false) throw new Error(result.error || "Failed to update salary record.");
+      setEditingRowId(null);
+      setRowEditData(emptyRowEdit());
+      setSuccessMessage(`Updated: ${employee_name} | Payable ${money(total_payable)} | Paid ${money(total_paid)} | Balance ${money(balance)}`);
+      window.setTimeout(() => setSuccessMessage(""), 4000);
+      await fetchSalaryLogs();
+    } catch (err: any) {
+      setError(err.message || "Failed to update salary record.");
+    } finally {
+      setIsRowSaving(false);
     }
   };
 
@@ -146,6 +250,7 @@ export default function ViewSalaryExpensesPage({
   };
 
   const deleteItem = data.find((x) => String(x.id) === String(deleteId));
+  const inputCls = "w-full px-2 py-2 bg-slate-950 border border-amber-500/50 rounded-lg text-slate-100 text-xs focus:border-amber-400 focus:outline-none";
 
   return (
     <main className="min-h-screen bg-[#070a12] p-4 text-slate-300 antialiased md:p-6 lg:p-8">
@@ -264,6 +369,45 @@ export default function ViewSalaryExpensesPage({
                   filteredData.map((item, index) => {
                     const balance = Number(item.balance || 0);
                     const settled = balance <= 0;
+                    const isEditingRow = String(editingRowId) === String(item.id);
+
+                    // ✅ EDIT MODE - HEMA DETAILS EKAKMA ROW EKE THULAMA INPUT
+                    if (isEditingRow) {
+                      return (
+                        <tr key={item.id ?? index} className="bg-amber-500/10 border-2 border-amber-500/40 align-top">
+                          <td className="p-2">
+                            <input name="employee_name" value={rowEditData.employee_name} onChange={handleRowInputChange} className={inputCls} placeholder="Employee Name" />
+                          </td>
+                          <td className="p-2">
+                            <input name="reason" value={rowEditData.reason} onChange={handleRowInputChange} className={inputCls} placeholder="Monthly structural salary payout" />
+                          </td>
+                          <td className="p-2">
+                            <input type="number" step="0.01" name="total_payable" value={rowEditData.total_payable} onChange={handleRowInputChange} className={inputCls} />
+                          </td>
+                          <td className="p-2">
+                            <input type="number" step="0.01" name="total_paid" value={rowEditData.total_paid} onChange={handleRowInputChange} className={inputCls} />
+                          </td>
+                          <td className="p-2">
+                            <input type="number" step="0.01" name="balance" value={rowEditData.balance} onChange={handleRowInputChange} className={inputCls} />
+                          </td>
+                          <td className="p-2">
+                            <input type="date" name="expense_date" value={rowEditData.expense_date} onChange={handleRowInputChange} className={inputCls} />
+                          </td>
+                          <td className="p-2 text-center">
+                            <div className="flex flex-col gap-1.5 min-w-[110px]">
+                              <button type="button" onClick={handleSaveRow} disabled={isRowSaving} className="inline-flex items-center justify-center gap-1 rounded bg-emerald-600 px-2 py-2 text-[10px] font-bold text-white hover:bg-emerald-500 disabled:opacity-50">
+                                {isRowSaving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Save
+                              </button>
+                              <button type="button" onClick={handleCancelRowEdit} disabled={isRowSaving} className="inline-flex items-center justify-center gap-1 rounded bg-slate-700 px-2 py-2 text-[10px] font-bold text-white hover:bg-slate-600">
+                                <X size={12} /> Cancel
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    // ✅ NORMAL ROW - Oyage kalin code eka ehema ma
                     return (
                       <tr key={item.id ?? index} className="transition hover:bg-slate-900/30">
                         <td className="p-4">
@@ -294,6 +438,14 @@ export default function ViewSalaryExpensesPage({
                               className="rounded border border-purple-500/20 bg-purple-500/10 px-2 py-1 text-[10px] font-bold text-purple-400 transition hover:bg-purple-600 hover:text-white"
                             >
                               <FileText size={11} className="mr-1 inline" />View Summary
+                            </button>
+                            {/* ✅ Edit - Row eka thulama edit wenawa */}
+                            <button
+                              type="button"
+                              onClick={() => handleEditRow(item)}
+                              className="inline-flex items-center gap-1 rounded border border-blue-500/30 bg-blue-500/10 px-2 py-1 text-[10px] font-bold text-blue-400 transition hover:bg-blue-600 hover:text-white"
+                            >
+                              <Pencil size={11} />Edit
                             </button>
                             <button
                               type="button"
