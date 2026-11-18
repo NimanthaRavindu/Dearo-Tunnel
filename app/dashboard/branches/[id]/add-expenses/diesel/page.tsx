@@ -10,6 +10,8 @@ const inputClass = "h-12 w-full rounded-xl border border-slate-600/80 bg-slate-8
 const numberValue = (v: any) => Number(v || 0);
 const formatNumber = (v: any) => Number(v || 0).toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+const DIESEL_PRICE = 397;
+
 export default function DieselExpensesPage() {
   const params = useParams(); const router = useRouter();
   const branchId = Array.isArray(params?.id)? params.id[0] : String(params?.id || "");
@@ -54,7 +56,6 @@ export default function DieselExpensesPage() {
     } catch (e) { alert((e as Error).message); } finally { setSavingInitial(false); }
   };
 
-  // FILTER LOGIC - EKA DATE EKIN WITHARAK
   const filteredExpenses = useMemo(() => {
     return expenses.filter(item => {
       const d = item.date?.slice(0, 10); // YYYY-MM-DD
@@ -78,16 +79,14 @@ export default function DieselExpensesPage() {
   const formPaid = numberValue(paid);
   const formBalance = Math.max(0, formPayable - formPaid);
 
-  const displayTotalDiesel = initialDieselStock;
-  const baseDieselRemaining = Math.max(0, initialDieselStock - activeDieselUsed);
-  const baseAmountRemaining = Math.max(0, initialTotalAmount - activePayable);
-  const liveDieselRemaining = Math.max(0, initialDieselStock - activeDieselUsed - formDiesel);
-  const liveAmountRemaining = Math.max(0, initialTotalAmount - activePayable - formPayable);
 
-  const displayDieselUsed = formDiesel > 0? liveDieselRemaining : baseDieselRemaining;
-  const displayTotalAmount = formPayable > 0? liveAmountRemaining : baseAmountRemaining;
-  const displayRemainingDiesel = formDiesel > 0? liveDieselRemaining : baseDieselRemaining;
-  const displayRemainingBalance = displayTotalAmount;
+  const displayTotalDiesel = initialDieselStock;
+  const displayDieselUsed = activeDieselUsed + formDiesel;
+  const displayTotalAmount = activePayable + formPayable;
+  // 4. Remaining Diesel = Total Diesel - Diesel Used
+  const displayRemainingDiesel = Math.max(0, displayTotalDiesel - displayDieselUsed);
+  // 5. Remaining Balance = Remaining Diesel x 397
+  const displayRemainingBalance = displayRemainingDiesel * DIESEL_PRICE;
 
   const clearFilters = () => { setFilterDate(""); setFilterMachine(""); };
 
@@ -123,10 +122,10 @@ export default function DieselExpensesPage() {
           {isInitialSet && <p className="mt-3 text-xs text-green-400">✓ Initial: {initialDieselStock} L / Rs. {initialTotalAmount.toLocaleString()} | Used: {totalUsedDiesel} L</p>}
         </section>
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <SummaryCard title="Diesel Used" subtitle={isFiltered ? `Filtered: ${fDiesel}L` : "Diesel Qty type karaddi adu"} value={`${formatNumber(displayDieselUsed)} L`} icon={<Droplets size={22}/>} color="cyan"/>
-          <SummaryCard title="Total Amount" subtitle={isFiltered ? `Filtered payable` : "Payable type karaddi adu"} value={`Rs. ${formatNumber(displayTotalAmount)}`} icon={<Wallet size={22}/>} color="blue"/>
-          <SummaryCard title="Remaining Diesel" subtitle="Initial - Used - Form (minus na)" value={`${formatNumber(displayRemainingDiesel)} L`} icon={<Droplets size={22}/>} color="orange"/>
-          <SummaryCard title="Remaining Balance" subtitle="= Total Amount (samana)" value={`Rs. ${formatNumber(displayRemainingBalance)}`} icon={<CreditCard size={22}/>} color="green"/>
+          <SummaryCard title="Diesel Used" subtitle={isFiltered ? `Filtered: ${fDiesel}L` : "Table eke diesel wala ekathuwa"} value={`${formatNumber(displayDieselUsed)} L`} icon={<Droplets size={22}/>} color="cyan"/>
+          <SummaryCard title="Total Amount" subtitle={isFiltered ? `Filtered payable` : "Table eke viyadam wela thiyena amount"} value={`Rs. ${formatNumber(displayTotalAmount)}`} icon={<Wallet size={22}/>} color="blue"/>
+          <SummaryCard title="Remaining Diesel" subtitle="Total Diesel - Diesel Used" value={`${formatNumber(displayRemainingDiesel)} L`} icon={<Droplets size={22}/>} color="orange"/>
+          <SummaryCard title="Remaining Balance" subtitle={`Remaining Diesel x Rs. ${DIESEL_PRICE}`} value={`Rs. ${formatNumber(displayRemainingBalance)}`} icon={<CreditCard size={22}/>} color="green"/>
           <SummaryCard title="Total Diesel" subtitle="Initial stock" value={`${formatNumber(displayTotalDiesel)} L`} icon={<AlertCircle size={22}/>} color="red"/>
         </section>
         <section className="rounded-3xl border border-slate-700/80 bg-slate-900 overflow-hidden">
@@ -155,7 +154,7 @@ export default function DieselExpensesPage() {
               <span className="text-sm bg-slate-800 px-3 py-1 rounded-xl">{filteredExpenses.length} / {expenses.length} Records</span>
             </div>
             
-            {/* FILTER BAR - EKA DATE EKAI MACHINE EKAI WITHARAK */}
+            
             <div className="flex flex-wrap gap-3 p-3 rounded-2xl bg-slate-800/50 border border-slate-700/50">
               <div className="flex items-center gap-2">
                 <Filter size={14} className="text-slate-400"/>
