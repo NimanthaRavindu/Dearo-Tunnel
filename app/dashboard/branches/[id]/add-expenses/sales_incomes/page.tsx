@@ -28,7 +28,7 @@ interface SalesIncomeFormData {
   unit_price: string;
   quantity: string;
   discount: string;
-  paid: string;
+  // ✅ Paid ain - Amount - Discount walin auto hadenawa
 }
 
 interface ProductPrice {
@@ -97,7 +97,6 @@ function SalesIncomesContent() {
   const [creditSearch, setCreditSearch] = useState("");
   const [showCredits, setShowCredits] = useState(true);
 
-  // ✅ EDIT + DELETE states
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -109,7 +108,6 @@ function SalesIncomesContent() {
     unit_price: "",
     quantity: "",
     discount: "",
-    paid: "",
   });
 
   const calculatedAmount = useMemo(() => {
@@ -120,8 +118,10 @@ function SalesIncomesContent() {
 
   const calculatedDiscount = useMemo(() => Number(formData.discount || 0), [formData.discount]);
   const calculatedPayable = useMemo(() => Math.max(0, calculatedAmount - calculatedDiscount), [calculatedAmount, calculatedDiscount]);
-  const calculatedPaid = useMemo(() => Number(formData.paid || 0), [formData.paid]);
-  const calculatedCredit = useMemo(() => Math.max(0, calculatedPayable - calculatedPaid), [calculatedPayable, calculatedPaid]);
+  // ✅ FIX - Paid = Amount - Discount - Discount eka Amount eken adu wenawa, Paid auto
+  const calculatedPaid = useMemo(() => calculatedPayable, [calculatedPayable]);
+  // ✅ FIX - Form eke Credit na nisa Credit = 0
+  const calculatedCredit = useMemo(() => 0, []);
 
   const filteredIncomes = incomes.filter((item) => {
     const matchDate = filterDate ? item.date.slice(0, 10) === filterDate : true;
@@ -131,8 +131,8 @@ function SalesIncomesContent() {
 
   const totalAmount = filteredIncomes.reduce((total, item) => total + Number(item.amount || 0), 0);
   const totalDiscount = filteredIncomes.reduce((total, item) => total + Number(item.discount ?? 0), 0);
+  // ✅ Total Paid = SUM(Amount - Discount)
   const totalPaid = filteredIncomes.reduce((total, item) => total + Number(item.paid ?? 0), 0);
-  const totalCredit = filteredIncomes.reduce((total, item) => total + Number(item.credit ?? 0), 0);
 
   const fetchSalesIncomes = async () => {
     if (!branchId) return;
@@ -218,7 +218,6 @@ function SalesIncomesContent() {
     setErrorMessage("");
   };
 
-  // ✅ EDIT - Row eke data form ekata load karanawa
   const handleEdit = (item: SalesIncomeItem) => {
     setEditingId(String(item.id));
     setFormData({
@@ -228,7 +227,7 @@ function SalesIncomesContent() {
       unit_price: String(item.unit_price ?? ""),
       quantity: String(item.quantity ?? ""),
       discount: String(item.discount ?? ""),
-      paid: String(item.paid ?? ""),
+      // ✅ Edit ekedi Paid load karanne na - Amount - Discount walin auto hadenawa
     });
     setErrorMessage("");
     setSuccessMessage("");
@@ -237,10 +236,9 @@ function SalesIncomesContent() {
 
   const handleCancelEdit = () => {
     setEditingId(null);
-    setFormData({ bill_number: "", name: "", date: getToday(), unit_price: "", quantity: "", discount: "", paid: "" });
+    setFormData({ bill_number: "", name: "", date: getToday(), unit_price: "", quantity: "", discount: "" });
   };
 
-  // ✅ DELETE - Confirm popup eken passe
   const handleDelete = async () => {
     if (!deleteId) return;
     try {
@@ -248,7 +246,6 @@ function SalesIncomesContent() {
       const res = await fetch(`/api/expences/sales-incomes?id=${encodeURIComponent(deleteId)}`, { method: "DELETE" });
       const result = await res.json();
       if (!res.ok || !result.success) throw new Error(result.error || "Failed to delete");
-      // Edit karana eka delete karoth form eka clear karanawa
       if (editingId === deleteId) handleCancelEdit();
       setDeleteId(null);
       setSuccessMessage("Entry deleted successfully.");
@@ -286,7 +283,6 @@ function SalesIncomesContent() {
     router.push(`/dashboard/branches/${branchId}/add-expenses/sales_incomes/credit?${q.toString()}`);
   };
 
-  // ✅ SUBMIT - Editing nam PUT, nathnam POST
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const bill_number = formData.bill_number.trim();
@@ -294,9 +290,11 @@ function SalesIncomesContent() {
     const unit_price = Number(formData.unit_price);
     const quantity = Number(formData.quantity);
     const discount = calculatedDiscount;
+    // ✅ Paid = Amount - Discount
     const paid = calculatedPaid;
     const amount = calculatedAmount;
-    const credit = calculatedCredit;
+    // ✅ Form eke Credit na nisa 0
+    const credit = 0;
 
     if (!branchId || !name || !formData.date || !formData.unit_price || !formData.quantity) {
       setErrorMessage("Please complete Name, Date, Unit Price and Quantity.");
@@ -304,8 +302,6 @@ function SalesIncomesContent() {
     }
     if (discount < 0) { setErrorMessage("Discount cannot be less than 0."); return; }
     if (discount > amount) { setErrorMessage("Discount cannot be greater than Amount."); return; }
-    if (paid < 0) { setErrorMessage("Paid cannot be less than 0."); return; }
-    if (paid > calculatedPayable) { setErrorMessage("Paid cannot be greater than Payable (Amount - Discount)."); return; }
 
     try {
       setIsSubmitting(true);
@@ -323,9 +319,9 @@ function SalesIncomesContent() {
         }
         throw new Error(result.error || (isEdit ? "Failed to update sales income." : "Failed to save sales income."));
       }
-      setFormData({ bill_number: "", name: "", date: getToday(), unit_price: "", quantity: "", discount: "", paid: "" });
+      setFormData({ bill_number: "", name: "", date: getToday(), unit_price: "", quantity: "", discount: "" });
       setEditingId(null);
-      setSuccessMessage(isEdit ? `Updated: Amount LKR ${amount.toFixed(2)} | Discount LKR ${discount.toFixed(2)} | Paid LKR ${paid.toFixed(2)} | Credit LKR ${credit.toFixed(2)}` : `Saved: Amount LKR ${amount.toFixed(2)} | Discount LKR ${discount.toFixed(2)} | Payable LKR ${calculatedPayable.toFixed(2)} | Paid LKR ${paid.toFixed(2)} | Credit LKR ${credit.toFixed(2)}`);
+      setSuccessMessage(isEdit ? `Updated: Amount LKR ${amount.toFixed(2)} | Discount LKR ${discount.toFixed(2)} | Paid LKR ${paid.toFixed(2)}` : `Saved: Amount LKR ${amount.toFixed(2)} | Discount LKR ${discount.toFixed(2)} | Paid LKR ${paid.toFixed(2)}`);
       window.setTimeout(() => setSuccessMessage(""), 4000);
       await fetchSalesIncomes();
       await fetchCredits();
@@ -403,9 +399,8 @@ function SalesIncomesContent() {
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Hash size={12} />Quantity</label><input type="number" step="0.01" min="0.01" name="quantity" value={formData.quantity} onChange={handleInputChange} required placeholder="0" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><DollarSign size={12} />Amount (LKR) - Auto</label><div className="w-full px-3.5 py-2.5 bg-slate-900/80 border border-slate-800 rounded-xl text-emerald-400 font-black text-sm">LKR {calculatedAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><BadgePercent size={12} />Discount (LKR)</label><input type="number" step="0.01" min="0" name="discount" value={formData.discount} onChange={handleInputChange} placeholder="0.00" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
-            <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><DollarSign size={12} />Payable (LKR) - Auto</label><div className="w-full px-3.5 py-2.5 bg-slate-900/80 border border-slate-800 rounded-xl text-slate-200 font-black text-sm">LKR {calculatedPayable.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
-            <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><DollarSign size={12} />Paid (LKR)</label><input type="number" step="0.01" min="0" name="paid" value={formData.paid} onChange={handleInputChange} placeholder="0.00" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
-            <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><CreditCard size={12} />Credit (LKR) - Auto</label><div className="w-full px-3.5 py-2.5 bg-slate-900/80 border border-amber-500/30 rounded-xl text-amber-400 font-black text-sm">LKR {calculatedCredit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
+            {/* ✅ Paid = Amount - Discount - Auto, athin gahanna ba - Credit field eka ain */}
+            <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><DollarSign size={12} />Paid (LKR) - Auto = Amount - Discount</label><div className="w-full px-3.5 py-2.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 font-black text-sm">LKR {calculatedPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
             <div className="sm:col-span-2 lg:col-span-4 flex justify-end gap-2 mt-2">
               {editingId && <button type="button" onClick={handleCancelEdit} className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl transition-all flex items-center gap-2"><X size={14} /><span>Cancel Edit</span></button>}
               <button type="button" onClick={handleOpenCreditPage} className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-amber-500/20 active:scale-95"><CreditCard size={14} /><span>Add Credit</span></button>
@@ -431,18 +426,17 @@ function SalesIncomesContent() {
           </div>
 
           {!isLoading && filteredIncomes.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Amount</p><p className="mt-1 text-lg font-black text-red-400">LKR {totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
               <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Discount</p><p className="mt-1 text-lg font-black text-amber-400">LKR {totalDiscount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
-              <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Paid</p><p className="mt-1 text-lg font-black text-emerald-400">LKR {totalPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
-              <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4"><p className="text-[10px] uppercase tracking-wider text-amber-400">Total Credit</p><p className="mt-1 text-lg font-black text-amber-400">LKR {totalCredit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
+              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4"><p className="text-[10px] uppercase tracking-wider text-emerald-400">Total Paid = Amount - Discount</p><p className="mt-1 text-lg font-black text-emerald-400">LKR {totalPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
             </div>
           )}
 
           {isLoading ? <div className="py-16 text-center flex flex-col items-center justify-center space-y-2"><Loader2 size={24} className="text-red-500 animate-spin" /><p className="text-slate-400">Loading branch entries...</p></div> : filteredIncomes.length === 0 ? <div className="py-16 text-center text-slate-500">{filterDate || filterName ? `No records found ${filterName ? `for "${filterName}"` : ""} ${filterDate ? `on ${filterDate}` : ""}.` : "No sales income records found for this branch."}</div> : (
             <div className="overflow-x-auto rounded-xl border border-slate-800 bg-[#090e1a]/50">
               <table className="w-full text-left border-collapse">
-                <thead><tr className="border-b border-slate-800 bg-slate-900/60 text-[10px] font-bold text-slate-400 uppercase tracking-wider"><th className="py-3 px-4">Bill No</th><th className="py-3 px-4">Name</th><th className="py-3 px-4">Date</th><th className="py-3 px-4 text-right">Unit Price</th><th className="py-3 px-4 text-right">Qty</th><th className="py-3 px-4 text-right">Amount (LKR)</th><th className="py-3 px-4 text-right">Discount (LKR)</th><th className="py-3 px-4 text-right">Paid (LKR)</th><th className="py-3 px-4 text-right">Credit (LKR)</th><th className="py-3 px-4">Credit Customer</th><th className="py-3 px-4 text-center">Action</th></tr></thead>
+                <thead><tr className="border-b border-slate-800 bg-slate-900/60 text-[10px] font-bold text-slate-400 uppercase tracking-wider"><th className="py-3 px-4">Bill No</th><th className="py-3 px-4">Name</th><th className="py-3 px-4">Date</th><th className="py-3 px-4 text-right">Unit Price</th><th className="py-3 px-4 text-right">Qty</th><th className="py-3 px-4 text-right">Amount (LKR)</th><th className="py-3 px-4 text-right">Discount (LKR)</th><th className="py-3 px-4 text-right">Paid (LKR)</th><th className="py-3 px-4">Credit Customer</th><th className="py-3 px-4 text-center">Action</th></tr></thead>
                 <tbody className="divide-y divide-slate-800/50 text-xs">
                   {filteredIncomes.map((item) => {
                     const billNo = item.bill_number || item.billNumber || "-";
@@ -458,7 +452,6 @@ function SalesIncomesContent() {
                         <td className="py-3 px-4 text-right font-black text-red-400">LKR {Number(item.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                         <td className="py-3 px-4 text-right font-black text-amber-400">LKR {Number(item.discount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                         <td className="py-3 px-4 text-right font-black text-emerald-400">LKR {Number(item.paid ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                        <td className="py-3 px-4 text-right font-black text-amber-400">LKR {Number(item.credit ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                         <td className="py-3 px-4">
                           {creditRec ? (
                             <div>
@@ -490,7 +483,6 @@ function SalesIncomesContent() {
           )}
         </div>
 
-        {/* Credit table - kalin wage, wenas na */}
         <div className="p-6 rounded-2xl bg-[#0d1527]/40 border border-amber-500/20 shadow-2xl space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
@@ -543,7 +535,6 @@ function SalesIncomesContent() {
         </div>
       </div>
 
-      {/* ✅ DELETE Confirm Modal */}
       {deleteId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => !isDeleting && setDeleteId(null)}>
           <div className="w-full max-w-sm rounded-2xl bg-[#0d1527] border border-red-500/40 p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
