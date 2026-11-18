@@ -9,10 +9,10 @@ interface DieselExpense {
   id?: number | string; branch_id?: number | string; date?: string; machine?: string;
   diesel?: number | string; amount?: number | string; payable?: number | string; paid?: number | string; balance?: number | string;
 }
-interface ApiResponse { success?: boolean; data?: DieselExpense[]; expenses?: DieselExpense[]; rows?: DieselExpense[]; error?: string; }
+interface ApiResponse { success?: boolean; data?: DieselExpense[]; expenses?: DieselExpense[]; rows?: DieselExpense[]; error?: string; summary?: { totalDiesel?: number; totalAmount?: number; }; }
 interface DieselSummary { diesel: number; amount: number; payable: number; paid: number; balance: number; }
 
-// ✅ Row Edit - HEMA DETAILS ekakma
+// ✅ Row Edit
 type RowEditData = {
   date: string;
   machine: string;
@@ -25,7 +25,9 @@ type RowEditData = {
 
 const DIESEL_API = "/api/expences/diesel";
 const EMPTY_SUMMARY: DieselSummary = { diesel: 0, amount: 0, payable: 0, paid: 0, balance: 0 };
-const INITIAL_DIESEL_STOCK = 0.00;
+
+
+const DIESEL_PRICE = 397;
 
 function numeric(value: unknown): number { return Number(value ?? 0) || 0; }
 function dateOnly(value: unknown): string { return String(value ?? "").slice(0, 10); }
@@ -64,7 +66,10 @@ export default function DieselExpensesPage({ params }: PageProps) {
   const [successMessage, setSuccessMessage] = useState("");
   const [showSummary, setShowSummary] = useState(false);
 
-  // ✅ INLINE EDIT - Row eka thulama
+  const [initialDieselStock, setInitialDieselStock] = useState(0);
+  const [initialTotalAmount, setInitialTotalAmount] = useState(0);
+
+  // ✅ INLINE EDIT 
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [rowEditData, setRowEditData] = useState<RowEditData>({
     date: "", machine: "", diesel: "", amount: "", payable: "", paid: "", balance: "",
@@ -84,6 +89,11 @@ export default function DieselExpensesPage({ params }: PageProps) {
       const result: ApiResponse = await response.json();
       if (!response.ok || result.success === false) throw new Error(result.error || "Failed to load diesel expenses.");
       setRecords(extractRecords(result).map(normalizeRecord));
+      // ✅ FIX - Initial Stock eka summary eken gannawa
+      if ((result as any).summary) {
+        setInitialDieselStock(Number((result as any).summary.totalDiesel || 0));
+        setInitialTotalAmount(Number((result as any).summary.totalAmount || 0));
+      }
     } catch (requestError) {
       setRecords([]); setError(requestError instanceof Error ? requestError.message : "Unable to load diesel expenses.");
     } finally { setLoading(false); }
@@ -122,7 +132,7 @@ export default function DieselExpensesPage({ params }: PageProps) {
     } finally { setIsDeleting(false); }
   };
 
-  // ✅ INLINE EDIT - Row eka thulama
+  // ✅ INLINE EDIT 
   const emptyRowEdit = (): RowEditData => ({
     date: "", machine: "", diesel: "", amount: "", payable: "", paid: "", balance: "",
   });
@@ -150,13 +160,11 @@ export default function DieselExpensesPage({ params }: PageProps) {
     const { name, value } = e.target;
     setRowEditData((prev) => {
       const next = { ...prev, [name]: value };
-      // ✅ Payable / Paid wenas kalama Balance auto suggest karanawa - eth athin wenas karannath puluwan
       if (name === "payable" || name === "paid") {
         const payable = Number(name === "payable" ? value : prev.payable) || 0;
         const paid = Number(name === "paid" ? value : prev.paid) || 0;
         next.balance = String(Math.max(0, payable - paid));
       }
-      // ✅ Amount wenas kalama Payable ekath auto fill wenawa - eth athin wenas karannath puluwan
       if (name === "amount") {
         next.payable = value;
         const paid = Number(prev.paid) || 0;
@@ -167,7 +175,6 @@ export default function DieselExpensesPage({ params }: PageProps) {
     setError("");
   };
 
-  // ✅ Row eke thulama Save
   const handleSaveRow = async () => {
     if (!editingRowId) return;
     const machine = rowEditData.machine.trim();
@@ -239,6 +246,17 @@ export default function DieselExpensesPage({ params }: PageProps) {
     }), EMPTY_SUMMARY);
   }, [filteredRecords]);
 
+  // 1. Total Diesel 
+  const displayTotalDiesel = initialDieselStock;
+  // 2. Diesel Used 
+  const displayDieselUsed = summary.diesel;
+  // 3. Total Amount 
+  const displayTotalAmount = summary.amount;
+  // 4. Remaining Diesel = Total Diesel - Diesel Used
+  const displayRemainingDiesel = Math.max(0, displayTotalDiesel - displayDieselUsed);
+  // 5. Remaining Balance = Remaining Diesel x 397
+  const displayRemainingBalance = displayRemainingDiesel * DIESEL_PRICE;
+
   const machineSummary = useMemo(() => {
     const map = new Map<string, DieselSummary & { count: number }>();
     filteredRecords.forEach((r) => {
@@ -291,11 +309,12 @@ export default function DieselExpensesPage({ params }: PageProps) {
         {successMessage && (<div className="mb-6 flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400"><CheckCircle2 size={16} /> {successMessage}</div>)}
         {error && (<div className="mb-6 flex items-center justify-between rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400"><span>{error}</span><button type="button" onClick={loadRecords} className="font-bold underline">Retry</button></div>)}
 
-        <section className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <MetricCard title="Diesel Used" value={`${formatDiesel(summary.diesel)} L`} subtitle="Table total" icon={<Droplets size={19} />} color="cyan" />
-          <MetricCard title="Total Amount" value={formatMoney(summary.amount)} subtitle="Amount total" icon={<Wallet size={19} />} color="amber" />
-          <MetricCard title="Remaining Balance" value={formatMoney(summary.balance)} subtitle="Payable - Paid" icon={<CreditCard size={19} />} color="emerald" />
-          <MetricCard title="Total Diesel" value={`${formatDiesel(INITIAL_DIESEL_STOCK)} L`} subtitle="Initial Stock" icon={<AlertCircle size={19} />} color="rose" />
+        <section className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <MetricCard title="Diesel Used" value={`${formatDiesel(displayDieselUsed)} L`} subtitle="Table eke diesel wala ekathuwa" icon={<Droplets size={19} />} color="cyan" />
+          <MetricCard title="Total Amount" value={formatMoney(displayTotalAmount)} subtitle="Table eke viyadam wela thiyena amount" icon={<Wallet size={19} />} color="amber" />
+          <MetricCard title="Remaining Diesel" value={`${formatDiesel(displayRemainingDiesel)} L`} subtitle="Total Diesel - Diesel Used" icon={<Droplets size={19} />} color="orange" />
+          <MetricCard title="Remaining Balance" value={formatMoney(displayRemainingBalance)} subtitle={`Remaining Diesel x Rs. ${DIESEL_PRICE}`} icon={<CreditCard size={19} />} color="emerald" />
+          <MetricCard title="Total Diesel" value={`${formatDiesel(displayTotalDiesel)} L`} subtitle="Initial Stock" icon={<AlertCircle size={19} />} color="rose" />
         </section>
 
         <section className="overflow-hidden rounded-2xl border border-slate-800 bg-[#0d1527] shadow-2xl">
@@ -310,7 +329,6 @@ export default function DieselExpensesPage({ params }: PageProps) {
             <div className="overflow-x-auto"><table className="w-full min-w-[1150px]"><thead><tr className="border-b border-slate-800 bg-[#0a1020] text-left text-[10px] font-bold uppercase tracking-wider text-slate-500"><th className="px-5 py-4">Branch ID</th><th className="px-5 py-4">Date</th><th className="px-5 py-4">Machine</th><th className="px-5 py-4 text-right">Diesel</th><th className="px-5 py-4 text-right">Amount</th><th className="px-5 py-4 text-right">Payable</th><th className="px-5 py-4 text-right">Paid</th><th className="px-5 py-4 text-right">Balance</th><th className="px-5 py-4 text-center">Action</th></tr></thead><tbody className="divide-y divide-slate-800/70">{filteredRecords.map((record, index) => {
               const isEditingRow = String(editingRowId) === String(record.id);
 
-              // ✅ EDIT MODE - HEMA DETAILS EKAKMA ROW EKE THULAMA
               if (isEditingRow) {
                 return (
                   <tr key={record.id ?? `${record.date}-${record.machine}-${index}`} className="bg-amber-500/10 border-2 border-amber-500/40 align-top">
@@ -339,18 +357,14 @@ export default function DieselExpensesPage({ params }: PageProps) {
                 );
               }
 
-              // ✅ NORMAL ROW - Oyage kalin code eka ehema ma
               return (<tr key={record.id ?? `${record.date}-${record.machine}-${index}`} className="transition hover:bg-cyan-500/[0.08]"><td className="px-5 py-4 text-xs text-slate-400">{record.branch_id ?? branchId}</td><td className="whitespace-nowrap px-5 py-4 text-xs text-slate-300">{formatDate(record.date)}</td><td className="px-5 py-4 text-sm font-bold text-white">{record.machine || "-"}</td><td className="px-5 py-4 text-right text-sm font-semibold text-cyan-400">{formatDiesel(record.diesel)} L</td><td className="px-5 py-4 text-right text-sm text-slate-200">{formatMoney(numeric(record.amount))}</td><td className="px-5 py-4 text-right text-sm text-amber-400">{formatMoney(numeric(record.payable ?? record.amount))}</td><td className="px-5 py-4 text-right text-sm text-emerald-400">{formatMoney(numeric(record.paid))}</td><td className="px-5 py-4 text-right text-sm font-bold text-rose-400">{formatMoney(numeric(record.balance))}</td><td className="px-5 py-4 text-center"><div className="flex items-center justify-center gap-1.5 flex-wrap"><button type="button" onClick={() => openRecordDetail(record)} className="flex items-center gap-1.5 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-cyan-400 transition hover:bg-cyan-500 hover:text-slate-950"><Eye size={12} /> View</button><button type="button" onClick={() => handleEditRow(record)} className="inline-flex items-center gap-1 rounded-lg border border-blue-500/30 bg-blue-500/10 px-2 py-2 text-[10px] font-bold text-blue-400 hover:bg-blue-600 hover:text-white"><Pencil size={11} />Edit</button><button type="button" onClick={() => setDeleteId(String(record.id))} className="inline-flex items-center gap-1 rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-2 text-[10px] font-bold text-red-400 hover:bg-red-600 hover:text-white"><Trash2 size={11} />Delete</button></div></td></tr>);
             })}</tbody><tfoot><tr className="border-t border-slate-700 bg-[#0a1020] text-sm font-bold"><td colSpan={3} className="px-5 py-4 text-slate-400">Filtered Total</td><td className="px-5 py-4 text-right text-cyan-400">{formatDiesel(summary.diesel)} L</td><td className="px-5 py-4 text-right text-white">{formatMoney(summary.amount)}</td><td className="px-5 py-4 text-right text-amber-400">{formatMoney(summary.payable)}</td><td className="px-5 py-4 text-right text-emerald-400">{formatMoney(summary.paid)}</td><td className="px-5 py-4 text-right text-rose-400">{formatMoney(summary.balance)}</td><td /></tr></tfoot></table></div>)}
         </section>
       </div>
 
-      {/* ✅ COMPACT MODAL - Mulu page ekata yanne na */}
       {showSummary && (
         <div className="fixed inset-0 z-[100] bg-black/80 p-4 overflow-y-auto" onClick={() => setShowSummary(false)}>
           <div className="relative mx-auto my-6 w-full max-w-[460px] rounded-2xl border border-slate-700 bg-[#0d1527] shadow-2xl" onClick={(e) => e.stopPropagation()}>
-
-            {/* Header - sticky top - Hamadama penawa */}
             <div className="sticky top-0 z-10 flex items-center justify-between rounded-t-2xl border-b border-slate-800 bg-[#0d1527] px-5 py-3">
               <div className="flex items-center gap-2">
                 <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/10 p-2 text-cyan-400"><Fuel size={16} /></div>
@@ -361,16 +375,15 @@ export default function DieselExpensesPage({ params }: PageProps) {
               </div>
               <button type="button" onClick={() => setShowSummary(false)} className="flex h-9 w-9 items-center justify-center rounded-lg bg-red-500 text-white text-base font-black hover:bg-red-600">✕</button>
             </div>
-
-            {/* Body - Podi, compact */}
             <div className="px-5 py-4">
               <div className="space-y-2 text-[13px]">
-                <div className="flex justify-between rounded-lg bg-slate-900/60 px-3 py-2"><span className="text-slate-400">Diesel Used</span><span className="font-black text-cyan-400">{formatDiesel(summary.diesel)} L</span></div>
-                <div className="flex justify-between rounded-lg bg-slate-900/60 px-3 py-2"><span className="text-slate-400">Total Amount</span><span className="font-black text-white">{formatMoney(summary.amount)}</span></div>
+                <div className="flex justify-between rounded-lg bg-slate-900/60 px-3 py-2"><span className="text-slate-400">Diesel Used</span><span className="font-black text-cyan-400">{formatDiesel(displayDieselUsed)} L</span></div>
+                <div className="flex justify-between rounded-lg bg-slate-900/60 px-3 py-2"><span className="text-slate-400">Total Amount</span><span className="font-black text-white">{formatMoney(displayTotalAmount)}</span></div>
                 <div className="flex justify-between rounded-lg bg-slate-900/60 px-3 py-2"><span className="text-slate-400">Total Payable</span><span className="font-black text-amber-400">{formatMoney(summary.payable)}</span></div>
                 <div className="flex justify-between rounded-lg bg-slate-900/60 px-3 py-2"><span className="text-slate-400">Total Paid</span><span className="font-black text-emerald-400">{formatMoney(summary.paid)}</span></div>
-                <div className="flex justify-between rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2"><span className="text-slate-300 font-bold">Remaining Balance</span><span className="font-black text-rose-400">{formatMoney(summary.balance)}</span></div>
-                <div className="flex justify-between rounded-lg bg-slate-900/60 px-3 py-2"><span className="text-slate-400">Initial Stock</span><span className="font-black text-white">{formatDiesel(INITIAL_DIESEL_STOCK)} L</span></div>
+                <div className="flex justify-between rounded-lg bg-slate-900/60 px-3 py-2"><span className="text-slate-400">Remaining Diesel</span><span className="font-black text-orange-400">{formatDiesel(displayRemainingDiesel)} L</span></div>
+                <div className="flex justify-between rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2"><span className="text-slate-300 font-bold">Remaining Balance</span><span className="font-black text-rose-400">{formatMoney(displayRemainingBalance)}</span></div>
+                <div className="flex justify-between rounded-lg bg-slate-900/60 px-3 py-2"><span className="text-slate-400">Initial Stock</span><span className="font-black text-white">{formatDiesel(displayTotalDiesel)} L</span></div>
               </div>
 
               <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500 mt-4 mb-2">By Machine</p>
@@ -383,18 +396,14 @@ export default function DieselExpensesPage({ params }: PageProps) {
                 ))}
               </div>
             </div>
-
-            {/* Footer - sticky bottom - Hamadama penawa */}
             <div className="sticky bottom-0 flex gap-2 rounded-b-2xl border-t border-slate-800 bg-[#0d1527] px-5 py-3">
               <button type="button" onClick={() => setShowSummary(false)} className="flex-1 rounded-xl bg-cyan-500 py-2.5 text-xs font-black uppercase tracking-wider text-slate-950 hover:bg-cyan-400">Close</button>
               <button type="button" onClick={() => window.print()} className="rounded-xl border border-slate-700 px-4 py-2.5 text-xs font-bold text-slate-300 hover:bg-slate-800">Print</button>
             </div>
-
           </div>
         </div>
       )}
 
-      {/* ✅ DELETE Confirm Modal */}
       {deleteId && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm" onClick={() => !isDeleting && setDeleteId(null)}>
           <div className="w-full max-w-sm rounded-2xl border border-red-500/40 bg-[#0d1527] p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
@@ -419,7 +428,7 @@ export default function DieselExpensesPage({ params }: PageProps) {
   );
 }
 
-function MetricCard({ title, value, subtitle, icon, color }: { title: string; value: string; subtitle?: string; icon: React.ReactNode; color: "cyan" | "amber" | "emerald" | "rose"; }) {
-  const styles = { cyan: "border-cyan-500/20 bg-cyan-500/10 text-cyan-400", amber: "border-amber-500/20 bg-amber-500/10 text-amber-400", emerald: "border-emerald-500/20 bg-emerald-500/10 text-emerald-400", rose: "border-rose-500/20 bg-rose-500/10 text-rose-400" };
+function MetricCard({ title, value, subtitle, icon, color }: { title: string; value: string; subtitle?: string; icon: React.ReactNode; color: "cyan" | "amber" | "emerald" | "rose" | "orange"; }) {
+  const styles = { cyan: "border-cyan-500/20 bg-cyan-500/10 text-cyan-400", amber: "border-amber-500/20 bg-amber-500/10 text-amber-400", emerald: "border-emerald-500/20 bg-emerald-500/10 text-emerald-400", rose: "border-rose-500/20 bg-rose-500/10 text-rose-400", orange: "border-orange-500/20 bg-orange-500/10 text-orange-400" };
   return (<div className="rounded-2xl border border-slate-800 bg-[#0d1527] p-5"><div className="flex items-start justify-between"><div><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{title}</p><p className="mt-3 text-xl font-black text-white">{value}</p>{subtitle && <p className="mt-1 text-[10px] text-slate-500">{subtitle}</p>}</div><div className={`rounded-xl border p-3 ${styles[color]}`}>{icon}</div></div></div>);
 }
