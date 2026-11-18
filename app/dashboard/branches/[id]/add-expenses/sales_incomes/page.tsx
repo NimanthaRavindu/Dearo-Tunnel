@@ -3,7 +3,7 @@
 import React, { Suspense, useEffect, useState, useMemo } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Calendar, CheckCircle2, DollarSign, FileText, Loader2, Plus, X, Hash, Tag, Eye, Receipt, BadgePercent, CreditCard, Search, User, Phone, Car, Pencil, Trash2, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Calendar, CheckCircle2, DollarSign, FileText, Loader2, Plus, X, Hash, Tag, Eye, Receipt, BadgePercent, CreditCard, Search, User, Phone, Car, Pencil, Trash2, AlertTriangle, Check, Save } from "lucide-react";
 
 interface SalesIncomeItem {
   id: string;
@@ -22,6 +22,16 @@ interface SalesIncomeItem {
 }
 
 interface SalesIncomeFormData {
+  bill_number: string;
+  name: string;
+  date: string;
+  unit_price: string;
+  quantity: string;
+  paid: string;
+}
+
+// ✅ Inline edit ekata wena form ekak
+interface RowEditData {
   bill_number: string;
   name: string;
   date: string;
@@ -78,7 +88,12 @@ function SalesIncomesContent() {
   const [credits, setCredits] = useState<CreditRecord[]>([]);
   const [creditSearch, setCreditSearch] = useState("");
   const [showCredits, setShowCredits] = useState(true);
-  const [editingId, setEditingId] = useState<string | null>(null);
+
+  // ✅ Inline Edit - Uda form eke Edit na, Row eke thulama Edit
+  const [editingRowId, setEditingRowId] = useState<string | null>(null);
+  const [rowEditData, setRowEditData] = useState<RowEditData>({ bill_number: "", name: "", date: "", unit_price: "", quantity: "", paid: "" });
+  const [isRowSaving, setIsRowSaving] = useState(false);
+
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -93,10 +108,19 @@ function SalesIncomesContent() {
   }, [formData.unit_price, formData.quantity]);
 
   const calculatedPaid = useMemo(() => Number(formData.paid || 0), [formData.paid]);
-  // ✅ Discount = Amount - Paid witharak - Credit eka adu karanne na
   const calculatedDiscountForm = useMemo(() => Math.max(0, calculatedAmount - calculatedPaid), [calculatedAmount, calculatedPaid]);
   const calculatedPayable = useMemo(() => calculatedPaid, [calculatedPaid]);
   const calculatedCredit = useMemo(() => 0, []);
+
+  // ✅ Row Edit eke Amount / Discount - Row eka thulama auto
+  const rowCalculatedAmount = useMemo(() => {
+    const up = Number(rowEditData.unit_price) || 0;
+    const qty = Number(rowEditData.quantity) || 0;
+    return up * qty;
+  }, [rowEditData.unit_price, rowEditData.quantity]);
+  const rowCalculatedPaid = useMemo(() => Number(rowEditData.paid || 0), [rowEditData.paid]);
+  // ✅ Discount = Amount - Paid witharak
+  const rowCalculatedDiscount = useMemo(() => Math.max(0, rowCalculatedAmount - rowCalculatedPaid), [rowCalculatedAmount, rowCalculatedPaid]);
 
   const filteredIncomes = incomes.filter((item) => {
     const matchDate = filterDate ? item.date.slice(0, 10) === filterDate : true;
@@ -141,7 +165,6 @@ function SalesIncomesContent() {
     return credits.find((c) => String(c.bill_number || "").trim().toLowerCase() === String(billNo).trim().toLowerCase());
   };
 
-  // ✅ Uda table eke Credit eka = Yata table eke credit_amount (nayata ganna mudala)
   const getCreditAmountForItem = (item: SalesIncomeItem) => {
     const billNo = item.bill_number || item.billNumber || "-";
     const rec = getCreditByBill(billNo);
@@ -149,11 +172,9 @@ function SalesIncomesContent() {
     return Number(item.credit || 0);
   };
 
-  // ✅ Totals
   const totalAmount = filteredIncomes.reduce((total, item) => total + Number(item.amount || 0), 0);
   const totalPaid = filteredIncomes.reduce((total, item) => total + Number(item.paid ?? 0), 0);
   const totalCreditTop = filteredIncomes.reduce((total, item) => total + getCreditAmountForItem(item), 0);
-  // ✅ Discount = Amount - Paid witharak - Credit eka adu karanne na
   const totalDiscount = Math.max(0, totalAmount - totalPaid);
 
   const filteredCredits = useMemo(() => {
@@ -190,9 +211,10 @@ function SalesIncomesContent() {
     setErrorMessage("");
   };
 
-  const handleEdit = (item: SalesIncomeItem) => {
-    setEditingId(String(item.id));
-    setFormData({
+  // ✅ INLINE EDIT - Row eka thulama edit karanna
+  const handleEditRow = (item: SalesIncomeItem) => {
+    setEditingRowId(String(item.id));
+    setRowEditData({
       bill_number: item.bill_number || item.billNumber || "",
       name: item.name || "",
       date: String(item.date || "").slice(0, 10) || getToday(),
@@ -201,12 +223,60 @@ function SalesIncomesContent() {
       paid: String(item.paid ?? ""),
     });
     setErrorMessage(""); setSuccessMessage("");
-    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const handleCancelEdit = () => {
-    setEditingId(null);
-    setFormData({ bill_number: "", name: "", date: getToday(), unit_price: "", quantity: "", paid: "" });
+  const handleCancelRowEdit = () => {
+    setEditingRowId(null);
+    setRowEditData({ bill_number: "", name: "", date: "", unit_price: "", quantity: "", paid: "" });
+  };
+
+  const handleRowInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setRowEditData((prev) => ({ ...prev, [name]: value }));
+    setErrorMessage("");
+  };
+
+  const handleRowNameChange = (value: string) => {
+    const found = products.find((p) => p.product_name.toLowerCase() === value.toLowerCase());
+    setRowEditData((prev) => ({
+      ...prev,
+      name: value,
+      unit_price: found && found.unit_price != null ? String(found.unit_price) : prev.unit_price,
+    }));
+  };
+
+  // ✅ Row eke thulama Save
+  const handleSaveRow = async () => {
+    if (!editingRowId) return;
+    const bill_number = rowEditData.bill_number.trim();
+    const name = rowEditData.name.trim();
+    const unit_price = Number(rowEditData.unit_price);
+    const quantity = Number(rowEditData.quantity);
+    const paid = rowCalculatedPaid;
+    const amount = rowCalculatedAmount;
+    const discount = rowCalculatedDiscount;
+
+    if (!name || !rowEditData.date || !rowEditData.unit_price || !rowEditData.quantity) {
+      setErrorMessage("Please complete Name, Date, Unit Price and Quantity."); return;
+    }
+    if (paid < 0) { setErrorMessage("Paid cannot be less than 0."); return; }
+    if (paid > amount) { setErrorMessage("Paid cannot be greater than Amount."); return; }
+
+    try {
+      setIsRowSaving(true); setErrorMessage("");
+      const response = await fetch("/api/expences/sales-incomes", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: editingRowId, branch_id: branchId, bill_number: bill_number || null, name, date: rowEditData.date, unit_price, quantity, amount, discount, paid, credit: 0 }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.error || "Failed to update sales income.");
+      setEditingRowId(null);
+      setSuccessMessage(`Updated: Bill ${bill_number} | Amount LKR ${amount.toFixed(2)} | Paid LKR ${paid.toFixed(2)} | Discount LKR ${discount.toFixed(2)}`);
+      window.setTimeout(() => setSuccessMessage(""), 4000);
+      await fetchSalesIncomes(); await fetchCredits();
+    } catch (error) { setErrorMessage(error instanceof Error ? error.message : "Failed to update."); }
+    finally { setIsRowSaving(false); }
   };
 
   const handleDelete = async () => {
@@ -216,7 +286,7 @@ function SalesIncomesContent() {
       const res = await fetch(`/api/expences/sales-incomes?id=${encodeURIComponent(deleteId)}`, { method: "DELETE" });
       const result = await res.json();
       if (!res.ok || !result.success) throw new Error(result.error || "Failed to delete");
-      if (editingId === deleteId) handleCancelEdit();
+      if (editingRowId === deleteId) handleCancelRowEdit();
       setDeleteId(null); setSuccessMessage("Entry deleted successfully.");
       window.setTimeout(() => setSuccessMessage(""), 3000);
       await fetchSalesIncomes(); await fetchCredits();
@@ -249,7 +319,6 @@ function SalesIncomesContent() {
     const quantity = Number(formData.quantity);
     const paid = calculatedPaid;
     const amount = calculatedAmount;
-    // ✅ Discount = Amount - Paid witharak
     const discount = calculatedDiscountForm;
     const credit = 0;
 
@@ -261,17 +330,15 @@ function SalesIncomesContent() {
 
     try {
       setIsSubmitting(true); setErrorMessage("");
-      const isEdit = !!editingId;
       const response = await fetch("/api/expences/sales-incomes", {
-        method: isEdit ? "PUT" : "POST",
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: editingId, branch_id: branchId, bill_number: bill_number || null, name, date: formData.date, unit_price, quantity, amount, discount, paid, credit }),
+        body: JSON.stringify({ branch_id: branchId, bill_number: bill_number || null, name, date: formData.date, unit_price, quantity, amount, discount, paid, credit }),
       });
       const result = await response.json();
-      if (!response.ok || !result.success) throw new Error(result.error || (isEdit ? "Failed to update sales income." : "Failed to save sales income."));
+      if (!response.ok || !result.success) throw new Error(result.error || "Failed to save sales income.");
       setFormData({ bill_number: "", name: "", date: getToday(), unit_price: "", quantity: "", paid: "" });
-      setEditingId(null);
-      setSuccessMessage(isEdit ? `Updated: Amount LKR ${amount.toFixed(2)} | Paid LKR ${paid.toFixed(2)} | Discount LKR ${discount.toFixed(2)}` : `Saved: Amount LKR ${amount.toFixed(2)} | Paid LKR ${paid.toFixed(2)} | Discount LKR ${discount.toFixed(2)}`);
+      setSuccessMessage(`Saved: Amount LKR ${amount.toFixed(2)} | Paid LKR ${paid.toFixed(2)} | Discount LKR ${discount.toFixed(2)}`);
       window.setTimeout(() => setSuccessMessage(""), 4000);
       await fetchSalesIncomes(); await fetchCredits();
     } catch (error) { setErrorMessage(error instanceof Error ? error.message : "Failed to save sales income."); }
@@ -297,6 +364,7 @@ function SalesIncomesContent() {
 
   const clearFilters = () => { setFilterDate(""); setFilterName(""); setCreditSearch(""); };
   const deleteItem = incomes.find((x) => String(x.id) === String(deleteId));
+  const inputCls = "w-full px-2 py-2 bg-slate-950 border border-amber-500/50 rounded-lg text-slate-100 text-xs focus:border-amber-400 focus:outline-none";
 
   return (
     <div className="min-h-screen bg-[#070a12] text-slate-100 p-6 sm:p-10 flex flex-col items-center relative overflow-hidden font-mono text-xs">
@@ -315,11 +383,9 @@ function SalesIncomesContent() {
         {successMessage && (<div className="flex items-center gap-2 bg-emerald-950/40 border border-emerald-500/40 px-4 py-3 rounded-xl text-emerald-400"><CheckCircle2 size={16} /><span>{successMessage}</span></div>)}
         {errorMessage && (<div className="flex items-center justify-between gap-3 bg-red-950/40 border border-red-500/40 px-4 py-3 rounded-xl text-red-400"><span>{errorMessage}</span><button type="button" onClick={() => setErrorMessage("")} className="hover:text-red-200"><X size={15} /></button></div>)}
 
-        <div className={`p-6 rounded-2xl border shadow-2xl ${editingId ? "bg-amber-950/20 border-amber-500/40" : "bg-[#0d1527]/60 border-slate-800"}`}>
-          <h2 className="text-xs font-bold uppercase tracking-widest text-slate-200 mb-4 flex items-center gap-2">
-            {editingId ? <><Pencil size={14} className="text-amber-400" /> Edit Sales Income Entry - ID #{editingId}</> : <><Plus size={14} className="text-red-400" /> Add New Sales Income Entry</>}
-          </h2>
-          {editingId && <p className="mb-4 px-3 py-2 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-[11px]">Edit mode - Data tika change karala Update Entry click karanna. Cancel karanna nam Cancel Edit click karanna.</p>}
+        {/* ✅ Uda Form eka - Aluth entry ekata witharak, Edit ekata na */}
+        <div className="p-6 rounded-2xl border shadow-2xl bg-[#0d1527]/60 border-slate-800">
+          <h2 className="text-xs font-bold uppercase tracking-widest text-slate-200 mb-4 flex items-center gap-2"><Plus size={14} className="text-red-400" /> Add New Sales Income Entry</h2>
           <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Receipt size={12} />Bill Number</label><input type="text" name="bill_number" value={formData.bill_number} onChange={handleInputChange} placeholder="Ex: B-001" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
             <div className="space-y-1.5">
@@ -345,16 +411,15 @@ function SalesIncomesContent() {
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><DollarSign size={12} />Paid (LKR)</label><input type="number" step="0.01" min="0" name="paid" value={formData.paid} onChange={handleInputChange} placeholder="0.00" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><BadgePercent size={12} />Discount (LKR) - Auto = Amount - Paid</label><div className="w-full px-3.5 py-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400 font-black text-sm">LKR {calculatedDiscountForm.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
             <div className="sm:col-span-2 lg:col-span-4 flex justify-end gap-2 mt-2">
-              {editingId && <button type="button" onClick={handleCancelEdit} className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl transition-all flex items-center gap-2"><X size={14} /><span>Cancel Edit</span></button>}
               <button type="button" onClick={handleOpenCreditPage} className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-amber-500/20 active:scale-95"><CreditCard size={14} /><span>Add Credit</span></button>
-              <button type="submit" disabled={isSubmitting} className={`px-5 py-2.5 text-white font-bold rounded-xl transition-all flex items-center gap-2 shadow-lg active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${editingId ? "bg-amber-600 hover:bg-amber-500 shadow-amber-600/20" : "bg-red-600 hover:bg-red-500 shadow-red-600/20"}`}>{isSubmitting ? <Loader2 size={14} className="animate-spin" /> : editingId ? <Pencil size={14} /> : <Plus size={14} />}<span>{isSubmitting ? (editingId ? "Updating..." : "Saving...") : editingId ? "Update Entry" : "Save Income Entry"}</span></button>
+              <button type="submit" disabled={isSubmitting} className="px-5 py-2.5 text-white font-bold rounded-xl transition-all flex items-center gap-2 shadow-lg active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed bg-red-600 hover:bg-red-500 shadow-red-600/20">{isSubmitting ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}<span>{isSubmitting ? "Saving..." : "Save Income Entry"}</span></button>
             </div>
           </form>
         </div>
 
         <div className="p-6 rounded-2xl bg-[#0d1527]/40 border border-slate-800 shadow-2xl space-y-4">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <div><h2 className="text-xs font-bold uppercase tracking-widest text-slate-200">Registered Sales Incomes Ledger</h2><p className="text-[10px] text-slate-500 mt-1">{filteredIncomes.length} records found</p></div>
+            <div><h2 className="text-xs font-bold uppercase tracking-widest text-slate-200">Registered Sales Incomes Ledger</h2><p className="text-[10px] text-slate-500 mt-1">{filteredIncomes.length} records found {editingRowId && <span className="text-amber-400 font-bold">• Editing Row #{editingRowId} - Row eka thulama edit karanna</span>}</p></div>
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-2">
                 <Search size={14} className="text-slate-400" />
@@ -386,11 +451,38 @@ function SalesIncomesContent() {
                     const billNo = item.bill_number || item.billNumber || "-";
                     const creditRec = getCreditByBill(billNo);
                     const creditAmt = getCreditAmountForItem(item);
-                    // ✅ Row Discount = Amount - Paid witharak - Credit adu karanne na
                     const rowDiscount = Math.max(0, Number(item.amount || 0) - Number(item.paid || 0));
-                    const isEditingRow = String(editingId) === String(item.id);
+                    const isEditingRow = String(editingRowId) === String(item.id);
+
+                    // ✅ EDIT MODE - Row eka thulama input wenawa
+                    if (isEditingRow) {
+                      return (
+                        <tr key={item.id} className="bg-amber-500/10 border-2 border-amber-500/40">
+                          <td className="py-3 px-2"><input name="bill_number" value={rowEditData.bill_number} onChange={handleRowInputChange} className={inputCls} placeholder="B-001" /></td>
+                          <td className="py-3 px-2"><input list="row-product-list" value={rowEditData.name} onChange={(e) => handleRowNameChange(e.target.value)} className={inputCls} placeholder="Name" /><datalist id="row-product-list">{products.map((p) => <option key={p.product_name} value={p.product_name} />)}</datalist></td>
+                          <td className="py-3 px-2"><input type="date" name="date" value={rowEditData.date} onChange={handleRowInputChange} className={inputCls} /></td>
+                          <td className="py-3 px-2"><input type="number" step="0.01" name="unit_price" value={rowEditData.unit_price} onChange={handleRowInputChange} className={inputCls} /></td>
+                          <td className="py-3 px-2"><input type="number" step="0.01" name="quantity" value={rowEditData.quantity} onChange={handleRowInputChange} className={inputCls} /></td>
+                          <td className="py-3 px-2 text-right font-black text-red-400">LKR {rowCalculatedAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                          <td className="py-3 px-2"><input type="number" step="0.01" name="paid" value={rowEditData.paid} onChange={handleRowInputChange} className={inputCls} /></td>
+                          <td className="py-3 px-2 text-right font-black text-amber-400">LKR {creditAmt.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                          <td className="py-3 px-2 text-right font-black text-amber-400">LKR {rowCalculatedDiscount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                          <td className="py-3 px-2">
+                            {creditRec ? (<div><p className="font-bold text-amber-300 flex items-center gap-1"><User size={11} /> {creditRec.customer_name}</p><p className="text-[10px] text-slate-400">{creditRec.contact_number}</p></div>) : (<span className="text-slate-600">-</span>)}
+                          </td>
+                          <td className="py-3 px-2 text-center">
+                            <div className="flex flex-col gap-1.5">
+                              <button onClick={handleSaveRow} disabled={isRowSaving} className="inline-flex items-center justify-center gap-1 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[10px] font-black uppercase disabled:opacity-50">{isRowSaving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Save</button>
+                              <button onClick={handleCancelRowEdit} disabled={isRowSaving} className="inline-flex items-center justify-center gap-1 px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-[10px] font-black uppercase"><X size={12} /> Cancel</button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    // ✅ NORMAL ROW
                     return (
-                      <tr key={item.id} className={`hover:bg-slate-900/70 transition-colors ${isEditingRow ? "bg-amber-500/10" : ""}`}>
+                      <tr key={item.id} className="hover:bg-slate-900/70 transition-colors">
                         <td className="py-3 px-4 font-bold text-slate-200">{billNo}</td>
                         <td className="py-3 px-4 font-bold text-slate-200">{item.name}</td>
                         <td className="py-3 px-4 text-slate-400">{item.date?.slice(0, 10)}</td>
@@ -414,7 +506,8 @@ function SalesIncomesContent() {
                             <Link href={`/dashboard/branches/${branchId}/add-expenses/sales_incomes/${item.id}`} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-900 border border-slate-700 text-slate-300 rounded-lg text-[10px] font-black uppercase hover:bg-white hover:text-black transition-all">
                               <Eye size={12} /> View
                             </Link>
-                            <button onClick={() => handleEdit(item)} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-600/20 border border-blue-500/40 text-blue-300 rounded-lg text-[10px] font-black uppercase hover:bg-blue-600 hover:text-white transition-all">
+                            {/* ✅ Edit click kalama e row eka thulama edit wenawa, uda form ekata yanne na */}
+                            <button onClick={() => handleEditRow(item)} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-600/20 border border-blue-500/40 text-blue-300 rounded-lg text-[10px] font-black uppercase hover:bg-blue-600 hover:text-white transition-all">
                               <Pencil size={12} /> Edit
                             </button>
                             <button onClick={() => setDeleteId(String(item.id))} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-red-600/20 border border-red-500/40 text-red-300 rounded-lg text-[10px] font-black uppercase hover:bg-red-600 hover:text-white transition-all">
