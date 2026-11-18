@@ -98,10 +98,8 @@ export default function DieselExpensesPage() {
   const formPaid = numberValue(paid);
   const formBalance = Math.max(0, formPayable - formPaid);
 
-  // ✅ FIX - Card wala agayan
-  // Kalin: Diesel Used / Total Amount card walath Remaining value eka pennuwe -> 0.00 pennuwa
+  // ✅ FIX - Card wala agayan - Kalin okkoma Remaining pennuwe nisa 0.00 pennuwa
   // Dan: Used = Used + Form eke type karana tika, Remaining = Initial - Used
-  // Type karaddi ma Used wadi wenawa, Remaining adu wenawa - oyage kalin live effect eka ehema ma thiyenawa
   const displayTotalDiesel = initialDieselStock;
   const displayDieselUsed = activeDieselUsed + formDiesel;
   const displayTotalAmount = activePayable + formPayable;
@@ -167,7 +165,6 @@ export default function DieselExpensesPage() {
     const { name, value } = e.target;
     setRowEditData((prev) => {
       const next = { ...prev, [name]: value };
-      // ✅ Payable / Paid wenas kalama Balance auto suggest karanawa - eth athin wenas karannath puluwan
       if (name === "payable" || name === "paid") {
         const payableVal = Number(name === "payable" ? value : prev.payable) || 0;
         const paidVal = Number(name === "paid" ? value : prev.paid) || 0;
@@ -336,7 +333,6 @@ export default function DieselExpensesPage() {
         </section>
       </div>
 
-      {/* ✅ DELETE Confirm Modal */}
       {deleteId !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm" onClick={() => !isDeleting && setDeleteId(null)}>
           <div className="w-full max-w-sm rounded-2xl border border-red-500/40 bg-[#0d1527] p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
