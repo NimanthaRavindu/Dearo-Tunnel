@@ -2,7 +2,7 @@
 
 import React, { use, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CalendarDays, Fuel, Loader2, RefreshCw, Search, Droplets, AlertCircle, CreditCard, Wallet, Settings2, BarChart3, Eye, X } from "lucide-react";
+import { ArrowLeft, CalendarDays, Fuel, Loader2, RefreshCw, Search, Droplets, AlertCircle, CreditCard, Wallet, Settings2, BarChart3, Eye, X, Trash2, AlertTriangle, CheckCircle2, Pencil, Save } from "lucide-react";
 
 interface PageProps { params: Promise<{ id: string }> }
 interface DieselExpense {
@@ -11,6 +11,17 @@ interface DieselExpense {
 }
 interface ApiResponse { success?: boolean; data?: DieselExpense[]; expenses?: DieselExpense[]; rows?: DieselExpense[]; error?: string; }
 interface DieselSummary { diesel: number; amount: number; payable: number; paid: number; balance: number; }
+
+// ✅ Row Edit - HEMA DETAILS ekakma
+type RowEditData = {
+  date: string;
+  machine: string;
+  diesel: string;
+  amount: string;
+  payable: string;
+  paid: string;
+  balance: string;
+};
 
 const DIESEL_API = "/api/expences/diesel";
 const EMPTY_SUMMARY: DieselSummary = { diesel: 0, amount: 0, payable: 0, paid: 0, balance: 0 };
@@ -50,7 +61,19 @@ export default function DieselExpensesPage({ params }: PageProps) {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
   const [showSummary, setShowSummary] = useState(false);
+
+  // ✅ INLINE EDIT - Row eka thulama
+  const [editingRowId, setEditingRowId] = useState<string | null>(null);
+  const [rowEditData, setRowEditData] = useState<RowEditData>({
+    date: "", machine: "", diesel: "", amount: "", payable: "", paid: "", balance: "",
+  });
+  const [isRowSaving, setIsRowSaving] = useState(false);
+
+  // ✅ DELETE
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const loadRecords = useCallback(async () => {
     if (!branchId || branchId === "[id]") { setLoading(false); return; }
@@ -79,6 +102,117 @@ export default function DieselExpensesPage({ params }: PageProps) {
     document.body.style.overflow = showSummary ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };
   }, [showSummary]);
+
+  // ✅ DELETE
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    try {
+      setIsDeleting(true); setError("");
+      const res = await fetch(`${DIESEL_API}?id=${encodeURIComponent(deleteId)}&branch_id=${encodeURIComponent(branchId)}&branchId=${encodeURIComponent(branchId)}`, { method: "DELETE", cache: "no-store" });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok || result.success === false) throw new Error(result.error || result.details || "Failed to delete record.");
+      if (editingRowId === deleteId) handleCancelRowEdit();
+      setDeleteId(null);
+      setSuccessMessage("Diesel expense record deleted successfully.");
+      window.setTimeout(() => setSuccessMessage(""), 3000);
+      await loadRecords();
+    } catch (err: any) {
+      setError(err.message || "Failed to delete record.");
+      setDeleteId(null);
+    } finally { setIsDeleting(false); }
+  };
+
+  // ✅ INLINE EDIT - Row eka thulama
+  const emptyRowEdit = (): RowEditData => ({
+    date: "", machine: "", diesel: "", amount: "", payable: "", paid: "", balance: "",
+  });
+
+  const handleEditRow = (record: DieselExpense) => {
+    setEditingRowId(String(record.id));
+    setRowEditData({
+      date: dateOnly(record.date) || new Date().toISOString().split("T")[0],
+      machine: record.machine || "",
+      diesel: String(record.diesel ?? ""),
+      amount: String(record.amount ?? ""),
+      payable: String(record.payable ?? record.amount ?? ""),
+      paid: String(record.paid ?? ""),
+      balance: String(record.balance ?? Math.max(0, numeric(record.payable ?? record.amount) - numeric(record.paid))),
+    });
+    setError(""); setSuccessMessage("");
+  };
+
+  const handleCancelRowEdit = () => {
+    setEditingRowId(null);
+    setRowEditData(emptyRowEdit());
+  };
+
+  const handleRowInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setRowEditData((prev) => {
+      const next = { ...prev, [name]: value };
+      // ✅ Payable / Paid wenas kalama Balance auto suggest karanawa - eth athin wenas karannath puluwan
+      if (name === "payable" || name === "paid") {
+        const payable = Number(name === "payable" ? value : prev.payable) || 0;
+        const paid = Number(name === "paid" ? value : prev.paid) || 0;
+        next.balance = String(Math.max(0, payable - paid));
+      }
+      // ✅ Amount wenas kalama Payable ekath auto fill wenawa - eth athin wenas karannath puluwan
+      if (name === "amount") {
+        next.payable = value;
+        const paid = Number(prev.paid) || 0;
+        next.balance = String(Math.max(0, (Number(value) || 0) - paid));
+      }
+      return next;
+    });
+    setError("");
+  };
+
+  // ✅ Row eke thulama Save
+  const handleSaveRow = async () => {
+    if (!editingRowId) return;
+    const machine = rowEditData.machine.trim();
+    const date = rowEditData.date;
+    const diesel = Number(rowEditData.diesel);
+    const amount = Number(rowEditData.amount);
+    const payable = Number(rowEditData.payable);
+    const paid = Number(rowEditData.paid);
+    const balance = Number(rowEditData.balance);
+
+    if (!machine) { setError("Machine eka danna ona."); return; }
+    if (!date) { setError("Date eka danna ona."); return; }
+    if (diesel < 0 || amount < 0 || payable < 0 || paid < 0) { setError("Diesel / Amount / Payable / Paid 0 ta wada adu karanna ba."); return; }
+    if (paid > payable) { setError("Paid, Payable ta wada wadi karanna ba."); return; }
+
+    try {
+      setIsRowSaving(true); setError("");
+      const res = await fetch(DIESEL_API, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingRowId,
+          branchId: branchId,
+          branch_id: branchId,
+          date,
+          machine,
+          diesel,
+          amount,
+          payable,
+          paid,
+          balance,
+        }),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok || result.success === false) throw new Error(result.error || result.details || "Failed to update record.");
+      setEditingRowId(null);
+      setRowEditData(emptyRowEdit());
+      setSuccessMessage(`Updated: ${machine} | ${formatDiesel(diesel)} L | Amount ${formatMoney(amount)} | Paid ${formatMoney(paid)} | Balance ${formatMoney(balance)}`);
+      window.setTimeout(() => setSuccessMessage(""), 4000);
+      await loadRecords();
+    } catch (err: any) {
+      console.error("Save diesel error:", err);
+      setError(err.message || "Failed to update record.");
+    } finally { setIsRowSaving(false); }
+  };
 
   const machineList = useMemo(() => {
     const machines = records.map(r => r.machine).filter(Boolean) as string[];
@@ -129,6 +263,9 @@ export default function DieselExpensesPage({ params }: PageProps) {
     router.push(`/dashboard/branches/${encodeURIComponent(branchId)}/view-expences/diesel/${encodeURIComponent(String(record.id))}`);
   };
 
+  const deleteItem = records.find((x) => String(x.id) === String(deleteId));
+  const inputCls = "w-full px-2 py-2 bg-slate-950 border border-amber-500/50 rounded-lg text-slate-100 text-xs focus:border-amber-400 focus:outline-none";
+
   return (
     <main className="min-h-screen bg-[#070a12] p-4 font-sans text-slate-200 md:p-6 lg:p-8">
       <div className="mx-auto max-w-7xl">
@@ -151,6 +288,7 @@ export default function DieselExpensesPage({ params }: PageProps) {
           </div>
         </header>
 
+        {successMessage && (<div className="mb-6 flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400"><CheckCircle2 size={16} /> {successMessage}</div>)}
         {error && (<div className="mb-6 flex items-center justify-between rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400"><span>{error}</span><button type="button" onClick={loadRecords} className="font-bold underline">Retry</button></div>)}
 
         <section className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -169,7 +307,41 @@ export default function DieselExpensesPage({ params }: PageProps) {
             </div>
           </div>
           {loading ? (<div className="flex min-h-[280px] flex-col items-center justify-center gap-3 text-sm text-slate-500"><Loader2 size={28} className="animate-spin text-cyan-400" />Loading...</div>) : filteredRecords.length === 0 ? (<div className="flex min-h-[280px] flex-col items-center justify-center gap-3 text-center text-sm text-slate-500"><Fuel size={30} className="text-slate-700" /><p>No records found for selected filter.</p></div>) : (
-            <div className="overflow-x-auto"><table className="w-full min-w-[1150px]"><thead><tr className="border-b border-slate-800 bg-[#0a1020] text-left text-[10px] font-bold uppercase tracking-wider text-slate-500"><th className="px-5 py-4">Branch ID</th><th className="px-5 py-4">Date</th><th className="px-5 py-4">Machine</th><th className="px-5 py-4 text-right">Diesel</th><th className="px-5 py-4 text-right">Amount</th><th className="px-5 py-4 text-right">Payable</th><th className="px-5 py-4 text-right">Paid</th><th className="px-5 py-4 text-right">Balance</th><th className="px-5 py-4 text-center">Action</th></tr></thead><tbody className="divide-y divide-slate-800/70">{filteredRecords.map((record, index) => (<tr key={record.id ?? `${record.date}-${record.machine}-${index}`} className="transition hover:bg-cyan-500/[0.08]"><td className="px-5 py-4 text-xs text-slate-400">{record.branch_id ?? branchId}</td><td className="whitespace-nowrap px-5 py-4 text-xs text-slate-300">{formatDate(record.date)}</td><td className="px-5 py-4 text-sm font-bold text-white">{record.machine || "-"}</td><td className="px-5 py-4 text-right text-sm font-semibold text-cyan-400">{formatDiesel(record.diesel)} L</td><td className="px-5 py-4 text-right text-sm text-slate-200">{formatMoney(numeric(record.amount))}</td><td className="px-5 py-4 text-right text-sm text-amber-400">{formatMoney(numeric(record.payable ?? record.amount))}</td><td className="px-5 py-4 text-right text-sm text-emerald-400">{formatMoney(numeric(record.paid))}</td><td className="px-5 py-4 text-right text-sm font-bold text-rose-400">{formatMoney(numeric(record.balance))}</td><td className="px-5 py-4 text-center"><button type="button" onClick={() => openRecordDetail(record)} className="flex items-center gap-1.5 mx-auto rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-cyan-400 transition hover:bg-cyan-500 hover:text-slate-950"><Eye size={12} /> View</button></td></tr>))}</tbody><tfoot><tr className="border-t border-slate-700 bg-[#0a1020] text-sm font-bold"><td colSpan={3} className="px-5 py-4 text-slate-400">Filtered Total</td><td className="px-5 py-4 text-right text-cyan-400">{formatDiesel(summary.diesel)} L</td><td className="px-5 py-4 text-right text-white">{formatMoney(summary.amount)}</td><td className="px-5 py-4 text-right text-amber-400">{formatMoney(summary.payable)}</td><td className="px-5 py-4 text-right text-emerald-400">{formatMoney(summary.paid)}</td><td className="px-5 py-4 text-right text-rose-400">{formatMoney(summary.balance)}</td><td /></tr></tfoot></table></div>)}
+            <div className="overflow-x-auto"><table className="w-full min-w-[1150px]"><thead><tr className="border-b border-slate-800 bg-[#0a1020] text-left text-[10px] font-bold uppercase tracking-wider text-slate-500"><th className="px-5 py-4">Branch ID</th><th className="px-5 py-4">Date</th><th className="px-5 py-4">Machine</th><th className="px-5 py-4 text-right">Diesel</th><th className="px-5 py-4 text-right">Amount</th><th className="px-5 py-4 text-right">Payable</th><th className="px-5 py-4 text-right">Paid</th><th className="px-5 py-4 text-right">Balance</th><th className="px-5 py-4 text-center">Action</th></tr></thead><tbody className="divide-y divide-slate-800/70">{filteredRecords.map((record, index) => {
+              const isEditingRow = String(editingRowId) === String(record.id);
+
+              // ✅ EDIT MODE - HEMA DETAILS EKAKMA ROW EKE THULAMA
+              if (isEditingRow) {
+                return (
+                  <tr key={record.id ?? `${record.date}-${record.machine}-${index}`} className="bg-amber-500/10 border-2 border-amber-500/40 align-top">
+                    <td className="px-5 py-4 text-xs text-slate-400">{record.branch_id ?? branchId}</td>
+                    <td className="px-2 py-2"><input type="date" name="date" value={rowEditData.date} onChange={handleRowInputChange} className={inputCls} /></td>
+                    <td className="px-2 py-2">
+                      <select name="machine" value={rowEditData.machine} onChange={handleRowInputChange} className={inputCls}>
+                        <option value="">Select Machine</option>
+                        {["Breker Machine","Compressor","CAT","Tractor","Loader","Meegahakuta"].map((m) => (<option key={m} value={m}>{m}</option>))}
+                        {machineList.filter(m => !["Breker Machine","Compressor","CAT","Tractor","Loader","Meegahakuta"].includes(m)).map((m) => (<option key={m} value={m}>{m}</option>))}
+                        {rowEditData.machine && !machineList.includes(rowEditData.machine) && !["Breker Machine","Compressor","CAT","Tractor","Loader","Meegahakuta"].includes(rowEditData.machine) && (<option value={rowEditData.machine}>{rowEditData.machine}</option>)}
+                      </select>
+                    </td>
+                    <td className="px-2 py-2"><input type="number" step="0.01" name="diesel" value={rowEditData.diesel} onChange={handleRowInputChange} className={inputCls} placeholder="L" /></td>
+                    <td className="px-2 py-2"><input type="number" step="0.01" name="amount" value={rowEditData.amount} onChange={handleRowInputChange} className={inputCls} /></td>
+                    <td className="px-2 py-2"><input type="number" step="0.01" name="payable" value={rowEditData.payable} onChange={handleRowInputChange} className={inputCls} /></td>
+                    <td className="px-2 py-2"><input type="number" step="0.01" name="paid" value={rowEditData.paid} onChange={handleRowInputChange} className={inputCls} /></td>
+                    <td className="px-2 py-2"><input type="number" step="0.01" name="balance" value={rowEditData.balance} onChange={handleRowInputChange} className={inputCls} /></td>
+                    <td className="px-2 py-2 text-center">
+                      <div className="flex flex-col gap-1.5 min-w-[110px]">
+                        <button type="button" onClick={handleSaveRow} disabled={isRowSaving} className="inline-flex items-center justify-center gap-1 rounded-lg bg-emerald-600 px-2 py-2 text-[10px] font-bold text-white hover:bg-emerald-500 disabled:opacity-50">{isRowSaving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Save</button>
+                        <button type="button" onClick={handleCancelRowEdit} disabled={isRowSaving} className="inline-flex items-center justify-center gap-1 rounded-lg bg-slate-700 px-2 py-2 text-[10px] font-bold text-white hover:bg-slate-600"><X size={12} /> Cancel</button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              }
+
+              // ✅ NORMAL ROW - Oyage kalin code eka ehema ma
+              return (<tr key={record.id ?? `${record.date}-${record.machine}-${index}`} className="transition hover:bg-cyan-500/[0.08]"><td className="px-5 py-4 text-xs text-slate-400">{record.branch_id ?? branchId}</td><td className="whitespace-nowrap px-5 py-4 text-xs text-slate-300">{formatDate(record.date)}</td><td className="px-5 py-4 text-sm font-bold text-white">{record.machine || "-"}</td><td className="px-5 py-4 text-right text-sm font-semibold text-cyan-400">{formatDiesel(record.diesel)} L</td><td className="px-5 py-4 text-right text-sm text-slate-200">{formatMoney(numeric(record.amount))}</td><td className="px-5 py-4 text-right text-sm text-amber-400">{formatMoney(numeric(record.payable ?? record.amount))}</td><td className="px-5 py-4 text-right text-sm text-emerald-400">{formatMoney(numeric(record.paid))}</td><td className="px-5 py-4 text-right text-sm font-bold text-rose-400">{formatMoney(numeric(record.balance))}</td><td className="px-5 py-4 text-center"><div className="flex items-center justify-center gap-1.5 flex-wrap"><button type="button" onClick={() => openRecordDetail(record)} className="flex items-center gap-1.5 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-cyan-400 transition hover:bg-cyan-500 hover:text-slate-950"><Eye size={12} /> View</button><button type="button" onClick={() => handleEditRow(record)} className="inline-flex items-center gap-1 rounded-lg border border-blue-500/30 bg-blue-500/10 px-2 py-2 text-[10px] font-bold text-blue-400 hover:bg-blue-600 hover:text-white"><Pencil size={11} />Edit</button><button type="button" onClick={() => setDeleteId(String(record.id))} className="inline-flex items-center gap-1 rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-2 text-[10px] font-bold text-red-400 hover:bg-red-600 hover:text-white"><Trash2 size={11} />Delete</button></div></td></tr>);
+            })}</tbody><tfoot><tr className="border-t border-slate-700 bg-[#0a1020] text-sm font-bold"><td colSpan={3} className="px-5 py-4 text-slate-400">Filtered Total</td><td className="px-5 py-4 text-right text-cyan-400">{formatDiesel(summary.diesel)} L</td><td className="px-5 py-4 text-right text-white">{formatMoney(summary.amount)}</td><td className="px-5 py-4 text-right text-amber-400">{formatMoney(summary.payable)}</td><td className="px-5 py-4 text-right text-emerald-400">{formatMoney(summary.paid)}</td><td className="px-5 py-4 text-right text-rose-400">{formatMoney(summary.balance)}</td><td /></tr></tfoot></table></div>)}
         </section>
       </div>
 
@@ -218,6 +390,28 @@ export default function DieselExpensesPage({ params }: PageProps) {
               <button type="button" onClick={() => window.print()} className="rounded-xl border border-slate-700 px-4 py-2.5 text-xs font-bold text-slate-300 hover:bg-slate-800">Print</button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* ✅ DELETE Confirm Modal */}
+      {deleteId && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm" onClick={() => !isDeleting && setDeleteId(null)}>
+          <div className="w-full max-w-sm rounded-2xl border border-red-500/40 bg-[#0d1527] p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3">
+              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-red-500/15 text-red-400"><AlertTriangle size={20} /></span>
+              <div><p className="font-black text-white uppercase">Delete Record?</p><p className="text-[11px] text-slate-400">Me action eka undo karanna ba.</p></div>
+            </div>
+            {deleteItem && (
+              <div className="rounded-xl bg-slate-950 border border-slate-800 p-3 text-[11px] space-y-1">
+                <p>Machine: <b className="text-white">{deleteItem.machine || "-"}</b> • Date: <b className="text-white">{formatDate(deleteItem.date)}</b></p>
+                <p>Diesel: <b className="text-cyan-400">{formatDiesel(deleteItem.diesel)} L</b> • Amount: <b className="text-amber-400">{formatMoney(numeric(deleteItem.amount))}</b> • Paid: <b className="text-emerald-400">{formatMoney(numeric(deleteItem.paid))}</b></p>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <button onClick={() => setDeleteId(null)} disabled={isDeleting} className="flex-1 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold text-white">Cancel</button>
+              <button onClick={handleDelete} disabled={isDeleting} className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-500 rounded-xl font-bold text-white flex items-center justify-center gap-2 disabled:opacity-50">{isDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />} Yes, Delete</button>
+            </div>
           </div>
         </div>
       )}

@@ -90,13 +90,121 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// ✅ ALUTH - PUT : Row eke thulama Edit kalama Save wenna
+// NOTE: balance kiyala column ekak diesel_expenses eke NA - balance = payable - paid walin Frontend eke hadenawa.
+// Eka nisa balance eka DB eke save karanne na - payable / paid witharak update karanawa.
+// POST eke wage amount = payable widiyata thiyagannawa - nathnam Total Amount / Payable dekak wenas wenawa.
+export async function PUT(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const {
+      id,
+      branchId,
+      branch_id,
+      date,
+      machine,
+      diesel,
+      amount,
+      payable,
+      paid,
+    } = body;
+
+    if (!id) {
+      return NextResponse.json({ success: false, error: "Record ID is required." }, { status: 400 });
+    }
+
+    // ✅ Thiyena record eka gannawa
+    const [existingRows]: any = await db.execute(
+      `SELECT * FROM diesel_expenses WHERE id = ?`,
+      [id]
+    );
+    const old = Array.isArray(existingRows) ? existingRows[0] : null;
+    if (!old) {
+      return NextResponse.json({ success: false, error: "Record not found." }, { status: 404 });
+    }
+
+    // ✅ branch check - wena branch ekaka record ekak update wena eka nawaththanawa
+    const finalBranchId = branchId || branch_id;
+    if (finalBranchId && Number(old.branch_id) !== Number(finalBranchId)) {
+      return NextResponse.json({ success: false, error: "Branch mismatch." }, { status: 403 });
+    }
+
+    const finalDate = date || old.date;
+    const finalMachine = machine?.trim() ? machine.trim() : old.machine;
+    const finalDiesel = diesel !== undefined ? Number(diesel) : Number(old.diesel || 0);
+    const finalPayable = payable !== undefined ? Number(payable) : Number(old.payable ?? old.amount ?? 0);
+    // ✅ POST eke wage amount = payable - Total Amount / Payable dekama ekata thiyagannawa
+    const finalAmount = amount !== undefined ? Number(amount) : finalPayable;
+    const finalPaid = paid !== undefined ? Number(paid) : Number(old.paid || 0);
+
+    if (!finalMachine) {
+      return NextResponse.json({ success: false, error: "Machine eka danna ona." }, { status: 400 });
+    }
+    if (!finalDate) {
+      return NextResponse.json({ success: false, error: "Date eka danna ona." }, { status: 400 });
+    }
+    if (finalDiesel < 0 || finalAmount < 0 || finalPayable < 0 || finalPaid < 0) {
+      return NextResponse.json({ success: false, error: "Diesel / Amount / Payable / Paid 0 ta wada adu karanna ba." }, { status: 400 });
+    }
+    if (finalPaid > finalPayable) {
+      return NextResponse.json({ success: false, error: "Paid, Payable ta wada wadi karanna ba." }, { status: 400 });
+    }
+
+    await db.execute(
+      `UPDATE diesel_expenses SET
+        date = ?,
+        machine = ?,
+        diesel = ?,
+        amount = ?,
+        payable = ?,
+        paid = ?
+       WHERE id = ?`,
+      [finalDate, finalMachine, finalDiesel, finalAmount, finalPayable, finalPaid, id]
+    );
+
+    // ✅ Update wuna record eka aye gannawa - GET eke wage
+    const [updatedRows]: any = await db.execute(
+      `SELECT id, branch_id, DATE_FORMAT(date, '%Y-%m-%d') AS date, machine, diesel, amount, payable, paid
+       FROM diesel_expenses WHERE id = ?`,
+      [id]
+    );
+    const updated = Array.isArray(updatedRows) ? updatedRows[0] : null;
+
+    return NextResponse.json({ success: true, data: updated }, { status: 200 });
+  } catch (error: any) {
+    console.error("PUT DIESEL ERROR:", error);
+    return NextResponse.json(
+      { success: false, error: "Failed to update record.", details: error?.message },
+      { status: 500 }
+    );
+  }
+}
+
+// ✅ FIX - DELETE : success + branch check + not found check
 export async function DELETE(request: NextRequest) {
   try {
-    const id = new URL(request.url).searchParams.get("id");
-    if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
-    await db.execute("DELETE FROM diesel_expenses WHERE id =?", [id]);
-    return NextResponse.json({ message: "Deleted" });
-  } catch (error) {
-    return NextResponse.json({ error: "Failed to delete" }, { status: 500 });
+    const url = new URL(request.url);
+    const id = url.searchParams.get("id");
+    const branchId = url.searchParams.get("branch_id") || url.searchParams.get("branchId");
+
+    if (!id) return NextResponse.json({ success: false, error: "ID required" }, { status: 400 });
+
+    let q = `DELETE FROM diesel_expenses WHERE id = ?`;
+    const params: any[] = [id];
+    // branchId awoth ekatath check karanawa - wena branch ekaka record ekak delete wena eka nawaththanawa
+    if (branchId) {
+      q += ` AND branch_id = ?`;
+      params.push(Number(branchId));
+    }
+
+    const [result]: any = await db.execute(q, params);
+    if (result.affectedRows === 0) {
+      return NextResponse.json({ success: false, error: "Record not found." }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true, message: "Deleted" }, { status: 200 });
+  } catch (error: any) {
+    console.error("DELETE DIESEL ERROR:", error);
+    return NextResponse.json({ success: false, error: "Failed to delete", details: error?.message }, { status: 500 });
   }
 }
