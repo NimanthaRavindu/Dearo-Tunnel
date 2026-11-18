@@ -384,7 +384,7 @@ export default function ViewOtherExpensesPage({
               <option value="Construction Repair">Construction Repair</option>
               <option value="Loading Expenses">Loading Expenses</option>
               <option value="Breker Expenses">Breker Expenses</option>
-              <option value="Other Expenses">Other Expenses</option>
+              <option value="Other Expenses">Other Payments</option>
             </select>
 
             <div className="relative">
@@ -570,7 +570,7 @@ export default function ViewOtherExpensesPage({
                       );
                     }
 
-                    // ✅ NORMAL ROW - Oyage kalin code eka ehema ma
+                    
                     return (
                       <tr
                         key={item.id?? index}
