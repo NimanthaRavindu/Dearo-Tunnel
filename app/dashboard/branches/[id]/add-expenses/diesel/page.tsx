@@ -18,7 +18,6 @@ export default function DieselExpensesPage() {
   const [expenses, setExpenses] = useState<DieselExpense[]>([]);
   const [loading, setLoading] = useState(false); const [saving, setSaving] = useState(false); const [savingInitial, setSavingInitial] = useState(false);
   const [initialDieselStock, setInitialDieselStock] = useState(0); const [initialTotalAmount, setInitialTotalAmount] = useState(0);
-  // ✅ initial_date - diesel_stock table eke thiyena eka
   const [initialDate, setInitialDate] = useState<string | null>(null);
   const [tempInitialDiesel, setTempInitialDiesel] = useState(""); const [tempInitialAmount, setTempInitialAmount] = useState("");
   const [tempInitialDate, setTempInitialDate] = useState(new Date().toISOString().slice(0,10));
@@ -44,9 +43,8 @@ export default function DieselExpensesPage() {
       if (data.summary) {
         const d = Number(data.summary.totalDiesel || 0); const a = Number(data.summary.totalAmount || 0);
         setInitialDieselStock(d); setInitialTotalAmount(a); setIsInitialSet(d > 0 || a > 0);
-        setInitialDate(data.summary.initialDate || null); // ✅ diesel_stock.initial_date
+        setInitialDate(data.summary.initialDate || null);
       }
-      // ✅ History ekath GET ekenma enawa
       if (Array.isArray(data.history)) {
         setInitialHistory(data.history.map((h: any) => ({
           id: h.id, date: String(h.stock_date || "").slice(0,10),
@@ -56,7 +54,6 @@ export default function DieselExpensesPage() {
     } catch (e) { console.error(e); } finally { setLoading(false); }
   };
 
-  // ✅ FIX - Eka ma route eken history gannawa
   const loadInitialHistory = async () => {
     if (!branchId) return;
     try {
@@ -81,7 +78,6 @@ export default function DieselExpensesPage() {
 
   const resetForm = () => { setSelectedMachine(""); setOtherMachine(""); setDate(""); setDiesel(""); setPayable(""); setPaid(""); };
 
-  // ✅ FIX - Initial Add eka - Date ekka, Eka ma route eken
   const handleAddInitial = async () => {
     const d = Number(tempInitialDiesel); const a = Number(tempInitialAmount);
     if (!d || d <= 0) return alert("Enter Initial Diesel");
@@ -107,7 +103,6 @@ export default function DieselExpensesPage() {
     } catch (e) { alert((e as Error).message); } finally { setSavingInitial(false); }
   };
 
-  // ✅ FIX - Past Add - Eka ma route eken, action: add_past - Total wadi karanne na
   const handleAddPastInitial = async () => {
     const d = Number(pastDiesel); const a = Number(pastAmount);
     if (!pastDate) return alert("Date eka denna");
@@ -122,9 +117,8 @@ export default function DieselExpensesPage() {
     } catch (e) { alert((e as Error).message); } finally { setSavingPast(false); }
   };
 
-  // ✅ FIX - Delete ekath eka ma route eken
   const handleDeletePast = async (id?: number) => {
-    if (!id || !confirm("Me past entry eka ain karannada?")) return;
+    if (!id || id === 0 || !confirm("Me past entry eka ain karannada?")) return;
     await fetch(`/api/expences/diesel?id=${id}&branch_id=${branchId}&type=history`, { method: "DELETE" });
     await loadInitialHistory();
   };
@@ -157,20 +151,35 @@ export default function DieselExpensesPage() {
   const displayRemainingDiesel = Math.max(0, displayTotalDiesel - displayDieselUsed);
   const displayRemainingBalance = displayRemainingDiesel * DIESEL_PRICE;
 
+  // ✅ FIX 1 - History huss nam diesel_stock eke 745L eka ma ek row ekak widihata pennanawa
+  // Oya photo eke "Thama History na" kiyala thibba thena dan 745L eka penawa
+  const effectiveHistory: InitialAdd[] = useMemo(() => {
+    if (initialHistory.length === 0 && initialDieselStock > 0) {
+      return [{
+        id: 0, // 0 kiyanne diesel_stock eken awe, history table eken newei - delete ba
+        date: initialDate || new Date().toISOString().slice(0,10),
+        diesel: initialDieselStock,
+        amount: initialTotalAmount,
+      }];
+    }
+    return initialHistory;
+  }, [initialHistory, initialDieselStock, initialTotalAmount, initialDate]);
+
   const initialByDate = useMemo(() => {
     const map = new Map<string, { date: string; diesel: number; amount: number; count: number; ids: (number|undefined)[] }>();
-    initialHistory.forEach((h) => {
+    effectiveHistory.forEach((h) => {
       const d = String(h.date || "").slice(0,10);
       const cur = map.get(d) || { date: d, diesel: 0, amount: 0, count: 0, ids: [] };
       cur.diesel += numberValue(h.diesel); cur.amount += numberValue(h.amount); cur.count += 1; cur.ids.push(h.id);
       map.set(d, cur);
     });
     return Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date));
-  }, [initialHistory]);
+  }, [effectiveHistory]);
 
   const filteredInitialByDate = useMemo(() => initialByDate.filter(r => !initialFilterDate || r.date === initialFilterDate), [initialByDate, initialFilterDate]);
-  const totalInitialHistoryDiesel = useMemo(() => initialHistory.reduce((s, h) => s + numberValue(h.diesel), 0), [initialHistory]);
-  const totalInitialHistoryAmount = useMemo(() => initialHistory.reduce((s, h) => s + numberValue(h.amount), 0), [initialHistory]);
+  // ✅ FIX 2 - History Total ekath effectiveHistory eken gannawa - 0.00 wenne na
+  const totalInitialHistoryDiesel = useMemo(() => effectiveHistory.reduce((s, h) => s + numberValue(h.diesel), 0), [effectiveHistory]);
+  const totalInitialHistoryAmount = useMemo(() => effectiveHistory.reduce((s, h) => s + numberValue(h.amount), 0), [effectiveHistory]);
 
   const dateWiseSummary = useMemo(() => {
     const map = new Map<string, { date: string; diesel: number; amount: number; paid: number; count: number; machines: Set<string> }>();
@@ -225,7 +234,6 @@ export default function DieselExpensesPage() {
           <button onClick={() => { loadExpenses(); loadInitialHistory(); }} className="h-11 inline-flex items-center gap-2 rounded-xl border border-slate-600 bg-slate-800 px-5 text-sm font-bold"><RefreshCw size={17} className={loading? "animate-spin" : ""}/>Refresh</button>
         </header>
 
-        {/* ✅ INITIAL STOCK - Date ekka */}
         <section className="rounded-3xl border border-cyan-500/30 bg-slate-900 p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-bold uppercase flex items-center gap-2"><PackagePlus size={18} className="text-cyan-400"/>Initial Stock - Add kalama wadi wenawa</h2>
@@ -233,7 +241,6 @@ export default function DieselExpensesPage() {
               <Eye size={16}/> View
             </button>
           </div>
-          {/* ✅ Date input eka - diesel_stock.initial_date ekata yanawa */}
           <div className="grid gap-4 md:grid-cols-[1fr_1fr_1fr_auto]">
             <Field label="Initial Date"><input type="date" value={tempInitialDate} onChange={e => setTempInitialDate(e.target.value)} className={inputClass}/></Field>
             <Field label="Initial Diesel (L)"><input type="number" value={tempInitialDiesel} onChange={e => setTempInitialDiesel(e.target.value)} placeholder="331" className={inputClass}/></Field>
@@ -314,7 +321,6 @@ export default function DieselExpensesPage() {
             </div>
 
             <div className="max-h-[70vh] overflow-y-auto p-6 space-y-5">
-              {/* ✅ Initial Date eka modal eke udama */}
               {initialDate && (
                 <div className="flex items-center gap-2 rounded-xl border border-cyan-500/20 bg-cyan-500/5 px-4 py-2.5 text-xs">
                   <span className="text-slate-400">Initial Date:</span>
@@ -367,7 +373,8 @@ export default function DieselExpensesPage() {
                       <input type="date" value={initialFilterDate} onChange={e=>setInitialFilterDate(e.target.value)} className="bg-transparent text-xs outline-none" />
                     </div>
                     {initialFilterDate && <button onClick={()=>setInitialFilterDate("")} className="h-9 px-3 rounded-lg bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold flex items-center gap-1"><X size={12}/>Clear</button>}
-                    <span className="rounded-lg bg-cyan-500/15 text-cyan-300 px-2.5 py-1 text-[11px] font-bold">{filteredInitialByDate.length} Days • {initialHistory.length} Adds</span>
+                    {/* ✅ FIX 3 - 0 Days • 0 Adds wenne na, effectiveHistory eken gannawa */}
+                    <span className="rounded-lg bg-cyan-500/15 text-cyan-300 px-2.5 py-1 text-[11px] font-bold">{filteredInitialByDate.length} Days • {effectiveHistory.length} Adds</span>
                   </div>
                 </div>
 
@@ -402,12 +409,13 @@ export default function DieselExpensesPage() {
                       <tbody className="divide-y divide-slate-800/70">
                         {filteredInitialByDate.map((row) => (
                           <tr key={row.date} className="hover:bg-slate-800/40">
-                            <td className="px-4 py-3 font-bold">{row.date}</td>
+                            <td className="px-4 py-3 font-bold">{row.date} {row.ids.includes(0) && <span className="ml-1 rounded bg-cyan-500/20 text-cyan-300 px-1.5 py-0.5 text-[9px]">CURRENT STOCK</span>}</td>
                             <td className="px-4 py-3 text-center"><span className="rounded-lg bg-slate-800 px-2 py-1 text-[11px] font-bold">{row.count}</span></td>
                             <td className="px-4 py-3 text-right font-bold text-cyan-300">{formatNumber(row.diesel)} L</td>
                             <td className="px-4 py-3 text-right font-bold">Rs. {formatNumber(row.amount)}</td>
                             <td className="px-4 py-3 text-right">
-                              {row.count === 1 && <button onClick={() => handleDeletePast(row.ids[0])} className="h-7 w-7 inline-flex items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20"><Trash2 size={13}/></button>}
+                              {/* ✅ diesel_stock eken apu row eka delete karanna ba */}
+                              {row.count === 1 && row.ids[0] !== 0 && row.ids[0] !== undefined && <button onClick={() => handleDeletePast(row.ids[0])} className="h-7 w-7 inline-flex items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20"><Trash2 size={13}/></button>}
                             </td>
                           </tr>
                         ))}
@@ -415,7 +423,7 @@ export default function DieselExpensesPage() {
                       <tfoot className="bg-slate-900">
                         <tr className="font-black">
                           <td className="px-4 py-3 text-slate-400">Total (History)</td>
-                          <td className="px-4 py-3 text-center">{initialHistory.length}</td>
+                          <td className="px-4 py-3 text-center">{effectiveHistory.length}</td>
                           <td className="px-4 py-3 text-right text-cyan-300">{formatNumber(totalInitialHistoryDiesel)} L</td>
                           <td className="px-4 py-3 text-right">Rs. {formatNumber(totalInitialHistoryAmount)}</td>
                           <td></td>
