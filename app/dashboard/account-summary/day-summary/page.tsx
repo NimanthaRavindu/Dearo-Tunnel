@@ -32,7 +32,6 @@ const EXPENSE_DEFS = [
 ] as const;
 type ExpenseKey = typeof EXPENSE_DEFS[number]["key"];
 
-// ✅ Salary page eke fields - total_payable / expense_date
 const getPayable = (r: any) => numeric(
   r.total_payable ?? r.totalPayable ?? r.payable ?? r.payable_amount ?? r.payableAmount ??
   r.amount ?? r.total_amount ?? r.totalAmount ?? r.total ?? r.value ??
@@ -57,7 +56,6 @@ export default function DaySummaryPage() {
   const [allDates, setAllDates] = useState<string[]>([]);
   const [expenseRows, setExpenseRows] = useState<any[]>([]);
   const [allExpensesRaw, setAllExpensesRaw] = useState<any[]>([]);
-  const [debug, setDebug] = useState<any>({ salaryCount: 0, otherCount: 0, dieselCount: 0, capitalCount: 0, salesExpCount: 0, salarySample: null, otherSample: null, ids: [] });
 
   const fetchAll = useCallback(async () => {
     setIsLoading(true);
@@ -87,7 +85,7 @@ export default function DaySummaryPage() {
       });
       setSummaryRows(normalizedSummary);
 
-      // ---------- 2. Branches - 1 request witharai ----------
+      // ---------- 2. Branches ----------
       let branchList: any[] = [];
       const bData = await fetchOne(`/api/branch`);
       if (bData.length > 0) branchList = bData.map((b: any) => ({ id: String(b.id ?? b.branch_id ?? b.branchId), branch_name: b.branchName || b.bName || b.branch_name || b.name || `Branch ${b.id ?? b.branch_id}` }));
@@ -102,7 +100,7 @@ export default function DaySummaryPage() {
       const ids = Array.from(new Set([...branchList.map((b: any) => String(b.id)), ...normalizedSummary.map((r: any) => String(r.branchId))])).filter(Boolean);
       const getName = (id: any) => branchList.find((x: any) => String(x.id) === String(id))?.branch_name || normalizedSummary.find((x: any) => String(x.branchId) === String(id))?.branchName || `Branch ${id}`;
 
-      // ---------- 3. Credits - SEQUENTIAL, ekapara 1i ----------
+      // ---------- 3. Credits ----------
       let allCredits: any[] = [];
       const creditsNoBranch = await fetchOne(`/api/expences/sales-credits`);
       if (creditsNoBranch.length > 0) {
@@ -118,17 +116,13 @@ export default function DaySummaryPage() {
       // ---------- 4. ✅ FIXED - Expenses ----------
       let allExpenses: any[] = [];
       for (const api of EXPENSE_DEFS) {
-
-        // ✅ SALES EXP walata witharak - wenama handle
-        // Hari URL: /api/expenses/sales (expences newei) + branchId oni
-        // Me API eka branchId nathuwa [] denawa, e nisa mulinma branchId nathuwa try karanne na
         if (api.key === "salesExp") {
           for (const id of ids) {
             const rows = await fetchOne(`/api/expenses/sales?branchId=${encodeURIComponent(id)}`);
             rows.forEach((r: any) => {
               allExpenses.push({
                 ...r,
-                _branchId: String(id), // me API eken branch_id enne na
+                _branchId: String(id),
                 _branchName: getName(String(id)),
                 _type: "salesExp" as ExpenseKey,
               });
@@ -137,20 +131,15 @@ export default function DaySummaryPage() {
           continue;
         }
 
-        // Anith ewa - Salary / Other / Diesel / Capital
-        // Step 1: branchId nathuwa try karanawa
         const rowsNoBranch = await fetchOne(`/api/expences/${api.path}`);
-
         if (rowsNoBranch.length > 0) {
           rowsNoBranch.forEach((r: any) => {
             const realBid = getRecordBranchId(r, ids[0] ?? "1");
             allExpenses.push({ ...r, _branchId: realBid, _branchName: getName(realBid), _type: api.key as ExpenseKey });
           });
         } else {
-          // Step 2: E Type eka 0 nam - e Type eka witharak per-branch SEQUENTIAL
           for (const id of ids) {
             let branchRows = await fetchOne(`/api/expences/${api.path}?branchId=${encodeURIComponent(id)}`);
-            // branchId walin 0 nam branch_id walinuth try karanawa (Diesel wage API walata)
             if (branchRows.length === 0) {
               branchRows = await fetchOne(`/api/expences/${api.path}?branch_id=${encodeURIComponent(id)}`);
             }
@@ -162,7 +151,6 @@ export default function DaySummaryPage() {
         }
       }
 
-      // Duplicate ain karanawa
       const seen = new Set<string>();
       allExpenses = allExpenses.filter((r: any) => {
         const k = `${r._type}|${r.id ?? ""}|${r._branchId}|${getPayable(r)}|${getExpDate(r)}`;
@@ -172,16 +160,8 @@ export default function DaySummaryPage() {
       });
 
       setAllExpensesRaw(allExpenses);
-      const salaryOnly = allExpenses.filter((r: any) => r._type === "salary");
-      const otherOnly = allExpenses.filter((r: any) => r._type === "other");
-      const dieselOnly = allExpenses.filter((r: any) => r._type === "diesel");
-      const capitalOnly = allExpenses.filter((r: any) => r._type === "capital");
-      // ✅ FIXED - kalin "sales" kiyala thibba, hari eka "salesExp"
-      const salesExpOnly = allExpenses.filter((r: any) => r._type === "salesExp");
-      setDebug({ salaryCount: salaryOnly.length, otherCount: otherOnly.length, dieselCount: dieselOnly.length, capitalCount: capitalOnly.length, salesExpCount: salesExpOnly.length, salarySample: salaryOnly[0] || null, otherSample: otherOnly[0] || null, ids });
-      console.log("DEBUG IDS:", ids, "SALARY:", salaryOnly.length, salaryOnly[0], "OTHER:", otherOnly.length, otherOnly[0], "CAPITAL:", capitalOnly.length, capitalOnly[0], "SALES_EXP:", salesExpOnly.length, salesExpOnly[0]);
 
-      // ---------- 5. Expense rows - date nathnam ain karanne na ----------
+      // ---------- 5. Expense rows ----------
       const expMap = new Map<string, any>();
       const latestDateForBranch = new Map<string, string>();
       normalizedSummary.forEach((r: any) => {
@@ -267,7 +247,6 @@ export default function DaySummaryPage() {
   const totalCreditFromCreditors = useMemo(() => creditorRows.reduce((t, r) => t + numeric(r.credit_amount), 0), [creditorRows]);
   const totalBills = useMemo(() => dayRows.reduce((t, r) => t + r.count, 0), [dayRows]);
 
-  // ✅ FIX - Totals DIRECT allExpenses walin - date grouping waradi unath Total hari
   const filteredExpensesForTotal = useMemo(() => allExpensesRaw.filter((r: any) => {
     if (branchFilter !== "all" && String(r._branchId) !== branchFilter) return false;
     if (date !== "all") {
@@ -307,14 +286,6 @@ export default function DaySummaryPage() {
             <button onClick={fetchAll} className="rounded-xl bg-amber-500 px-4 py-2.5 font-bold text-black hover:bg-amber-400">Refresh</button>
             <button onClick={exportCSV} className="flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 font-bold text-black hover:bg-slate-200"><Download size={14} /> Export CSV</button>
           </div>
-        </div>
-
-        <div className="rounded-2xl border border-yellow-500/40 bg-yellow-500/10 p-4 text-[11px] break-all">
-          <p className="font-black text-yellow-300">DEBUG</p>
-          <p>IDs used: {JSON.stringify(debug.ids)}</p>
-          <p>Salary: {debug.salaryCount} | Other: {debug.otherCount} | Diesel: {debug.dieselCount} | Capital: {debug.capitalCount} | SalesExp: {debug.salesExpCount}</p>
-          <p>Salary sample: {JSON.stringify(debug.salarySample)}</p>
-          <p>Other sample: {JSON.stringify(debug.otherSample)}</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/[0.06] bg-[#0B1226] p-4">
