@@ -1,576 +1,383 @@
 "use client";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
+import { Calendar, Wallet, CreditCard, Building2, Loader2, Search, Download, Phone, Car, Receipt, TrendingDown, Scale } from "lucide-react";
 
-import React, { use, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { AlertCircle, ArrowLeft, Calendar, FileText, RefreshCw, Search, ShieldCheck, User, X, Trash2, AlertTriangle, Loader2, CheckCircle2, Pencil, Save } from "lucide-react";
+const fmt = (n: number) => `LKR ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+const numeric = (v: any) => Number(v ?? 0) || 0;
 
-interface PageProps {
-  params: Promise<{ id: string }>;
-}
-
-type SalaryEntry = {
-  id?: number | string;
-  employee_name?: string;
-  employee_id?: number | string;
-  reason?: string;
-  total_payable?: number | string;
-  total_paid?: number | string;
-  balance?: number | string;
-  expense_date?: string;
-  date?: string;
+// ✅ Salary page eke EXACT parse eka ma - Array nam eka, nathnam data / rows
+const parseLikeSalaryPage = (result: any): any[] => {
+  if (Array.isArray(result)) return result;
+  if (Array.isArray(result?.data)) return result.data;
+  if (Array.isArray(result?.rows)) return result.rows;
+  if (Array.isArray(result?.expenses)) return result.expenses;
+  if (Array.isArray(result?.records)) return result.records;
+  return [];
 };
 
-type SalarySummary = {
-  payable: number;
-  paid: number;
-  balance: number;
+// ✅ Salary page eke EXACT fetch eka ma - branchId witharai, cache no-store witharai
+const fetchLikeSalaryPage = async (url: string): Promise<any[]> => {
+  try {
+    const response = await fetch(url, { cache: "no-store" });
+    if (!response.ok) return [];
+    const result = await response.json();
+    return parseLikeSalaryPage(result);
+  } catch { return []; }
 };
 
-// ✅ Row Edit - HEMA DETAILS ekakma
-type RowEditData = {
-  employee_id:string;
-  employee_name: string;
-  reason: string;
-  total_payable: string;
-  total_paid: string;
-  balance: string;
-  expense_date: string;
-};
+const EXPENSE_DEFS = [
+  { key: "salary", path: "salary" },
+  { key: "other", path: "other" },
+  { key: "diesel", path: "diesel" },
+  { key: "capital", path: "capital" },
+  { key: "salesExp", path: "sales" },
+] as const;
+type ExpenseKey = typeof EXPENSE_DEFS[number]["key"];
 
-const EMPTY_SALARY_SUMMARY: SalarySummary = {
-  payable: 0,
-  paid: 0,
-  balance: 0,
-};
+// ✅ Salary page eke fields - total_payable / expense_date
+const getPayable = (r: any) => numeric(
+  r.total_payable ?? r.totalPayable ?? r.payable ?? r.payable_amount ??
+  r.amount ?? r.total_amount ?? r.totalAmount ?? r.total ?? r.value ??
+  r.salary_amount ?? r.net_salary ?? r.other_amount ?? r.diesel_amount ?? r.expense_amount ?? r.cost ?? r.price ?? 0
+);
 
-function money(value: unknown): string {
-  return Number(value ?? 0).toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
+const getExpDate = (r: any) => String(
+  r.expense_date || r.date || r.expenseDate || r.created_date || r.created_at || r.updated_at || ""
+).slice(0, 10);
 
-function entryDate(item: SalaryEntry): string {
-  return String(item.expense_date || item.date || "").slice(0, 10);
-}
-
-export default function ViewSalaryExpensesPage({
-  params,
-}: PageProps) {
-  const router = useRouter();
-  const routeParams = use(params);
-  const branchId = routeParams?.id ? decodeURIComponent(routeParams.id) : "";
-
-  const [data, setData] = useState<SalaryEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedDate, setSelectedDate] = useState("");
+export default function DaySummaryPage() {
+  const [date, setDate] = useState("all");
+  const [branchFilter, setBranchFilter] = useState("all");
   const [search, setSearch] = useState("");
-  const [showSummary, setShowSummary] = useState(false);
-  const [error, setError] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [summaryRows, setSummaryRows] = useState<any[]>([]);
+  const [credits, setCredits] = useState<any[]>([]);
+  const [branches, setBranches] = useState<any[]>([]);
+  const [showCreditors, setShowCreditors] = useState(true);
+  const [allDates, setAllDates] = useState<string[]>([]);
+  const [expenseRows, setExpenseRows] = useState<any[]>([]);
+  const [allExpensesRaw, setAllExpensesRaw] = useState<any[]>([]);
+  const [debug, setDebug] = useState<any>({ salaryCount: 0, otherCount: 0, dieselCount: 0, capitalCount: 0, salesExpCount: 0, salarySample: null, otherSample: null, ids: [] });
 
-  // ✅ INLINE EDIT - Row eka thulama
-  const [editingRowId, setEditingRowId] = useState<string | null>(null);
-  const [rowEditData, setRowEditData] = useState<RowEditData>({
-      employee_id:"",employee_name: "", reason: "", total_payable: "", total_paid: "", balance: "", expense_date: "",
-  });
-  const [isRowSaving, setIsRowSaving] = useState(false);
-
-  // ✅ DELETE states
-  const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-
-  const fetchSalaryLogs = async () => {
-    if (!branchId || branchId === "[id]") { setLoading(false); return; }
+  const fetchAll = useCallback(async () => {
+    setIsLoading(true);
     try {
-      setLoading(true);
-      setError("");
-      const response = await fetch(
-        `/api/expences/salary?branchId=${encodeURIComponent(branchId)}`,
-        { cache: "no-store" },
-      );
-      if (!response.ok) throw new Error("Failed to load salary expenses.");
-      const result = await response.json();
-      setData(Array.isArray(result) ? result : result.data || result.rows || []);
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Unable to load salary expenses.");
-      setData([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+      // ---------- 1. Summary (Sales Incomes) - kalin widiyama ----------
+      const summaryRes = await fetch(`/api/expences/sales-incomes?summary=true${date !== "all" ? `&date=${encodeURIComponent(date)}` : ""}`, { cache: "no-store" });
+      const summaryJson = await summaryRes.json().catch(() => null);
+      const summaryData: any[] = Array.isArray(summaryJson) ? summaryJson : (Array.isArray(summaryJson?.data) ? summaryJson.data : []);
+      const datesFromAll = summaryData.map((r: any) => String(r.date || "").slice(0, 10)).filter(Boolean);
+      const uniqDates = Array.from(new Set(datesFromAll)).sort().reverse().slice(0, 15) as string[];
+      setAllDates(uniqDates);
 
-  useEffect(() => { fetchSalaryLogs(); }, [branchId]);
-
-
-  const handleDelete = async () => {
-    if (!deleteId) return;
-    try {
-      setIsDeleting(true);
-      setError("");
-      const res = await fetch(
-        `/api/expences/salary?id=${encodeURIComponent(deleteId)}&branchId=${encodeURIComponent(branchId)}`,
-        { method: "DELETE", cache: "no-store" }
-      );
-      const result = await res.json().catch(() => ({}));
-      if (!res.ok || result.success === false) throw new Error(result.error || "Failed to delete salary record.");
-      if (editingRowId === deleteId) handleCancelRowEdit();
-      setDeleteId(null);
-      setSuccessMessage("Salary record deleted successfully.");
-      window.setTimeout(() => setSuccessMessage(""), 3000);
-      await fetchSalaryLogs();
-    } catch (err: any) {
-      setError(err.message || "Failed to delete salary record.");
-      setDeleteId(null);
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
-  // ✅ INLINE EDIT - Row eka thulama edit karanna - Hema details ekakma load karanawa
-  const emptyRowEdit = (): RowEditData => ({
-    employee_id:"",employee_name: "", reason: "", total_payable: "", total_paid: "", balance: "", expense_date: "",
-  });
-
-  const handleEditRow = (item: SalaryEntry) => {
-    setEditingRowId(String(item.id));
-    setRowEditData({
-      employee_id:String(item.employee_id ?? ""),
-      employee_name: item.employee_name || "",
-      reason: item.reason || "Monthly salary payout",
-      total_payable: String(item.total_payable ?? ""),
-      total_paid: String(item.total_paid ?? ""),
-      balance: String(item.balance ?? Math.max(0, Number(item.total_payable || 0) - Number(item.total_paid || 0))),
-      expense_date: entryDate(item) || new Date().toISOString().split("T")[0],
-    });
-    setError(""); setSuccessMessage("");
-  };
-
-  const handleCancelRowEdit = () => {
-    setEditingRowId(null);
-    setRowEditData(emptyRowEdit());
-  };
-
-  const handleRowInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setRowEditData((prev) => {
-      const next = { ...prev, [name]: value };
-      // ✅ Payable / Paid wenas kalama Balance auto suggest karanawa - eth athin wenas karannath puluwan
-      if (name === "total_payable" || name === "total_paid") {
-        const payable = Number(name === "total_payable" ? value : prev.total_payable) || 0;
-        const paid = Number(name === "total_paid" ? value : prev.total_paid) || 0;
-        next.balance = String(Math.max(0, payable - paid));
-      }
-      return next;
-    });
-    setError("");
-  };
-
-  // ✅ Row eke thulama Save
-  const handleSaveRow = async () => {
-    if (!editingRowId) return;
-    const employee_name = rowEditData.employee_name.trim();
-    const reason = rowEditData.reason.trim();
-    const total_payable = Number(rowEditData.total_payable);
-    const total_paid = Number(rowEditData.total_paid);
-    const balance = Number(rowEditData.balance);
-    const expense_date = rowEditData.expense_date;
-
-    if (!employee_name) { setError("Employee Name eka danna ona."); return; }
-    if (!rowEditData.employee_id){setError("Employee ID missing.");return;}
-    if (!reason) { setError("Classification Reason eka danna ona."); return; }
-    if (!expense_date) { setError("Date eka danna ona."); return; }
-    if (total_payable < 0 || total_paid < 0) { setError("Payable / Paid 0 ta wada adu karanna ba."); return; }
-    if (total_paid > total_payable) { setError("Total Paid, Total Payable ta wada wadi karanna ba."); return; }
-
-    try {
-      setIsRowSaving(true); setError("");
-      const res = await fetch("/api/expences/salary", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: editingRowId,
-          branchId: branchId,
-          employee_id:rowEditData.employee_id,
-          employeeId:rowEditData.employee_id,
-          branch_id: branchId,
-          employee_name,
-          reason,
-          total_payable,
-          total_paid,
-          balance,
-          expense_date,
-          date: expense_date,
-        }),
+      const normalizedSummary = summaryData.map((r: any) => {
+        const paid = numeric(r.totalPaid ?? r.total_paid ?? r.paid ?? r.paid_amount ?? 0);
+        const credit = numeric(r.totalCredit ?? r.total_credit ?? r.credit ?? r.credit_amount ?? 0);
+        const hasPaidCredit = (r.totalPaid ?? r.total_paid ?? r.paid ?? r.paid_amount ?? r.totalCredit ?? r.total_credit ?? r.credit ?? r.credit_amount) !== undefined;
+        const income = hasPaidCredit ? (paid + credit) : numeric(r.amount ?? r.totalAmount ?? r.total_amount);
+        return {
+          branchId: String(r.branchId ?? r.branch_id ?? ""),
+          branchName: r.branchName || r.branch_name || `Branch ${r.branchId ?? r.branch_id}`,
+          date: String(r.date || "").slice(0, 10),
+          paid: hasPaidCredit ? paid : income,
+          credit: hasPaidCredit ? credit : 0,
+          income, amount: income,
+          discount: numeric(r.totalDiscount ?? r.total_discount ?? r.discount),
+          count: numeric(r.entriesCount ?? r.entries_count ?? 0),
+        };
       });
-      const result = await res.json().catch(() => ({}));
-      if (!res.ok || result.success === false) throw new Error(result.error || "Failed to update salary record.");
-      setEditingRowId(null);
-      setRowEditData(emptyRowEdit());
-      setSuccessMessage(`Updated: ${employee_name} | Payable ${money(total_payable)} | Paid ${money(total_paid)} | Balance ${money(balance)}`);
-      window.setTimeout(() => setSuccessMessage(""), 4000);
-      await fetchSalaryLogs();
-    } catch (err: any) {
-      setError(err.message || "Failed to update salary record.");
-    } finally {
-      setIsRowSaving(false);
-    }
-  };
+      setSummaryRows(normalizedSummary);
 
-  const filteredData = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return data.filter((item) => {
-      const matchesDate = !selectedDate || entryDate(item) === selectedDate;
-      const matchesSearch =
-        !query ||
-        [
-          item.employee_name,
-          item.employee_id,
-          item.reason,
-          item.total_payable,
-          item.total_paid,
-          item.balance,
-          entryDate(item),
-        ].some((value) =>
-          String(value ?? "").toLowerCase().includes(query),
-        );
-      return matchesDate && matchesSearch;
+      // ---------- 2. Branches - Salary page eke branch ID "1" wage - /api/branch mulinma ----------
+      const bRes = await fetch(`/api/branch`, { cache: "no-store" });
+      const bJson = await bRes.json().catch(() => null);
+      const bData: any[] = Array.isArray(bJson) ? bJson : (Array.isArray(bJson?.data) ? bJson.data : (Array.isArray(bJson?.branches) ? bJson.branches : (bJson && typeof bJson === "object" && (bJson.id || bJson.branch_id) ? [bJson] : [])));
+      let branchList = bData.length > 0
+        ? bData.map((b: any) => ({ id: String(b.id ?? b.branch_id ?? b.branchId), branch_name: b.branchName || b.bName || b.branch_name || b.name || `Branch ${b.id ?? b.branch_id}` }))
+        : normalizedSummary.map((r: any) => ({ id: r.branchId, branch_name: r.branchName }));
+      // /api/branches walinuth gannawa - duplicate ain karanawa
+      try {
+        const b2Res = await fetch(`/api/branches`, { cache: "no-store" });
+        const b2Json = await b2Res.json().catch(() => null);
+        const b2Data: any[] = Array.isArray(b2Json) ? b2Json : (Array.isArray(b2Json?.data) ? b2Json.data : []);
+        b2Data.forEach((b: any) => {
+          const id = String(b.id ?? b.branch_id ?? b.branchId);
+          if (id && !branchList.find((x: any) => String(x.id) === id)) branchList.push({ id, branch_name: b.branchName || b.bName || b.branch_name || b.name || `Branch ${id}` });
+        });
+      } catch {}
+      branchList = Array.from(new Map(branchList.map((b: any) => [String(b.id), b])).values());
+      normalizedSummary.forEach((r: any) => {
+        if (!branchList.find((b: any) => String(b.id) === String(r.branchId))) branchList.push({ id: r.branchId, branch_name: r.branchName });
+      });
+      // Salary page eke hari ID eka "1" - nathnam add karanawa
+      if (!branchList.find((b: any) => String(b.id) === "1")) branchList.push({ id: "1", branch_name: normalizedSummary.find((r: any) => String(r.branchId) === "1")?.branchName || "Branch 1" });
+      setBranches(branchList);
+
+      const ids = Array.from(new Set([...branchList.map((b: any) => String(b.id)), ...normalizedSummary.map((r: any) => String(r.branchId))])).filter(Boolean);
+      const getName = (id: any) => branchList.find((x: any) => String(x.id) === String(id))?.branch_name || normalizedSummary.find((x: any) => String(x.branchId) === String(id))?.branchName || `Branch ${id}`;
+
+      // ---------- 3. Credits ----------
+      const creditResults = await Promise.allSettled(ids.map((id: any) => fetchLikeSalaryPage(`/api/expences/sales-credits?branch_id=${encodeURIComponent(id)}`).then((rows) => rows.map((r: any) => ({ ...r, _branchId: id, _branchName: getName(id) })))));
+      const allCredits: any[] = [];
+      creditResults.forEach((res: any) => { if (res.status === "fulfilled") allCredits.push(...res.value); });
+      setCredits(allCredits);
+
+      // ---------- 4. Expenses - Salary page eke EXACT fetch eka ma, branch ekakata - type ekakata ----------
+      let allExpenses: any[] = [];
+      for (const id of ids) {
+        for (const api of EXPENSE_DEFS) {
+          // Salary page eka wage - branchId witharai
+          const rows = await fetchLikeSalaryPage(`/api/expences/${api.path}?branchId=${encodeURIComponent(id)}`);
+          rows.forEach((r: any) => {
+            // Record eke thiyena branch_id eka thiyenawa nam eka, nathnam fetch karapu ID eka
+            const realBid = String(r.branchId ?? r.branch_id ?? r.branch ?? id);
+            allExpenses.push({ ...r, _branchId: realBid, _branchName: getName(realBid), _type: api.key as ExpenseKey });
+          });
+        }
+      }
+
+      // ---------- 5. FALLBACK - Branch walin 0 nam, branchId nathuwa okkoma gannawa ----------
+      if (allExpenses.length === 0) {
+        for (const api of EXPENSE_DEFS) {
+          const rows = await fetchLikeSalaryPage(`/api/expences/${api.path}`);
+          rows.forEach((r: any) => {
+            const realBid = String(r.branchId ?? r.branch_id ?? r.branch ?? ids[0] ?? "1");
+            allExpenses.push({ ...r, _branchId: realBid, _branchName: getName(realBid), _type: api.key as ExpenseKey });
+          });
+        }
+      }
+
+      setAllExpensesRaw(allExpenses);
+
+      const salaryOnly = allExpenses.filter((r: any) => r._type === "salary");
+      const otherOnly = allExpenses.filter((r: any) => r._type === "other");
+      const dieselOnly = allExpenses.filter((r: any) => r._type === "diesel");
+      const capitalOnly = allExpenses.filter((r: any) => r._type === "capital");
+      const salesExpOnly = allExpenses.filter((r: any) => r._type === "salesExp");
+      setDebug({ salaryCount: salaryOnly.length, otherCount: otherOnly.length, dieselCount: dieselOnly.length, capitalCount: capitalOnly.length, salesExpCount: salesExpOnly.length, salarySample: salaryOnly[0] || null, otherSample: otherOnly[0] || null, ids });
+      console.log("DEBUG IDS:", ids);
+      console.log("DEBUG SALARY:", salaryOnly.length, salaryOnly[0]);
+      console.log("DEBUG OTHER:", otherOnly.length, otherOnly[0]);
+      console.log("DEBUG DIESEL:", dieselOnly.length, dieselOnly[0]);
+      console.log("DEBUG CAPITAL:", capitalOnly.length, capitalOnly[0]);
+      console.log("DEBUG SALES_EXP:", salesExpOnly.length, salesExpOnly[0]);
+
+      // ---------- 6. Expense rows - date eka nathnam ain karanne na, branch eke aluthma date ekata dannawa ----------
+      const expMap = new Map<string, any>();
+      const latestDateForBranch = new Map<string, string>();
+      normalizedSummary.forEach((r: any) => {
+        const cur = latestDateForBranch.get(String(r.branchId));
+        if (!cur || String(r.date) > cur) latestDateForBranch.set(String(r.branchId), String(r.date));
+      });
+      allExpenses.forEach((r: any) => {
+        let d = getExpDate(r);
+        if (!d) d = date !== "all" ? date : (latestDateForBranch.get(String(r._branchId)) || uniqDates[0] || "");
+        if (!d) return;
+        // Date filter eka thiyenawa nam e date eke witharak gannawa
+        if (date !== "all" && d !== date) return;
+        const key = `${d}|${String(r._branchId)}`;
+        if (!expMap.has(key)) expMap.set(key, { key, date: d, branchId: String(r._branchId), branchName: r._branchName, salary: 0, other: 0, diesel: 0, capital: 0, salesExp: 0 });
+        const row = expMap.get(key);
+        const val = getPayable(r);
+        if (r._type === "salary") row.salary += val;
+        else if (r._type === "other") row.other += val;
+        else if (r._type === "diesel") row.diesel += val;
+        else if (r._type === "capital") row.capital += val;
+        else if (r._type === "salesExp") row.salesExp += val;
+      });
+      setExpenseRows(Array.from(expMap.values()));
+    } finally { setIsLoading(false); }
+  }, [date]);
+
+  useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  const getBranchName = (r: any) => r._branchName || r.branch_name || "-";
+  const getBranchKey = (r: any) => String(r._branchId || r.branch_id || r.branchId || "");
+  const getCreditDateStr = (r: any) => String(r.created_date || r.date || r.created_at || "").slice(0, 10);
+  const isBranch = (r: any) => branchFilter === "all" || getBranchKey(r) === branchFilter;
+  const branchOptions = useMemo(() => branches.map((b: any) => ({ id: String(b.id), name: b.branch_name })), [branches]);
+
+  const creditorRows = useMemo(() => {
+    let list = credits.filter(r => {
+      if (date !== "all" && getCreditDateStr(r) !== date) return false;
+      if (!isBranch(r)) return false;
+      if (numeric(r.credit_amount) <= 0) return false;
+      if (search) {
+        const s = search.toLowerCase();
+        if (!String(r.customer_name || "").toLowerCase().includes(s) && !String(r.bill_number || "").toLowerCase().includes(s) && !String(r.vehicle_number || "").toLowerCase().includes(s) && !getBranchName(r).toLowerCase().includes(s)) return false;
+      }
+      return true;
     });
-  }, [data, selectedDate, search]);
+    return list.sort((a, b) => numeric(b.credit_amount) - numeric(a.credit_amount));
+  }, [credits, date, branchFilter, search]);
 
-  const summary = useMemo<SalarySummary>(() => {
-    return filteredData.reduce<SalarySummary>(
-      (total, item) => ({
-        payable: total.payable + Number(item.total_payable || 0),
-        paid: total.paid + Number(item.total_paid || 0),
-        balance: total.balance + Number(item.balance || 0),
-      }),
-      EMPTY_SALARY_SUMMARY,
-    );
-  }, [filteredData]);
+  const dayRows = useMemo(() => {
+    const map = new Map<string, any>();
+    summaryRows.forEach(r => {
+      if (branchFilter !== "all" && String(r.branchId) !== branchFilter) return;
+      const key = `${r.date}|${r.branchId}`;
+      if (!map.has(key)) map.set(key, { key, branchId: String(r.branchId), branchName: r.branchName, date: r.date, paid: 0, income: 0, amount: 0, discount: 0, credit: 0, count: 0, salary: 0, other: 0, diesel: 0, capital: 0, salesExp: 0 });
+      const row = map.get(key);
+      row.paid += numeric(r.paid); row.credit += numeric(r.credit); row.income += numeric(r.income); row.amount += numeric(r.amount); row.discount += r.discount; row.count += r.count;
+    });
+    expenseRows.forEach(r => {
+      if (branchFilter !== "all" && String(r.branchId) !== branchFilter) return;
+      if (date !== "all" && r.date !== date) return;
+      const key = `${r.date}|${r.branchId}`;
+      if (!map.has(key)) map.set(key, { key, branchId: String(r.branchId), branchName: r.branchName, date: r.date, paid: 0, income: 0, amount: 0, discount: 0, credit: 0, count: 0, salary: 0, other: 0, diesel: 0, capital: 0, salesExp: 0 });
+      const row = map.get(key);
+      row.salary += numeric(r.salary); row.other += numeric(r.other); row.diesel += numeric(r.diesel); row.capital += numeric(r.capital); row.salesExp += numeric(r.salesExp);
+    });
+    creditorRows.forEach(r => {
+      const k = getBranchKey(r);
+      if (branchFilter !== "all" && k !== branchFilter) return;
+      const d = getCreditDateStr(r);
+      const key = `${d}|${k}`;
+      if (!map.has(key)) map.set(key, { key, branchId: k, branchName: getBranchName(r), date: d, paid: 0, income: 0, amount: 0, discount: 0, credit: 0, count: 0, salary: 0, other: 0, diesel: 0, capital: 0, salesExp: 0 });
+    });
+    return Array.from(map.values()).map(r => {
+      const totalIncome = numeric(r.paid) + numeric(r.credit);
+      const totalExpenses = numeric(r.salary) + numeric(r.other) + numeric(r.diesel) + numeric(r.capital) + numeric(r.salesExp);
+      return { ...r, totalIncome, totalExpenses, netBalance: totalIncome - totalExpenses };
+    }).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  }, [summaryRows, creditorRows, branchFilter, expenseRows, date]);
 
-  const clearFilters = () => {
-    setSelectedDate("");
-    setSearch("");
+  const totalPaid = useMemo(() => dayRows.reduce((t, r) => t + numeric(r.paid), 0), [dayRows]);
+  const totalCredit = useMemo(() => dayRows.reduce((t, r) => t + numeric(r.credit), 0), [dayRows]);
+  const totalIncome = useMemo(() => totalPaid + totalCredit, [totalPaid, totalCredit]);
+  const totalDiscount = useMemo(() => dayRows.reduce((t, r) => t + r.discount, 0), [dayRows]);
+  const totalCreditFromCreditors = useMemo(() => creditorRows.reduce((t, r) => t + numeric(r.credit_amount), 0), [creditorRows]);
+  const totalBills = useMemo(() => dayRows.reduce((t, r) => t + r.count, 0), [dayRows]);
+
+  // ✅ FIX - Totals direct allExpenses walin - date grouping waradi unath Total hari yanawa
+  // Date filter eka thiyenawa nam e date eke witharak, branch filter eka thiyenawa nam e branch eke witharak
+  const filteredExpensesForTotal = useMemo(() => allExpensesRaw.filter((r: any) => {
+    if (branchFilter !== "all" && String(r._branchId) !== branchFilter) return false;
+    if (date !== "all") {
+      const d = getExpDate(r);
+      if (d && d !== date) return false;
+      // Date eka nathnam - eka ain karanne na, eka thiyenne e date ekata kiyala hithanawa
+    }
+    return true;
+  }), [allExpensesRaw, branchFilter, date]);
+  const totalSalary = useMemo(() => filteredExpensesForTotal.filter((r: any) => r._type === "salary").reduce((t, r) => t + getPayable(r), 0), [filteredExpensesForTotal]);
+  const totalOther = useMemo(() => filteredExpensesForTotal.filter((r: any) => r._type === "other").reduce((t, r) => t + getPayable(r), 0), [filteredExpensesForTotal]);
+  const totalDiesel = useMemo(() => filteredExpensesForTotal.filter((r: any) => r._type === "diesel").reduce((t, r) => t + getPayable(r), 0), [filteredExpensesForTotal]);
+  const totalCapital = useMemo(() => filteredExpensesForTotal.filter((r: any) => r._type === "capital").reduce((t, r) => t + getPayable(r), 0), [filteredExpensesForTotal]);
+  const totalSalesExp = useMemo(() => filteredExpensesForTotal.filter((r: any) => r._type === "salesExp").reduce((t, r) => t + getPayable(r), 0), [filteredExpensesForTotal]);
+  const totalExpenses = useMemo(() => totalSalary + totalOther + totalDiesel + totalCapital + totalSalesExp, [totalSalary, totalOther, totalDiesel, totalCapital, totalSalesExp]);
+  const netBalance = useMemo(() => totalIncome - totalExpenses, [totalIncome, totalExpenses]);
+
+  const exportCSV = () => {
+    const head = "Date,Branch,Total Paid,Discount,Total Credit,Total Income,Total Salary,Total Other,Total Diesel,Total Capital,Total Sales Exp,Total Expenses,Net Balance";
+    const body = [...dayRows.map(r => [r.date, `"${r.branchName}"`, r.paid, r.discount, r.credit, r.totalIncome, r.salary, r.other, r.diesel, r.capital, r.salesExp, r.totalExpenses, r.netBalance].join(",")), `Total,,${totalPaid},${totalDiscount},${totalCredit},${totalIncome},${totalSalary},${totalOther},${totalDiesel},${totalCapital},${totalSalesExp},${totalExpenses},${netBalance}`].join("\n");
+    const blob = new Blob([head + "\n" + body], { type: "text/csv" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `day-summary-${date}.csv`; a.click();
   };
 
-  const deleteItem = data.find((x) => String(x.id) === String(deleteId));
-  const inputCls = "w-full px-2 py-2 bg-slate-950 border border-amber-500/50 rounded-lg text-slate-100 text-xs focus:border-amber-400 focus:outline-none";
-
   return (
-    <main className="min-h-screen bg-[#070a12] p-4 text-slate-300 antialiased md:p-6 lg:p-8">
-      <div className="mx-auto max-w-7xl">
-        <header className="mb-6 flex flex-col justify-between gap-4 border-b border-slate-900 pb-5 xl:flex-row xl:items-center">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => router.back()}
-              className="rounded-lg border border-slate-800 bg-slate-900 p-2 text-slate-400 transition hover:text-white"
-            >
-              <ArrowLeft size={16} />
-            </button>
-            <div>
-              <h1 className="font-mono text-sm font-bold uppercase tracking-wider text-slate-100">
-                Salary Expenditure Ledger
-              </h1>
-              <p className="mt-1 text-[10px] uppercase text-slate-500">
-                Scope Node ID: {branchId}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <div className="relative">
-              <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(event) => setSelectedDate(event.target.value)}
-                className="rounded-lg border border-slate-800 bg-slate-50 py-2 pl-9 pr-3 text-xs text-slate-900 outline-none focus:border-amber-500"
-              />
-            </div>
-
-            <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-              <input
-                type="search"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search employee..."
-                className="rounded-lg border border-slate-800 bg-slate-950 py-2 pl-9 pr-3 text-xs text-slate-300 outline-none focus:border-amber-500"
-              />
-            </div>
-
-            {(selectedDate || search) && (
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="flex items-center justify-center rounded-lg border border-slate-800 px-3 text-xs text-slate-400 transition hover:text-white"
-                aria-label="Clear filters"
-              >
-                <X size={14} />
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="flex items-center justify-center gap-2 rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-slate-300 transition hover:text-amber-400"
-            >
-              <RefreshCw size={14} />
-              Refresh
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setShowSummary(true)}
-              className="rounded-lg border border-purple-500/30 bg-purple-500/10 px-3 py-2 text-xs font-bold text-purple-400 transition hover:bg-purple-500/20"
-            >
-              <FileText size={13} className="mr-1 inline" />
-              View Summary
-            </button>
-          </div>
-        </header>
-
-        {successMessage && (
-          <div className="mb-5 flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm text-emerald-400">
-            <CheckCircle2 size={16} /> {successMessage}
-          </div>
-        )}
-
-        {error && (
-          <div className="mb-5 rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-400">
-            {error}
-          </div>
-        )}
-
-        <section className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <SummaryCard title="Total Payable" value={money(summary.payable)} color="amber" />
-          <SummaryCard title="Total Paid" value={money(summary.paid)} color="emerald" />
-          <SummaryCard title="Outstanding Balance" value={money(summary.balance)} color="rose" />
-        </section>
-
-        <section className="overflow-hidden rounded-xl border border-slate-900 bg-slate-900/10 shadow-2xl">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1050px] text-left">
-              <thead>
-                <tr className="border-b border-slate-900 bg-slate-950/80 font-mono text-[10px] uppercase tracking-wider text-slate-400">
-                  <th className="p-4">Employee Name</th>
-                  <th className="p-4">Classification Reason</th>
-                  <th className="p-4 text-right">Total Payable</th>
-                  <th className="p-4 text-right">Total Paid</th>
-                  <th className="p-4 text-right">Balance</th>
-                  <th className="p-4">Date</th>
-                  <th className="p-4 text-center">Actions</th>
-                </tr>
-              </thead>
-
-              <tbody className="divide-y divide-slate-900/40 text-[11px]">
-                {loading ? (
-                  <tr><td colSpan={7} className="p-12 text-center text-slate-500">Loading salary records...</td></tr>
-                ) : filteredData.length === 0 ? (
-                  <tr><td colSpan={7} className="p-12 text-center text-slate-600"><AlertCircle size={18} className="mx-auto mb-2" />No salary records found.</td></tr>
-                ) : (
-                  filteredData.map((item, index) => {
-                    const balance = Number(item.balance || 0);
-                    const settled = balance <= 0;
-                    const isEditingRow = String(editingRowId) === String(item.id);
-
-                    // ✅ EDIT MODE - HEMA DETAILS EKAKMA ROW EKE THULAMA INPUT
-                    if (isEditingRow) {
-                      return (
-                        <tr key={item.id ?? index} className="bg-amber-500/10 border-2 border-amber-500/40 align-top">
-                          <td className="p-2">
-                            <input name="employee_name" value={rowEditData.employee_name} onChange={handleRowInputChange} className={inputCls} placeholder="Employee Name" />
-                          </td>
-                          <td className="p-2">
-                            <input name="reason" value={rowEditData.reason} onChange={handleRowInputChange} className={inputCls} placeholder="Monthly structural salary payout" />
-                          </td>
-                          <td className="p-2">
-                            <input type="number" step="0.01" name="total_payable" value={rowEditData.total_payable} onChange={handleRowInputChange} className={inputCls} />
-                          </td>
-                          <td className="p-2">
-                            <input type="number" step="0.01" name="total_paid" value={rowEditData.total_paid} onChange={handleRowInputChange} className={inputCls} />
-                          </td>
-                          <td className="p-2">
-                            <input type="number" step="0.01" name="balance" value={rowEditData.balance} onChange={handleRowInputChange} className={inputCls} />
-                          </td>
-                          <td className="p-2">
-                            <input type="date" name="expense_date" value={rowEditData.expense_date} onChange={handleRowInputChange} className={inputCls} />
-                          </td>
-                          <td className="p-2 text-center">
-                            <div className="flex flex-col gap-1.5 min-w-[110px]">
-                              <button type="button" onClick={handleSaveRow} disabled={isRowSaving} className="inline-flex items-center justify-center gap-1 rounded bg-emerald-600 px-2 py-2 text-[10px] font-bold text-white hover:bg-emerald-500 disabled:opacity-50">
-                                {isRowSaving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Save
-                              </button>
-                              <button type="button" onClick={handleCancelRowEdit} disabled={isRowSaving} className="inline-flex items-center justify-center gap-1 rounded bg-slate-700 px-2 py-2 text-[10px] font-bold text-white hover:bg-slate-600">
-                                <X size={12} /> Cancel
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    }
-
-                    // ✅ NORMAL ROW - Oyage kalin code eka ehema ma
-                    return (
-                      <tr key={item.id ?? index} className="transition hover:bg-slate-900/30">
-                        <td className="p-4">
-                          <div className="flex items-center gap-2 font-semibold text-slate-200">
-                            <User size={13} className="text-slate-600" />
-                            {item.employee_name || `ID: ${item.employee_id || "UNKNOWN"}`}
-                          </div>
-                        </td>
-                        <td className="p-4 text-slate-400">{item.reason || "Monthly salary payout"}</td>
-                        <td className="p-4 text-right text-slate-300">{money(item.total_payable)}</td>
-                        <td className="p-4 text-right text-emerald-400">{money(item.total_paid)}</td>
-                        <td className="p-4 text-right">
-                          {settled ? (
-                            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-[9px] font-bold text-emerald-400"><ShieldCheck size={10} />SETTLED</span>
-                          ) : (
-                            <span className="font-bold text-amber-400">{money(balance)}</span>
-                          )}
-                        </td>
-                        <td className="whitespace-nowrap p-4 text-slate-300">
-                          <Calendar size={12} className="mr-2 inline text-slate-100" />
-                          {entryDate(item) || "-"}
-                        </td>
-                        <td className="p-4 text-center">
-                          <div className="flex items-center justify-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => router.push(`/dashboard/branches/${encodeURIComponent(branchId)}/view-expences/salary/${item.id}`)}
-                              className="rounded border border-purple-500/20 bg-purple-500/10 px-2 py-1 text-[10px] font-bold text-purple-400 transition hover:bg-purple-600 hover:text-white"
-                            >
-                              <FileText size={11} className="mr-1 inline" />View Summary
-                            </button>
-                            {/* ✅ Edit - Row eka thulama edit wenawa */}
-                            <button
-                              type="button"
-                              onClick={() => handleEditRow(item)}
-                              className="inline-flex items-center gap-1 rounded border border-blue-500/30 bg-blue-500/10 px-2 py-1 text-[10px] font-bold text-blue-400 transition hover:bg-blue-600 hover:text-white"
-                            >
-                              <Pencil size={11} />Edit
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setDeleteId(String(item.id))}
-                              className="inline-flex items-center gap-1 rounded border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] font-bold text-red-400 transition hover:bg-red-600 hover:text-white"
-                            >
-                              <Trash2 size={11} />Delete
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-
-              {!loading && filteredData.length > 0 && (
-                <tfoot>
-                  <tr className="border-t border-slate-800 bg-slate-950/70 font-bold">
-                    <td colSpan={2} className="p-4 text-slate-400">Filtered Total</td>
-                    <td className="p-4 text-right text-amber-400">{money(summary.payable)}</td>
-                    <td className="p-4 text-right text-emerald-400">{money(summary.paid)}</td>
-                    <td className="p-4 text-right text-rose-400">{money(summary.balance)}</td>
-                    <td colSpan={2} />
-                  </tr>
-                </tfoot>
-              )}
-            </table>
-          </div>
-        </section>
-      </div>
-
-      {showSummary && (
-        <SummaryModal
-          title="Salary Expense Summary"
-          count={filteredData.length}
-          values={[
-            ["Total Payable", money(summary.payable)],
-            ["Total Paid", money(summary.paid)],
-            ["Outstanding Balance", money(summary.balance)],
-          ]}
-          onClose={() => setShowSummary(false)}
-        />
-      )}
-
-      {/* ✅ DELETE Confirm Modal */}
-      {deleteId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm" onClick={() => !isDeleting && setDeleteId(null)}>
-          <div className="w-full max-w-sm rounded-2xl border border-red-500/40 bg-[#0d1527] p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center gap-3">
-              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-red-500/15 text-red-400"><AlertTriangle size={20} /></span>
-              <div><p className="font-black text-white uppercase">Delete Salary Record?</p><p className="text-[11px] text-slate-400">Me action eka undo karanna ba.</p></div>
-            </div>
-            {deleteItem && (
-              <div className="rounded-xl bg-slate-950 border border-slate-800 p-3 text-[11px] space-y-1">
-                <p>Employee: <b className="text-white">{deleteItem.employee_name || `ID: ${deleteItem.employee_id}`}</b></p>
-                <p>Date: <b className="text-white">{entryDate(deleteItem) || "-"}</b> • Payable: <b className="text-amber-400">LKR {money(deleteItem.total_payable)}</b> • Paid: <b className="text-emerald-400">LKR {money(deleteItem.total_paid)}</b></p>
-                <p>Reason: <span className="text-slate-300">{deleteItem.reason || "-"}</span></p>
-              </div>
-            )}
-            <div className="flex gap-2">
-              <button onClick={() => setDeleteId(null)} disabled={isDeleting} className="flex-1 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold text-white">Cancel</button>
-              <button onClick={handleDelete} disabled={isDeleting} className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-500 rounded-xl font-bold text-white flex items-center justify-center gap-2 disabled:opacity-50">{isDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />} Yes, Delete</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </main>
-  );
-}
-
-function SummaryCard({
-  title,
-  value,
-  color,
-}: {
-  title: string;
-  value: string;
-  color: "amber" | "emerald" | "rose";
-}) {
-  const colors = {
-    amber: "text-amber-400",
-    emerald: "text-emerald-400",
-    rose: "text-rose-400",
-  };
-  return (
-    <div className="rounded-xl border border-slate-800 bg-[#0d1527] p-5">
-      <p className="text-[10px] uppercase tracking-wider text-slate-500">{title}</p>
-      <p className={`mt-3 text-xl font-black ${colors[color]}`}>{value}</p>
-    </div>
-  );
-}
-
-function SummaryModal({
-  title,
-  count,
-  values,
-  onClose,
-}: {
-  title: string;
-  count: number;
-  values: string[][];
-  onClose: () => void;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-[#0d1527] p-6">
-        <div className="mb-5 flex items-center justify-between border-b border-slate-800 pb-4">
+    <div className="min-h-screen bg-[#060913] p-6 sm:p-10 font-sans text-xs text-slate-100">
+      <div className="mx-auto max-w-6xl space-y-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between border-b border-white/[0.06] pb-6">
           <div>
-            <h2 className="font-mono text-lg font-bold uppercase text-white">{title}</h2>
-            <p className="mt-1 text-xs text-slate-500">{count} records</p>
+            <h1 className="flex items-center gap-2 text-xl sm:text-2xl font-black tracking-wider uppercase">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30"><Receipt size={18} /></span>
+              Day Summary
+            </h1>
+            <p className="mt-1 text-slate-400">Total Income = Total Paid + Total Credit • Net Balance = Total Income - Total Expenses • Payable / Amount walin</p>
+            {allDates.length > 0 && <p className="mt-2 text-[11px] text-slate-300">DB eke data thiyena dates: {allDates.map(d => <button key={d} onClick={() => setDate(d)} className="mx-1 px-2 py-1 bg-slate-800 rounded-lg text-white font-bold hover:bg-emerald-600">{d}</button>)}</p>}
           </div>
-          <button type="button" onClick={onClose} className="text-slate-500 transition hover:text-white" aria-label="Close summary"><X size={18} /></button>
+          <div className="flex gap-2">
+            <button onClick={fetchAll} className="rounded-xl bg-amber-500 px-4 py-2.5 font-bold text-black hover:bg-amber-400">Refresh</button>
+            <button onClick={exportCSV} className="flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 font-bold text-black hover:bg-slate-200"><Download size={14} /> Export CSV</button>
+          </div>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <SummaryCard title="Records" value={String(count)} color="amber" />
-          {values.map(([label, value]) => (
-            <SummaryCard key={label} title={label} value={value} color="emerald" />
-          ))}
+
+        <div className="rounded-2xl border border-yellow-500/40 bg-yellow-500/10 p-4 text-[11px] break-all">
+          <p className="font-black text-yellow-300">DEBUG</p>
+          <p>IDs used: {JSON.stringify(debug.ids)}</p>
+          <p>Salary: {debug.salaryCount} | Other: {debug.otherCount} | Diesel: {debug.dieselCount} | Capital: {debug.capitalCount} | SalesExp: {debug.salesExpCount}</p>
+          <p>Salary sample: {JSON.stringify(debug.salarySample)}</p>
+          <p>Other sample: {JSON.stringify(debug.otherSample)}</p>
         </div>
+
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/[0.06] bg-[#0B1226] p-4">
+          <div className="flex items-center gap-2"><Calendar size={14} className="text-slate-400" />
+            <select value={date} onChange={e => setDate(e.target.value)} className="rounded-xl bg-slate-950 px-3 py-2.5 text-slate-200 ring-1 ring-white/10 focus:outline-none">
+              <option value="all">All Dates</option>
+              {allDates.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+            <input type="date" value={date === "all" ? "" : date} onChange={e => setDate(e.target.value || "all")} className="rounded-xl bg-slate-950 px-3 py-2.5 text-slate-200 ring-1 ring-white/10 focus:outline-none focus:ring-emerald-500/50" />
+          </div>
+          <div className="flex items-center gap-2"><Building2 size={14} className="text-slate-400" />
+            <select value={branchFilter} onChange={e => setBranchFilter(e.target.value)} className="rounded-xl bg-slate-950 px-3 py-2.5 text-slate-200 ring-1 ring-white/10 focus:outline-none">
+              <option value="all">All Branches</option>
+              {branchOptions.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </div>
+          <div className="relative flex-1 min-w-[200px]"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" /><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search creditor / bill / vehicle..." className="w-full rounded-xl bg-slate-950 py-2.5 pl-8 pr-3 ring-1 ring-white/10 focus:outline-none focus:ring-emerald-500/50" /></div>
+        </div>
+
+        {isLoading ? <div className="flex justify-center py-16 text-slate-400"><Loader2 className="animate-spin" /> Loading...</div> : (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+              <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.05] p-5">
+                <p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase flex items-center gap-2"><Wallet size={13} /> Total Paid • {date === "all" ? "All Dates" : date}</p>
+                <p className="mt-3 text-2xl font-black text-emerald-400">{fmt(totalPaid)}</p>
+                <p className="mt-1 text-[10px] text-slate-500">Sales Incomes Total Paid wala ekathuwa • {totalBills} bills • Discount {fmt(totalDiscount)}</p>
+              </div>
+              <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.05] p-5">
+                <p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase flex items-center gap-2"><CreditCard size={13} /> Total Credit • {date === "all" ? "All Dates" : date}</p>
+                <p className="mt-3 text-2xl font-black text-amber-400">{fmt(totalCredit)}</p>
+                <p className="mt-1 text-[10px] text-slate-500">Sales Incomes Total Credit wala ekathuwa • {creditorRows.length} creditors</p>
+              </div>
+              <div className="rounded-2xl border border-white/[0.06] bg-[#0B1226] p-5">
+                <p className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">Total Income • Paid + Credit</p>
+                <p className="mt-3 text-2xl font-black text-white">{fmt(totalIncome)}</p>
+                <p className="mt-1 text-[10px] text-slate-500">Total Paid {fmt(totalPaid)} + Total Credit {fmt(totalCredit)}</p>
+              </div>
+              <div className="rounded-2xl border border-red-500/20 bg-red-500/[0.05] p-5">
+                <p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase flex items-center gap-2"><TrendingDown size={13} /> Total Expenses • {date === "all" ? "All Dates" : date}</p>
+                <p className="mt-3 text-2xl font-black text-red-400">{fmt(totalExpenses)}</p>
+                <p className="mt-1 text-[10px] text-slate-500">Salary {fmt(totalSalary)} • Other {fmt(totalOther)} • Diesel {fmt(totalDiesel)} • Capital {fmt(totalCapital)} • Sales Exp {fmt(totalSalesExp)}</p>
+              </div>
+              <div className={`rounded-2xl border p-5 ${netBalance >= 0 ? "border-emerald-500/20 bg-emerald-500/[0.05]" : "border-red-500/30 bg-red-500/[0.08]"}`}>
+                <p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase flex items-center gap-2"><Scale size={13} /> Net Balance • {date === "all" ? "All Dates" : date}</p>
+                <p className={`mt-3 text-2xl font-black ${netBalance >= 0 ? "text-emerald-400" : "text-red-400"}`}>{fmt(netBalance)}</p>
+                <p className="mt-1 text-[10px] text-slate-500">Total Income {fmt(totalIncome)} - Total Expenses {fmt(totalExpenses)}</p>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-emerald-500/20 bg-[#0B1226] p-5">
+              <h3 className="flex items-center gap-2 font-bold uppercase tracking-wider"><Receipt size={14} className="text-emerald-400" /> Summary • {date === "all" ? "All Dates - Okkoma Data" : date}</h3>
+              {dayRows.length === 0 ? <p className="py-8 text-center text-slate-500">Data na.</p> : (
+                <div className="overflow-x-auto">
+                  <table className="mt-4 w-full text-left min-w-[1400px]">
+                    <thead><tr className="border-b border-white/[0.06] text-[10px] uppercase text-slate-500"><th className="py-3">Date</th><th className="py-3">Branch</th><th className="py-3 text-right">Total Paid</th><th className="py-3 text-right">Discount</th><th className="py-3 text-right">Total Credit</th><th className="py-3 text-right">Total Income</th><th className="py-3 text-right">Total Salary</th><th className="py-3 text-right">Total Other</th><th className="py-3 text-right">Total Diesel</th><th className="py-3 text-right">Total Capital</th><th className="py-3 text-right">Total Sales Exp</th><th className="py-3 text-right">Total Expenses</th><th className="py-3 text-right">Net Balance</th></tr></thead>
+                    <tbody>{dayRows.map(r => (<tr key={r.key} className="border-b border-white/[0.04]"><td className="py-3 font-bold">{r.date}</td><td className="py-3"><p className="font-bold flex items-center gap-2"><Building2 size={13} className="text-cyan-400" /> {r.branchName}</p><p className="text-[10px] text-slate-500">{r.count} bills</p></td><td className="py-3 text-right font-black text-emerald-400">{fmt(r.paid)}</td><td className="py-3 text-right text-amber-400">{fmt(r.discount)}</td><td className="py-3 text-right font-black text-amber-400">{fmt(r.credit)}</td><td className="py-3 text-right font-black text-white">{fmt(r.totalIncome)}</td><td className="py-3 text-right">{fmt(r.salary)}</td><td className="py-3 text-right">{fmt(r.other)}</td><td className="py-3 text-right">{fmt(r.diesel)}</td><td className="py-3 text-right">{fmt(r.capital)}</td><td className="py-3 text-right">{fmt(r.salesExp)}</td><td className="py-3 text-right font-black text-red-400">{fmt(r.totalExpenses)}</td><td className={`py-3 text-right font-black ${r.netBalance >= 0 ? "text-emerald-400" : "text-red-400"}`}>{fmt(r.netBalance)}</td></tr>))}</tbody>
+                    <tfoot><tr className="font-black text-base"><td className="py-4">Total</td><td className="py-4 text-slate-400">{dayRows.length} Rows</td><td className="py-4 text-right text-emerald-400">{fmt(totalPaid)}</td><td className="py-4 text-right text-amber-400">{fmt(totalDiscount)}</td><td className="py-4 text-right text-amber-400">{fmt(totalCredit)}</td><td className="py-4 text-right text-white">{fmt(totalIncome)}</td><td className="py-4 text-right">{fmt(totalSalary)}</td><td className="py-4 text-right">{fmt(totalOther)}</td><td className="py-4 text-right">{fmt(totalDiesel)}</td><td className="py-4 text-right">{fmt(totalCapital)}</td><td className="py-4 text-right">{fmt(totalSalesExp)}</td><td className="py-4 text-right text-red-400">{fmt(totalExpenses)}</td><td className={`py-4 text-right ${netBalance >= 0 ? "text-emerald-400" : "text-red-400"}`}>{fmt(netBalance)}</td></tr></tfoot>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-2xl border border-amber-500/20 bg-[#0B1226] p-5">
+              <div className="flex items-center justify-between">
+                <div><h3 className="flex items-center gap-2 font-bold uppercase tracking-wider"><CreditCard size={14} className="text-amber-400" /> Creditors • {date === "all" ? "All Dates" : date} • {creditorRows.length} Customers</h3><p className="text-[10px] text-slate-500 mt-1">Credit karapu okkoma customer la - Total {fmt(totalCreditFromCreditors)}</p></div>
+                <button onClick={() => setShowCreditors(!showCreditors)} className="px-3 py-2 bg-slate-900 border border-white/10 rounded-xl text-[10px] font-bold">{showCreditors ? "Hide" : "Show"}</button>
+              </div>
+              {showCreditors && (creditorRows.length === 0 ? <p className="py-8 text-center text-slate-500">Creditors la na.</p> : (
+                <div className="overflow-x-auto mt-4">
+                  <table className="w-full text-left min-w-[720px]">
+                    <thead><tr className="border-b border-white/[0.06] text-[10px] uppercase text-slate-500"><th className="py-3">Creditor (Customer)</th><th className="py-3">Branch</th><th className="py-3">Bill No</th><th className="py-3">Product</th><th className="py-3">Promise Date</th><th className="py-3">Credit Amount</th><th className="py-3 text-right">Total</th></tr></thead>
+                    <tbody>{creditorRows.map(r => (<tr key={r.id} className="border-b border-white/[0.04]"><td className="py-3"><p className="font-bold flex items-center gap-2"><span className="w-7 h-7 rounded-full bg-amber-500/15 text-amber-400 flex items-center justify-center font-black">{String(r.customer_name || "?").charAt(0).toUpperCase()}</span>{r.customer_name}</p><p className="text-[10px] text-slate-400 flex items-center gap-1 mt-1"><Phone size={10} /> {r.contact_number || "-"} • <Car size={10} /> {r.vehicle_number || "-"}</p></td><td className="py-3 font-bold">{getBranchName(r)}</td><td className="py-3 font-bold">{r.bill_number || "-"}</td><td className="py-3">{r.product_name || "-"}</td><td className="py-3">{String(r.promise_date || "").slice(0, 10) || "-"}</td><td className="py-3 text-right font-black text-amber-400">{fmt(numeric(r.credit_amount))}</td><td className="py-3 text-right">{fmt(numeric(r.total_amount))}</td></tr>))}</tbody>
+                    <tfoot><tr className="font-black"><td colSpan={5} className="py-3 text-right">Total Credit ({creditorRows.length})</td><td className="py-3 text-right text-amber-400">{fmt(totalCreditFromCreditors)}</td><td /></tr></tfoot>
+                  </table>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
