@@ -88,7 +88,7 @@ export default function DaySummaryPage() {
       });
       setSummaryRows(normalizedSummary);
 
-      // ---------- 2. Branches - 1 request witharai (kalin 2k thibba) ----------
+      // ---------- 2. Branches - 1 request witharai ----------
       let branchList: any[] = [];
       const bData = await fetchOne(`/api/branch`);
       if (bData.length > 0) branchList = bData.map((b: any) => ({ id: String(b.id ?? b.branch_id ?? b.branchId), branch_name: b.branchName || b.bName || b.branch_name || b.name || `Branch ${b.id ?? b.branch_id}` }));
@@ -104,13 +104,11 @@ export default function DaySummaryPage() {
       const getName = (id: any) => branchList.find((x: any) => String(x.id) === String(id))?.branch_name || normalizedSummary.find((x: any) => String(x.branchId) === String(id))?.branchName || `Branch ${id}`;
 
       // ---------- 3. Credits - SEQUENTIAL, ekapara 1i ----------
-      // Mulinma branchId nathuwa 1 parak try karanawa - hari giyoth ekenma iwarai
       let allCredits: any[] = [];
       const creditsNoBranch = await fetchOne(`/api/expences/sales-credits`);
       if (creditsNoBranch.length > 0) {
         allCredits = creditsNoBranch.map((r: any) => ({ ...r, _branchId: getRecordBranchId(r, ids[0] ?? "1"), _branchName: getName(getRecordBranchId(r, ids[0] ?? "1")) }));
       } else {
-        // Nathnam branch ekakata - SEQUENTIAL, Promise.all NA
         for (const id of ids) {
           const rows = await fetchOne(`/api/expences/sales-credits?branch_id=${encodeURIComponent(id)}`);
           rows.forEach((r: any) => allCredits.push({ ...r, _branchId: id, _branchName: getName(id) }));
@@ -118,24 +116,29 @@ export default function DaySummaryPage() {
       }
       setCredits(allCredits);
 
-      // ---------- 4. Expenses - FIX: Mulinma branchId NATHUWA 5 request witharai ----------
-      // Me 5 request walin okkoma branches wala okkoma expenses enawa nam, per-branch fetch one na
+      // ---------- 4. ✅ FIX ADDED - Expenses TYPE ekakata gane ----------
+      // Kalin waradda: allExpenses.length === 0 nam witharak fallback - Capital awoth Salary skip wenawa
+      // Dan: Type ekak 0 nam e Type eka witharak per-branch fetch wenawa
+      // branchId nathuwa -> branchId walin -> branch_id walin - SEQUENTIAL, ekapara 1 request i
       let allExpenses: any[] = [];
       for (const api of EXPENSE_DEFS) {
-        const rows = await fetchOne(`/api/expences/${api.path}`);
-        rows.forEach((r: any) => {
-          const realBid = getRecordBranchId(r, ids[0] ?? "1");
-          allExpenses.push({ ...r, _branchId: realBid, _branchName: getName(realBid), _type: api.key as ExpenseKey });
-        });
-      }
+        // Step 1: branchId nathuwa try karanawa
+        const rowsNoBranch = await fetchOne(`/api/expences/${api.path}`);
 
-      // ---------- 5. FALLBACK - branchId nathuwa 0 nam witharak, per-branch SEQUENTIAL ----------
-      // Promise.all NA - ekapara 1 request i, DB connection 1i
-      if (allExpenses.length === 0) {
-        for (const id of ids) {
-          for (const api of EXPENSE_DEFS) {
-            const rows = await fetchOne(`/api/expences/${api.path}?branchId=${encodeURIComponent(id)}`);
-            rows.forEach((r: any) => {
+        if (rowsNoBranch.length > 0) {
+          rowsNoBranch.forEach((r: any) => {
+            const realBid = getRecordBranchId(r, ids[0] ?? "1");
+            allExpenses.push({ ...r, _branchId: realBid, _branchName: getName(realBid), _type: api.key as ExpenseKey });
+          });
+        } else {
+          // Step 2: E Type eka 0 nam - e Type eka witharak per-branch SEQUENTIAL
+          for (const id of ids) {
+            let branchRows = await fetchOne(`/api/expences/${api.path}?branchId=${encodeURIComponent(id)}`);
+            // branchId walin 0 nam branch_id walinuth try karanawa (Diesel wage API walata)
+            if (branchRows.length === 0) {
+              branchRows = await fetchOne(`/api/expences/${api.path}?branch_id=${encodeURIComponent(id)}`);
+            }
+            branchRows.forEach((r: any) => {
               const realBid = getRecordBranchId(r, String(id));
               allExpenses.push({ ...r, _branchId: realBid, _branchName: getName(realBid), _type: api.key as ExpenseKey });
             });
@@ -143,7 +146,7 @@ export default function DaySummaryPage() {
         }
       }
 
-      // Duplicate ain karanawa - API eken branchId ignore karala okkoma dunna nam duplicate wenawa
+      // Duplicate ain karanawa
       const seen = new Set<string>();
       allExpenses = allExpenses.filter((r: any) => {
         const k = `${r._type}|${r.id ?? ""}|${r._branchId}|${getPayable(r)}|${getExpDate(r)}`;
@@ -157,11 +160,11 @@ export default function DaySummaryPage() {
       const otherOnly = allExpenses.filter((r: any) => r._type === "other");
       const dieselOnly = allExpenses.filter((r: any) => r._type === "diesel");
       const capitalOnly = allExpenses.filter((r: any) => r._type === "capital");
-      const salesExpOnly = allExpenses.filter((r: any) => r._type === "salesExp");
+      const salesExpOnly = allExpenses.filter((r: any) => r._type === "sales");
       setDebug({ salaryCount: salaryOnly.length, otherCount: otherOnly.length, dieselCount: dieselOnly.length, capitalCount: capitalOnly.length, salesExpCount: salesExpOnly.length, salarySample: salaryOnly[0] || null, otherSample: otherOnly[0] || null, ids });
       console.log("DEBUG IDS:", ids, "SALARY:", salaryOnly.length, salaryOnly[0], "OTHER:", otherOnly.length, otherOnly[0], "CAPITAL:", capitalOnly.length, capitalOnly[0]);
 
-      // ---------- 6. Expense rows - date nathnam ain karanne na ----------
+      // ---------- 5. Expense rows - date nathnam ain karanne na ----------
       const expMap = new Map<string, any>();
       const latestDateForBranch = new Map<string, string>();
       normalizedSummary.forEach((r: any) => {
