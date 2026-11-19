@@ -18,19 +18,21 @@ export default function DieselExpensesPage() {
   const [expenses, setExpenses] = useState<DieselExpense[]>([]);
   const [loading, setLoading] = useState(false); const [saving, setSaving] = useState(false); const [savingInitial, setSavingInitial] = useState(false);
   const [initialDieselStock, setInitialDieselStock] = useState(0); const [initialTotalAmount, setInitialTotalAmount] = useState(0);
+  // ✅ initial_date - diesel_stock table eke thiyena eka
+  const [initialDate, setInitialDate] = useState<string | null>(null);
   const [tempInitialDiesel, setTempInitialDiesel] = useState(""); const [tempInitialAmount, setTempInitialAmount] = useState("");
+  const [tempInitialDate, setTempInitialDate] = useState(new Date().toISOString().slice(0,10));
   const [isInitialSet, setIsInitialSet] = useState(false);
   const [selectedMachine, setSelectedMachine] = useState(""); const [otherMachine, setOtherMachine] = useState("");
   const [date, setDate] = useState(""); const [diesel, setDiesel] = useState(""); const [payable, setPayable] = useState(""); const [paid, setPaid] = useState("");
   const [showInitialSummary, setShowInitialSummary] = useState(false);
 
-  // ✅ NEW - Initial Add History
   const [initialHistory, setInitialHistory] = useState<InitialAdd[]>([]);
   const [initialFilterDate, setInitialFilterDate] = useState("");
   const [pastDate, setPastDate] = useState(""); const [pastDiesel, setPastDiesel] = useState(""); const [pastAmount, setPastAmount] = useState("");
   const [savingPast, setSavingPast] = useState(false);
 
-  const [filterDate, setFilterDate] = useState(""); 
+  const [filterDate, setFilterDate] = useState("");
   const [filterMachine, setFilterMachine] = useState("");
 
   const loadExpenses = async () => {
@@ -42,15 +44,23 @@ export default function DieselExpensesPage() {
       if (data.summary) {
         const d = Number(data.summary.totalDiesel || 0); const a = Number(data.summary.totalAmount || 0);
         setInitialDieselStock(d); setInitialTotalAmount(a); setIsInitialSet(d > 0 || a > 0);
+        setInitialDate(data.summary.initialDate || null); // ✅ diesel_stock.initial_date
+      }
+      // ✅ History ekath GET ekenma enawa
+      if (Array.isArray(data.history)) {
+        setInitialHistory(data.history.map((h: any) => ({
+          id: h.id, date: String(h.stock_date || "").slice(0,10),
+          diesel: Number(h.added_diesel || 0), amount: Number(h.added_amount || 0),
+        })));
       }
     } catch (e) { console.error(e); } finally { setLoading(false); }
   };
 
-  // ✅ NEW - History eka DB eken gannawa
+  // ✅ FIX - Eka ma route eken history gannawa
   const loadInitialHistory = async () => {
     if (!branchId) return;
     try {
-      const r = await fetch(`/api/expences/diesel-stock-history?branchId=${encodeURIComponent(branchId)}`, { cache: "no-store" });
+      const r = await fetch(`/api/expences/diesel?branch_id=${encodeURIComponent(branchId)}&type=history`, { cache: "no-store" });
       if (!r.ok) return;
       const j = await r.json();
       setInitialHistory((Array.isArray(j) ? j : []).map((h: any) => ({
@@ -71,40 +81,51 @@ export default function DieselExpensesPage() {
 
   const resetForm = () => { setSelectedMachine(""); setOtherMachine(""); setDate(""); setDiesel(""); setPayable(""); setPaid(""); };
 
+  // ✅ FIX - Initial Add eka - Date ekka, Eka ma route eken
   const handleAddInitial = async () => {
     const d = Number(tempInitialDiesel); const a = Number(tempInitialAmount);
     if (!d || d <= 0) return alert("Enter Initial Diesel");
     if (!Number.isFinite(a) || a < 0) return alert("Enter Initial Amount");
+    if (!tempInitialDate) return alert("Initial Date eka denna");
     const newDiesel = isInitialSet? initialDieselStock + d : d;
     const newAmount = isInitialSet? initialTotalAmount + a : a;
     try { setSavingInitial(true);
-      const res = await fetch("/api/expences/diesel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ branch_id: branchId, initialDiesel: newDiesel, initialAmount: newAmount, action: "set_initial" }) });
+      const res = await fetch("/api/expences/diesel", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          branch_id: branchId,
+          initialDiesel: newDiesel, initialAmount: newAmount,
+          addedDiesel: d, addedAmount: a,
+          stockDate: tempInitialDate, initialDate: tempInitialDate,
+          action: "set_initial"
+        }) });
       const data = await res.json(); if (!res.ok) throw new Error(data.error);
       setInitialDieselStock(newDiesel); setInitialTotalAmount(newAmount); setIsInitialSet(true);
-      // ✅ NEW - Aluth Add eka history ekata date ekka save karanawa
-      await fetch(`/api/expences/diesel-stock-history`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ branchId, addedDiesel: d, addedAmount: a, stockDate: new Date().toISOString().slice(0,10) }) }).catch(()=>{});
+      if (!initialDate) setInitialDate(tempInitialDate);
       await loadInitialHistory();
-      setTempInitialDiesel(""); setTempInitialAmount(""); await loadExpenses();
+      setTempInitialDiesel(""); setTempInitialAmount(""); setTempInitialDate(new Date().toISOString().slice(0,10));
+      await loadExpenses();
     } catch (e) { alert((e as Error).message); } finally { setSavingInitial(false); }
   };
 
-  // ✅ NEW - Kalin 745L eka hadapu ewa manual add karanna - Total eka wadi karanne NA, history ekata witharak danawa
+  // ✅ FIX - Past Add - Eka ma route eken, action: add_past - Total wadi karanne na
   const handleAddPastInitial = async () => {
     const d = Number(pastDiesel); const a = Number(pastAmount);
     if (!pastDate) return alert("Date eka denna");
     if (!d || d <= 0) return alert("Diesel eka denna");
     if (!Number.isFinite(a) || a < 0) return alert("Amount eka denna");
     try { setSavingPast(true);
-      const res = await fetch(`/api/expences/diesel-stock-history`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ branchId, addedDiesel: d, addedAmount: a, stockDate: pastDate }) });
-      if (!res.ok) throw new Error("Save une na - API file eka hadala thiyenawada balanna");
+      const res = await fetch(`/api/expences/diesel`, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ branch_id: branchId, addedDiesel: d, addedAmount: a, stockDate: pastDate, action: "add_past" }) });
+      if (!res.ok) throw new Error("Save une na");
       setPastDate(""); setPastDiesel(""); setPastAmount("");
-      await loadInitialHistory();
+      await loadInitialHistory(); await loadExpenses();
     } catch (e) { alert((e as Error).message); } finally { setSavingPast(false); }
   };
 
+  // ✅ FIX - Delete ekath eka ma route eken
   const handleDeletePast = async (id?: number) => {
     if (!id || !confirm("Me past entry eka ain karannada?")) return;
-    await fetch(`/api/expences/diesel-stock-history?id=${id}`, { method: "DELETE" });
+    await fetch(`/api/expences/diesel?id=${id}&branch_id=${branchId}&type=history`, { method: "DELETE" });
     await loadInitialHistory();
   };
 
@@ -136,7 +157,6 @@ export default function DieselExpensesPage() {
   const displayRemainingDiesel = Math.max(0, displayTotalDiesel - displayDieselUsed);
   const displayRemainingBalance = displayRemainingDiesel * DIESEL_PRICE;
 
-  // ✅ NEW - Initial History eka DATE WISIN group karanawa - Total Diesel card wage
   const initialByDate = useMemo(() => {
     const map = new Map<string, { date: string; diesel: number; amount: number; count: number; ids: (number|undefined)[] }>();
     initialHistory.forEach((h) => {
@@ -205,6 +225,7 @@ export default function DieselExpensesPage() {
           <button onClick={() => { loadExpenses(); loadInitialHistory(); }} className="h-11 inline-flex items-center gap-2 rounded-xl border border-slate-600 bg-slate-800 px-5 text-sm font-bold"><RefreshCw size={17} className={loading? "animate-spin" : ""}/>Refresh</button>
         </header>
 
+        {/* ✅ INITIAL STOCK - Date ekka */}
         <section className="rounded-3xl border border-cyan-500/30 bg-slate-900 p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-bold uppercase flex items-center gap-2"><PackagePlus size={18} className="text-cyan-400"/>Initial Stock - Add kalama wadi wenawa</h2>
@@ -212,12 +233,14 @@ export default function DieselExpensesPage() {
               <Eye size={16}/> View
             </button>
           </div>
-          <div className="grid gap-4 md:grid-cols-[1fr_1fr_auto]">
+          {/* ✅ Date input eka - diesel_stock.initial_date ekata yanawa */}
+          <div className="grid gap-4 md:grid-cols-[1fr_1fr_1fr_auto]">
+            <Field label="Initial Date"><input type="date" value={tempInitialDate} onChange={e => setTempInitialDate(e.target.value)} className={inputClass}/></Field>
             <Field label="Initial Diesel (L)"><input type="number" value={tempInitialDiesel} onChange={e => setTempInitialDiesel(e.target.value)} placeholder="331" className={inputClass}/></Field>
             <Field label="Initial Amount (Rs.)"><input type="number" value={tempInitialAmount} onChange={e => setTempInitialAmount(e.target.value)} placeholder="317000" className={inputClass}/></Field>
             <button onClick={handleAddInitial} disabled={savingInitial} className="h-12 self-end inline-flex items-center gap-2 rounded-xl bg-cyan-600 px-6 font-bold">{savingInitial? <RefreshCw size={17} className="animate-spin"/> : <Save size={17}/>}Add</button>
           </div>
-          {isInitialSet && <p className="mt-3 text-xs text-green-400">✓ Initial: {initialDieselStock} L / Rs. {initialTotalAmount.toLocaleString()} | Used: {totalUsedDiesel} L | Remaining: {Math.max(0, initialDieselStock - totalUsedDiesel)} L</p>}
+          {isInitialSet && <p className="mt-3 text-xs text-green-400">✓ Initial Date: {initialDate || "-"} • Initial: {initialDieselStock} L / Rs. {initialTotalAmount.toLocaleString()} | Used: {totalUsedDiesel} L | Remaining: {Math.max(0, initialDieselStock - totalUsedDiesel)} L</p>}
         </section>
 
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -225,7 +248,7 @@ export default function DieselExpensesPage() {
           <SummaryCard title="Total Amount" subtitle={isFiltered ? `Filtered payable` : "Table eke viyadam wela thiyena amount"} value={`Rs. ${formatNumber(displayTotalAmount)}`} icon={<Wallet size={22}/>} color="blue"/>
           <SummaryCard title="Remaining Diesel" subtitle="Total Diesel - Diesel Used" value={`${formatNumber(displayRemainingDiesel)} L`} icon={<Droplets size={22}/>} color="orange"/>
           <SummaryCard title="Remaining Balance" subtitle={`Remaining Diesel x Rs. ${DIESEL_PRICE}`} value={`Rs. ${formatNumber(displayRemainingBalance)}`} icon={<CreditCard size={22}/>} color="green"/>
-          <SummaryCard title="Total Diesel" subtitle="Initial stock" value={`${formatNumber(displayTotalDiesel)} L`} icon={<AlertCircle size={22}/>} color="red"/>
+          <SummaryCard title="Total Diesel" subtitle={initialDate ? `Initial • ${initialDate}` : "Initial stock"} value={`${formatNumber(displayTotalDiesel)} L`} icon={<AlertCircle size={22}/>} color="red"/>
         </section>
 
         <section className="rounded-3xl border border-slate-700/80 bg-slate-900 overflow-hidden">
@@ -284,13 +307,24 @@ export default function DieselExpensesPage() {
                 <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400"><BarChart3 size={20}/></div>
                 <div>
                   <h2 className="text-base font-black uppercase tracking-wider">Initial Stock Summary</h2>
-                  <p className="text-[11px] text-slate-500 mt-0.5">Branch • {expenses.length} Records • {dateWiseSummary.length} Days</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">Branch • {expenses.length} Records • {dateWiseSummary.length} Days {initialDate ? `• Initial: ${initialDate}` : ""}</p>
                 </div>
               </div>
               <button onClick={() => setShowInitialSummary(false)} className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-500 text-white font-black hover:bg-red-600"><X size={16}/></button>
             </div>
 
             <div className="max-h-[70vh] overflow-y-auto p-6 space-y-5">
+              {/* ✅ Initial Date eka modal eke udama */}
+              {initialDate && (
+                <div className="flex items-center gap-2 rounded-xl border border-cyan-500/20 bg-cyan-500/5 px-4 py-2.5 text-xs">
+                  <span className="text-slate-400">Initial Date:</span>
+                  <span className="font-black text-cyan-300">{initialDate}</span>
+                  <span className="text-slate-500">|</span>
+                  <span>{formatNumber(initialDieselStock)} L</span>
+                  <span className="text-slate-500">|</span>
+                  <span>Rs. {formatNumber(initialTotalAmount)}</span>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-4">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Initial Diesel</p>
@@ -324,7 +358,6 @@ export default function DieselExpensesPage() {
                 </div>
               </div>
 
-              {/* ✅ NEW - INITIAL ADD HISTORY - 745L KALIN EWATH MEKE */}
               <div>
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
                   <h3 className="text-xs font-black uppercase tracking-widest text-cyan-300">Initial Add History • Date Wise</h3>
@@ -338,7 +371,6 @@ export default function DieselExpensesPage() {
                   </div>
                 </div>
 
-                {/* Kalin ewa manual add karana thena */}
                 <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 mb-3">
                   <h4 className="text-xs font-black uppercase tracking-widest text-amber-300">Kalin Add Karapu Ewa • Manual Add</h4>
                   <p className="text-[11px] text-slate-400 mt-1">745L wenna kalin add karapu ewa date ekka methana danna. Meka Total Diesel eka wadi karanne na, history ekata witharak danawa.</p>
