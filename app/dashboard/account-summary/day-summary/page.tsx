@@ -17,24 +17,34 @@ const fetchRaw = async (url: string): Promise<{ ok: boolean; status: number; jso
     else if (Array.isArray(j?.expenses)) data = j.expenses;
     else if (Array.isArray(j?.records)) data = j.records;
     else if (Array.isArray(j?.rows)) data = j.rows;
+    else if (Array.isArray(j?.summary)) data = j.summary;
     return { ok: r.ok, status: r.status, json: j, data };
   } catch (e: any) {
     return { ok: false, status: 0, json: { error: String(e?.message || e) }, data: [] };
   }
 };
 
-// ✅ Expenses API - Oyage names wenas nam me tika witharak maru karanna
 const EXPENSE_APIS = [
-  { key: "salary", urls: (id: string) => [`/api/expences/salary?branch_id=${id}`, `/api/expences/salaries?branch_id=${id}`] },
-  { key: "other", urls: (id: string) => [`/api/expences/other?branch_id=${id}`, `/api/expences/others?branch_id=${id}`, `/api/expences/other-expenses?branch_id=${id}`] },
+  { key: "salary", urls: (id: string) => [`/api/expences/salary?branchId=${id}`] },
+  { key: "other", urls: (id: string) => [`/api/expences/other?branchId=${id}`] },
   { key: "diesel", urls: (id: string) => [`/api/expences/diesel?branch_id=${id}`] },
-  { key: "capital", urls: (id: string) => [`/api/expences/capital?branch_id=${id}`, `/api/expences/capital-expenses?branch_id=${id}`] },
-  { key: "salesExp", urls: (id: string) => [`/api/expences/sales-expenses?branch_id=${id}`, `/api/expences/sales_expenses?branch_id=${id}`, `/api/expences/sales-expence?branch_id=${id}`] },
+  { key: "capital", urls: (id: string) => [`/api/expences/capital?branchId=${id}`, `/api/expences/capital?branch_id=${id}`] },
+  { key: "salesExp", urls: (id: string) => [`/api/expences/sales?branch_id=${id}`, `/api/expences/sales-expenses?branch_id=${id}`, `/api/expences/sales-expences?branch_id=${id}`] },
 ] as const;
 type ExpenseKey = typeof EXPENSE_APIS[number]["key"];
-// ✅ Expenses wala payable field eka - hama table ekema payable / amount thiyenna puluwan
-const getPayable = (r: any) => numeric(r.payable ?? r.amount ?? r.total_amount ?? r.totalAmount ?? r.total ?? 0);
-const getExpDate = (r: any) => String(r.date || r.created_date || r.created_at || "").slice(0, 10);
+
+// ✅ Payable - Salary/Other: total_payable | Diesel: payable | Capital/Sales: amount
+const getPayable = (r: any) => numeric(
+  r.total_payable ?? r.totalPayable ??
+  r.payable ?? r.payable_amount ??
+  r.amount ?? r.total_amount ?? r.totalAmount ?? r.total ?? r.value ?? 0
+);
+
+// ✅ Date - Salary/Other: expense_date | Diesel/Capital/Sales: date
+const getExpDate = (r: any) => String(
+  r.expense_date || r.date || r.expenseDate ||
+  r.created_date || r.created_at || r.updated_at || ""
+).slice(0, 10);
 
 export default function DaySummaryPage() {
   const [date, setDate] = useState("all");
@@ -46,7 +56,6 @@ export default function DaySummaryPage() {
   const [branches, setBranches] = useState<any[]>([]);
   const [showCreditors, setShowCreditors] = useState(true);
   const [allDates, setAllDates] = useState<string[]>([]);
-  // ✅ ALUTH - Expenses - { date, branchId, salary, other, diesel, capital, salesExp }
   const [expenseRows, setExpenseRows] = useState<any[]>([]);
 
   const fetchAll = useCallback(async () => {
@@ -104,16 +113,13 @@ export default function DaySummaryPage() {
       creditResults.forEach((res: any) => { if (res.status === "fulfilled") allCredits.push(...res.value); });
       setCredits(allCredits);
 
-      // ✅ ALUTH - Expenses gannawa - Hama branch ekakata ma, hama expenses type ekakata ma
-      // Date filter eka thibboth API ekenma filter wenne na - frontend eken filter karanawa
+ 
       const expenseResults = await Promise.allSettled(
         ids.flatMap((id: any) =>
           EXPENSE_APIS.map(async (api) => {
             for (const url of api.urls(encodeURIComponent(id))) {
               const res = await fetchRaw(url);
-              if (res.ok && res.data.length >= 0) {
-                // ✅ 404 / empty unath me API eka hari - loop eka nawaththanawa
-                // Data na nam empty array ekak enawa - eka hari
+              if (res.ok && res.data.length > 0) {
                 return (res.data || []).map((r: any) => ({ ...r, _branchId: String(id), _branchName: getName(id), _type: api.key as ExpenseKey }));
               }
             }
@@ -124,7 +130,7 @@ export default function DaySummaryPage() {
       const allExpenses: any[] = [];
       expenseResults.forEach((res: any) => { if (res.status === "fulfilled") allExpenses.push(...res.value); });
 
-      // ✅ Expenses - Date + Branch walata group karanawa - Payable walin
+      // ✅ Expenses 
       const expMap = new Map<string, any>();
       allExpenses.forEach((r: any) => {
         const d = getExpDate(r);
@@ -165,7 +171,7 @@ export default function DaySummaryPage() {
     return list.sort((a, b) => numeric(b.credit_amount) - numeric(a.credit_amount));
   }, [credits, date, branchFilter, search]);
 
-  // ✅ Day Rows - Income + Expenses dekama merge karanawa
+  // ✅ Day Rows 
   const dayRows = useMemo(() => {
     const map = new Map<string, any>();
     summaryRows.forEach(r => {
@@ -179,7 +185,7 @@ export default function DaySummaryPage() {
       row.amount += numeric(r.amount);
       row.discount += r.discount; row.count += r.count;
     });
-    // ✅ Expenses witharak thiyena Date + Branch tikauth - Income 0 wela pennanawa
+
     expenseRows.forEach(r => {
       if (branchFilter !== "all" && String(r.branchId) !== branchFilter) return;
       if (date !== "all" && r.date !== date) return;
@@ -209,7 +215,7 @@ export default function DaySummaryPage() {
   const totalCreditFromCreditors = useMemo(() => creditorRows.reduce((t, r) => t + numeric(r.credit_amount), 0), [creditorRows]);
   const totalBills = useMemo(() => dayRows.reduce((t, r) => t + r.count, 0), [dayRows]);
 
-  // ✅ ALUTH - Expenses Totals
+  // ✅ Expenses Totals
   const totalSalary = useMemo(() => dayRows.reduce((t, r) => t + numeric(r.salary), 0), [dayRows]);
   const totalOther = useMemo(() => dayRows.reduce((t, r) => t + numeric(r.other), 0), [dayRows]);
   const totalDiesel = useMemo(() => dayRows.reduce((t, r) => t + numeric(r.diesel), 0), [dayRows]);
@@ -234,7 +240,7 @@ export default function DaySummaryPage() {
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30"><Receipt size={18} /></span>
               Day Summary
             </h1>
-            <p className="mt-1 text-slate-400">Total Income = Total Paid + Total Credit • Net Balance = Total Income - Total Expenses • Payable walin</p>
+            <p className="mt-1 text-slate-400">Total Income = Total Paid + Total Credit • Net Balance = Total Income - Total Expenses • Payable / Amount walin</p>
             {allDates.length > 0 && <p className="mt-2 text-[11px] text-slate-300">DB eke data thiyena dates: {allDates.map(d => <button key={d} onClick={() => setDate(d)} className="mx-1 px-2 py-1 bg-slate-800 rounded-lg text-white font-bold hover:bg-emerald-600">{d}</button>)}</p>}
           </div>
           <div className="flex gap-2">
@@ -279,13 +285,11 @@ export default function DaySummaryPage() {
                 <p className="mt-3 text-2xl font-black text-white">{fmt(totalIncome)}</p>
                 <p className="mt-1 text-[10px] text-slate-500">Total Paid {fmt(totalPaid)} + Total Credit {fmt(totalCredit)}</p>
               </div>
-              {/* ✅ ALUTH - TOTAL EXPENSES */}
               <div className="rounded-2xl border border-red-500/20 bg-red-500/[0.05] p-5">
                 <p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase flex items-center gap-2"><TrendingDown size={13} /> Total Expenses • {date === "all" ? "All Dates" : date}</p>
                 <p className="mt-3 text-2xl font-black text-red-400">{fmt(totalExpenses)}</p>
                 <p className="mt-1 text-[10px] text-slate-500">Salary {fmt(totalSalary)} • Other {fmt(totalOther)} • Diesel {fmt(totalDiesel)} • Capital {fmt(totalCapital)} • Sales Exp {fmt(totalSalesExp)}</p>
               </div>
-              {/* ✅ ALUTH - NET BALANCE */}
               <div className={`rounded-2xl border p-5 ${netBalance >= 0 ? "border-emerald-500/20 bg-emerald-500/[0.05]" : "border-red-500/30 bg-red-500/[0.08]"}`}>
                 <p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase flex items-center gap-2"><Scale size={13} /> Net Balance • {date === "all" ? "All Dates" : date}</p>
                 <p className={`mt-3 text-2xl font-black ${netBalance >= 0 ? "text-emerald-400" : "text-red-400"}`}>{fmt(netBalance)}</p>
