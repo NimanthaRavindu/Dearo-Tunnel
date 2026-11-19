@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useMemo, useState, useCallback } from "react";
-import { Calendar, Wallet, CreditCard, Building2, Loader2, Search, Download, Phone, Car, Receipt } from "lucide-react";
+import { Calendar, Wallet, CreditCard, Building2, Loader2, Search, Download, Phone, Car, Receipt, TrendingDown, Scale } from "lucide-react";
 
 const fmt = (n: number) => `LKR ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
 const numeric = (v: any) => Number(v ?? 0) || 0;
@@ -14,11 +14,27 @@ const fetchRaw = async (url: string): Promise<{ ok: boolean; status: number; jso
     else if (j?.success && Array.isArray(j.data)) data = j.data;
     else if (Array.isArray(j?.data)) data = j.data;
     else if (Array.isArray(j?.branches)) data = j.branches;
+    else if (Array.isArray(j?.expenses)) data = j.expenses;
+    else if (Array.isArray(j?.records)) data = j.records;
+    else if (Array.isArray(j?.rows)) data = j.rows;
     return { ok: r.ok, status: r.status, json: j, data };
   } catch (e: any) {
     return { ok: false, status: 0, json: { error: String(e?.message || e) }, data: [] };
   }
 };
+
+// ✅ Expenses API - Oyage names wenas nam me tika witharak maru karanna
+const EXPENSE_APIS = [
+  { key: "salary", urls: (id: string) => [`/api/expences/salary?branch_id=${id}`, `/api/expences/salaries?branch_id=${id}`] },
+  { key: "other", urls: (id: string) => [`/api/expences/other?branch_id=${id}`, `/api/expences/others?branch_id=${id}`, `/api/expences/other-expenses?branch_id=${id}`] },
+  { key: "diesel", urls: (id: string) => [`/api/expences/diesel?branch_id=${id}`] },
+  { key: "capital", urls: (id: string) => [`/api/expences/capital?branch_id=${id}`, `/api/expences/capital-expenses?branch_id=${id}`] },
+  { key: "salesExp", urls: (id: string) => [`/api/expences/sales-expenses?branch_id=${id}`, `/api/expences/sales_expenses?branch_id=${id}`, `/api/expences/sales-expence?branch_id=${id}`] },
+] as const;
+type ExpenseKey = typeof EXPENSE_APIS[number]["key"];
+// ✅ Expenses wala payable field eka - hama table ekema payable / amount thiyenna puluwan
+const getPayable = (r: any) => numeric(r.payable ?? r.amount ?? r.total_amount ?? r.totalAmount ?? r.total ?? 0);
+const getExpDate = (r: any) => String(r.date || r.created_date || r.created_at || "").slice(0, 10);
 
 export default function DaySummaryPage() {
   const [date, setDate] = useState("all");
@@ -30,6 +46,8 @@ export default function DaySummaryPage() {
   const [branches, setBranches] = useState<any[]>([]);
   const [showCreditors, setShowCreditors] = useState(true);
   const [allDates, setAllDates] = useState<string[]>([]);
+  // ✅ ALUTH - Expenses - { date, branchId, salary, other, diesel, capital, salesExp }
+  const [expenseRows, setExpenseRows] = useState<any[]>([]);
 
   const fetchAll = useCallback(async () => {
     setIsLoading(true);
@@ -44,25 +62,15 @@ export default function DaySummaryPage() {
       setAllDates(uniqDates);
 
       const summary = s1.data || [];
-      // ✅ FIX - Total Amount ganna EPA
-      // Sales Incomes page eke wage: Income = Total Paid + Total Credit
-      // API eken enna puluwan okkoma field names handle karala thiyenne
       const normalizedSummary = summary.map((r: any) => {
-        const paid = numeric(
-          r.totalPaid ?? r.total_paid ?? r.paid ?? r.paid_amount ?? r.totalPaidAmount ?? 0
-        );
-        const credit = numeric(
-          r.totalCredit ?? r.total_credit ?? r.credit ?? r.credit_amount ?? r.totalCreditAmount ?? 0
-        );
-        // ✅ Total Amount eka use karanne na - Paid + Credit witharak
-        // API eke paid/credit nathnam witharak fallback eka widiyata amount eka gannawa (API eka update karana kalata)
+        const paid = numeric(r.totalPaid ?? r.total_paid ?? r.paid ?? r.paid_amount ?? r.totalPaidAmount ?? 0);
+        const credit = numeric(r.totalCredit ?? r.total_credit ?? r.credit ?? r.credit_amount ?? r.totalCreditAmount ?? 0);
         const hasPaidCredit = (r.totalPaid ?? r.total_paid ?? r.paid ?? r.paid_amount ?? r.totalCredit ?? r.total_credit ?? r.credit ?? r.credit_amount) !== undefined;
         const income = hasPaidCredit ? (paid + credit) : numeric(r.amount ?? r.totalAmount ?? r.total_amount);
         return {
           branchId: String(r.branchId ?? r.branch_id ?? ""),
           branchName: r.branchName || r.branch_name || `Branch ${r.branchId ?? r.branch_id}`,
           date: String(r.date || "").slice(0, 10),
-          // ✅ paid = Total Paid, credit = Total Credit, income = Paid + Credit
           paid: hasPaidCredit ? paid : income,
           credit: hasPaidCredit ? credit : 0,
           income: income,
@@ -95,6 +103,43 @@ export default function DaySummaryPage() {
       const allCredits: any[] = [];
       creditResults.forEach((res: any) => { if (res.status === "fulfilled") allCredits.push(...res.value); });
       setCredits(allCredits);
+
+      // ✅ ALUTH - Expenses gannawa - Hama branch ekakata ma, hama expenses type ekakata ma
+      // Date filter eka thibboth API ekenma filter wenne na - frontend eken filter karanawa
+      const expenseResults = await Promise.allSettled(
+        ids.flatMap((id: any) =>
+          EXPENSE_APIS.map(async (api) => {
+            for (const url of api.urls(encodeURIComponent(id))) {
+              const res = await fetchRaw(url);
+              if (res.ok && res.data.length >= 0) {
+                // ✅ 404 / empty unath me API eka hari - loop eka nawaththanawa
+                // Data na nam empty array ekak enawa - eka hari
+                return (res.data || []).map((r: any) => ({ ...r, _branchId: String(id), _branchName: getName(id), _type: api.key as ExpenseKey }));
+              }
+            }
+            return [];
+          })
+        )
+      );
+      const allExpenses: any[] = [];
+      expenseResults.forEach((res: any) => { if (res.status === "fulfilled") allExpenses.push(...res.value); });
+
+      // ✅ Expenses - Date + Branch walata group karanawa - Payable walin
+      const expMap = new Map<string, any>();
+      allExpenses.forEach((r: any) => {
+        const d = getExpDate(r);
+        if (!d) return;
+        const key = `${d}|${String(r._branchId)}`;
+        if (!expMap.has(key)) expMap.set(key, { key, date: d, branchId: String(r._branchId), branchName: r._branchName, salary: 0, other: 0, diesel: 0, capital: 0, salesExp: 0 });
+        const row = expMap.get(key);
+        const val = getPayable(r);
+        if (r._type === "salary") row.salary += val;
+        else if (r._type === "other") row.other += val;
+        else if (r._type === "diesel") row.diesel += val;
+        else if (r._type === "capital") row.capital += val;
+        else if (r._type === "salesExp") row.salesExp += val;
+      });
+      setExpenseRows(Array.from(expMap.values()));
     } finally { setIsLoading(false); }
   }, [date]);
 
@@ -120,44 +165,62 @@ export default function DaySummaryPage() {
     return list.sort((a, b) => numeric(b.credit_amount) - numeric(a.credit_amount));
   }, [credits, date, branchFilter, search]);
 
-  // ✅ Day Rows - Income = Total Paid + Total Credit (Sales Incomes page eke wage)
-  // Credit eka sales-incomes ekenma gannawa - sales-credits table eken double count wenne na
+  // ✅ Day Rows - Income + Expenses dekama merge karanawa
   const dayRows = useMemo(() => {
     const map = new Map<string, any>();
     summaryRows.forEach(r => {
       if (branchFilter !== "all" && String(r.branchId) !== branchFilter) return;
       const key = `${r.date}|${r.branchId}`;
-      if (!map.has(key)) map.set(key, { key, branchId: String(r.branchId), branchName: r.branchName, date: r.date, paid: 0, income: 0, amount: 0, discount: 0, credit: 0, count: 0 });
+      if (!map.has(key)) map.set(key, { key, branchId: String(r.branchId), branchName: r.branchName, date: r.date, paid: 0, income: 0, amount: 0, discount: 0, credit: 0, count: 0, salary: 0, other: 0, diesel: 0, capital: 0, salesExp: 0 });
       const row = map.get(key);
       row.paid += numeric(r.paid);
       row.credit += numeric(r.credit);
-      row.income += numeric(r.income); // = Paid + Credit
+      row.income += numeric(r.income);
       row.amount += numeric(r.amount);
       row.discount += r.discount; row.count += r.count;
     });
-    // Creditors list eke witharak thiyena date/branch ekak thibboth row ekak hadanawa - income eka 0
+    // ✅ Expenses witharak thiyena Date + Branch tikauth - Income 0 wela pennanawa
+    expenseRows.forEach(r => {
+      if (branchFilter !== "all" && String(r.branchId) !== branchFilter) return;
+      if (date !== "all" && r.date !== date) return;
+      const key = `${r.date}|${r.branchId}`;
+      if (!map.has(key)) map.set(key, { key, branchId: String(r.branchId), branchName: r.branchName, date: r.date, paid: 0, income: 0, amount: 0, discount: 0, credit: 0, count: 0, salary: 0, other: 0, diesel: 0, capital: 0, salesExp: 0 });
+      const row = map.get(key);
+      row.salary += numeric(r.salary); row.other += numeric(r.other); row.diesel += numeric(r.diesel); row.capital += numeric(r.capital); row.salesExp += numeric(r.salesExp);
+    });
     creditorRows.forEach(r => {
       const k = getBranchKey(r);
       if (branchFilter !== "all" && k !== branchFilter) return;
       const d = getCreditDateStr(r);
       const key = `${d}|${k}`;
-      if (!map.has(key)) map.set(key, { key, branchId: k, branchName: getBranchName(r), date: d, paid: 0, income: 0, amount: 0, discount: 0, credit: 0, count: 0 });
+      if (!map.has(key)) map.set(key, { key, branchId: k, branchName: getBranchName(r), date: d, paid: 0, income: 0, amount: 0, discount: 0, credit: 0, count: 0, salary: 0, other: 0, diesel: 0, capital: 0, salesExp: 0 });
     });
-    return Array.from(map.values()).map(r => ({ ...r, totalIncome: numeric(r.paid) + numeric(r.credit) })).sort((a, b) => String(b.date).localeCompare(String(a.date)));
-  }, [summaryRows, creditorRows, branchFilter]);
+    return Array.from(map.values()).map(r => {
+      const totalIncome = numeric(r.paid) + numeric(r.credit);
+      const totalExpenses = numeric(r.salary) + numeric(r.other) + numeric(r.diesel) + numeric(r.capital) + numeric(r.salesExp);
+      return { ...r, totalIncome, totalExpenses, netBalance: totalIncome - totalExpenses };
+    }).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  }, [summaryRows, creditorRows, branchFilter, expenseRows, date]);
 
-  // ✅ Cards - Total Amount ganna EPA
   const totalPaid = useMemo(() => dayRows.reduce((t, r) => t + numeric(r.paid), 0), [dayRows]);
   const totalCredit = useMemo(() => dayRows.reduce((t, r) => t + numeric(r.credit), 0), [dayRows]);
-  // ✅ Total Income = Total Paid + Total Credit
   const totalIncome = useMemo(() => totalPaid + totalCredit, [totalPaid, totalCredit]);
   const totalDiscount = useMemo(() => dayRows.reduce((t, r) => t + r.discount, 0), [dayRows]);
   const totalCreditFromCreditors = useMemo(() => creditorRows.reduce((t, r) => t + numeric(r.credit_amount), 0), [creditorRows]);
   const totalBills = useMemo(() => dayRows.reduce((t, r) => t + r.count, 0), [dayRows]);
 
+  // ✅ ALUTH - Expenses Totals
+  const totalSalary = useMemo(() => dayRows.reduce((t, r) => t + numeric(r.salary), 0), [dayRows]);
+  const totalOther = useMemo(() => dayRows.reduce((t, r) => t + numeric(r.other), 0), [dayRows]);
+  const totalDiesel = useMemo(() => dayRows.reduce((t, r) => t + numeric(r.diesel), 0), [dayRows]);
+  const totalCapital = useMemo(() => dayRows.reduce((t, r) => t + numeric(r.capital), 0), [dayRows]);
+  const totalSalesExp = useMemo(() => dayRows.reduce((t, r) => t + numeric(r.salesExp), 0), [dayRows]);
+  const totalExpenses = useMemo(() => totalSalary + totalOther + totalDiesel + totalCapital + totalSalesExp, [totalSalary, totalOther, totalDiesel, totalCapital, totalSalesExp]);
+  const netBalance = useMemo(() => totalIncome - totalExpenses, [totalIncome, totalExpenses]);
+
   const exportCSV = () => {
-    const head = "Date,Branch,Total Paid,Discount,Total Credit,Total Income (Paid + Credit)";
-    const body = [...dayRows.map(r => [r.date, `"${r.branchName}"`, r.paid, r.discount, r.credit, r.totalIncome].join(",")), `Total,,${totalPaid},${totalDiscount},${totalCredit},${totalIncome}`].join("\n");
+    const head = "Date,Branch,Total Paid,Discount,Total Credit,Total Income,Total Salary,Total Other,Total Diesel,Total Capital,Total Sales Exp,Total Expenses,Net Balance";
+    const body = [...dayRows.map(r => [r.date, `"${r.branchName}"`, r.paid, r.discount, r.credit, r.totalIncome, r.salary, r.other, r.diesel, r.capital, r.salesExp, r.totalExpenses, r.netBalance].join(",")), `Total,,${totalPaid},${totalDiscount},${totalCredit},${totalIncome},${totalSalary},${totalOther},${totalDiesel},${totalCapital},${totalSalesExp},${totalExpenses},${netBalance}`].join("\n");
     const blob = new Blob([head + "\n" + body], { type: "text/csv" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `day-summary-${date}.csv`; a.click();
   };
@@ -171,7 +234,7 @@ export default function DaySummaryPage() {
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30"><Receipt size={18} /></span>
               Day Summary
             </h1>
-            <p className="mt-1 text-slate-400">Total Income = Total Paid + Total Credit • Total Amount ganna EPA • Sales Incomes page eke wage</p>
+            <p className="mt-1 text-slate-400">Total Income = Total Paid + Total Credit • Net Balance = Total Income - Total Expenses • Payable walin</p>
             {allDates.length > 0 && <p className="mt-2 text-[11px] text-slate-300">DB eke data thiyena dates: {allDates.map(d => <button key={d} onClick={() => setDate(d)} className="mx-1 px-2 py-1 bg-slate-800 rounded-lg text-white font-bold hover:bg-emerald-600">{d}</button>)}</p>}
           </div>
           <div className="flex gap-2">
@@ -199,7 +262,8 @@ export default function DaySummaryPage() {
 
         {isLoading ? <div className="flex justify-center py-16 text-slate-400"><Loader2 className="animate-spin" /> Loading...</div> : (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* ✅ Cards - 5k */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
               <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.05] p-5">
                 <p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase flex items-center gap-2"><Wallet size={13} /> Total Paid • {date === "all" ? "All Dates" : date}</p>
                 <p className="mt-3 text-2xl font-black text-emerald-400">{fmt(totalPaid)}</p>
@@ -213,7 +277,19 @@ export default function DaySummaryPage() {
               <div className="rounded-2xl border border-white/[0.06] bg-[#0B1226] p-5">
                 <p className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">Total Income • Paid + Credit</p>
                 <p className="mt-3 text-2xl font-black text-white">{fmt(totalIncome)}</p>
-                <p className="mt-1 text-[10px] text-slate-500">Total Paid {fmt(totalPaid)} + Total Credit {fmt(totalCredit)} • Total Amount ganna EPA</p>
+                <p className="mt-1 text-[10px] text-slate-500">Total Paid {fmt(totalPaid)} + Total Credit {fmt(totalCredit)}</p>
+              </div>
+              {/* ✅ ALUTH - TOTAL EXPENSES */}
+              <div className="rounded-2xl border border-red-500/20 bg-red-500/[0.05] p-5">
+                <p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase flex items-center gap-2"><TrendingDown size={13} /> Total Expenses • {date === "all" ? "All Dates" : date}</p>
+                <p className="mt-3 text-2xl font-black text-red-400">{fmt(totalExpenses)}</p>
+                <p className="mt-1 text-[10px] text-slate-500">Salary {fmt(totalSalary)} • Other {fmt(totalOther)} • Diesel {fmt(totalDiesel)} • Capital {fmt(totalCapital)} • Sales Exp {fmt(totalSalesExp)}</p>
+              </div>
+              {/* ✅ ALUTH - NET BALANCE */}
+              <div className={`rounded-2xl border p-5 ${netBalance >= 0 ? "border-emerald-500/20 bg-emerald-500/[0.05]" : "border-red-500/30 bg-red-500/[0.08]"}`}>
+                <p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase flex items-center gap-2"><Scale size={13} /> Net Balance • {date === "all" ? "All Dates" : date}</p>
+                <p className={`mt-3 text-2xl font-black ${netBalance >= 0 ? "text-emerald-400" : "text-red-400"}`}>{fmt(netBalance)}</p>
+                <p className="mt-1 text-[10px] text-slate-500">Total Income {fmt(totalIncome)} - Total Expenses {fmt(totalExpenses)}</p>
               </div>
             </div>
 
@@ -221,10 +297,10 @@ export default function DaySummaryPage() {
               <h3 className="flex items-center gap-2 font-bold uppercase tracking-wider"><Receipt size={14} className="text-emerald-400" /> Summary • {date === "all" ? "All Dates - Okkoma Data" : date}</h3>
               {dayRows.length === 0 ? <p className="py-8 text-center text-slate-500">Data na.</p> : (
                 <div className="overflow-x-auto">
-                  <table className="mt-4 w-full text-left min-w-[820px]">
-                    <thead><tr className="border-b border-white/[0.06] text-[10px] uppercase text-slate-500"><th className="py-3">Date</th><th className="py-3">Branch</th><th className="py-3 text-right">Total Paid</th><th className="py-3 text-right">Discount</th><th className="py-3 text-right">Total Credit</th><th className="py-3 text-right">Total Income</th></tr></thead>
-                    <tbody>{dayRows.map(r => (<tr key={r.key} className="border-b border-white/[0.04]"><td className="py-3 font-bold">{r.date}</td><td className="py-3"><p className="font-bold flex items-center gap-2"><Building2 size={13} className="text-cyan-400" /> {r.branchName}</p><p className="text-[10px] text-slate-500">{r.count} bills</p></td><td className="py-3 text-right font-black text-emerald-400">{fmt(r.paid)}</td><td className="py-3 text-right text-amber-400">{fmt(r.discount)}</td><td className="py-3 text-right font-black text-amber-400">{fmt(r.credit)}</td><td className="py-3 text-right font-black text-white">{fmt(r.totalIncome)}</td></tr>))}</tbody>
-                    <tfoot><tr className="font-black text-base"><td className="py-4">Total</td><td className="py-4 text-slate-400">{dayRows.length} Rows</td><td className="py-4 text-right text-emerald-400">{fmt(totalPaid)}</td><td className="py-4 text-right text-amber-400">{fmt(totalDiscount)}</td><td className="py-4 text-right text-amber-400">{fmt(totalCredit)}</td><td className="py-4 text-right text-white">{fmt(totalIncome)}</td></tr></tfoot>
+                  <table className="mt-4 w-full text-left min-w-[1400px]">
+                    <thead><tr className="border-b border-white/[0.06] text-[10px] uppercase text-slate-500"><th className="py-3">Date</th><th className="py-3">Branch</th><th className="py-3 text-right">Total Paid</th><th className="py-3 text-right">Discount</th><th className="py-3 text-right">Total Credit</th><th className="py-3 text-right">Total Income</th><th className="py-3 text-right">Total Salary</th><th className="py-3 text-right">Total Other</th><th className="py-3 text-right">Total Diesel</th><th className="py-3 text-right">Total Capital</th><th className="py-3 text-right">Total Sales Exp</th><th className="py-3 text-right">Total Expenses</th><th className="py-3 text-right">Net Balance</th></tr></thead>
+                    <tbody>{dayRows.map(r => (<tr key={r.key} className="border-b border-white/[0.04]"><td className="py-3 font-bold">{r.date}</td><td className="py-3"><p className="font-bold flex items-center gap-2"><Building2 size={13} className="text-cyan-400" /> {r.branchName}</p><p className="text-[10px] text-slate-500">{r.count} bills</p></td><td className="py-3 text-right font-black text-emerald-400">{fmt(r.paid)}</td><td className="py-3 text-right text-amber-400">{fmt(r.discount)}</td><td className="py-3 text-right font-black text-amber-400">{fmt(r.credit)}</td><td className="py-3 text-right font-black text-white">{fmt(r.totalIncome)}</td><td className="py-3 text-right">{fmt(r.salary)}</td><td className="py-3 text-right">{fmt(r.other)}</td><td className="py-3 text-right">{fmt(r.diesel)}</td><td className="py-3 text-right">{fmt(r.capital)}</td><td className="py-3 text-right">{fmt(r.salesExp)}</td><td className="py-3 text-right font-black text-red-400">{fmt(r.totalExpenses)}</td><td className={`py-3 text-right font-black ${r.netBalance >= 0 ? "text-emerald-400" : "text-red-400"}`}>{fmt(r.netBalance)}</td></tr>))}</tbody>
+                    <tfoot><tr className="font-black text-base"><td className="py-4">Total</td><td className="py-4 text-slate-400">{dayRows.length} Rows</td><td className="py-4 text-right text-emerald-400">{fmt(totalPaid)}</td><td className="py-4 text-right text-amber-400">{fmt(totalDiscount)}</td><td className="py-4 text-right text-amber-400">{fmt(totalCredit)}</td><td className="py-4 text-right text-white">{fmt(totalIncome)}</td><td className="py-4 text-right">{fmt(totalSalary)}</td><td className="py-4 text-right">{fmt(totalOther)}</td><td className="py-4 text-right">{fmt(totalDiesel)}</td><td className="py-4 text-right">{fmt(totalCapital)}</td><td className="py-4 text-right">{fmt(totalSalesExp)}</td><td className="py-4 text-right text-red-400">{fmt(totalExpenses)}</td><td className={`py-4 text-right ${netBalance >= 0 ? "text-emerald-400" : "text-red-400"}`}>{fmt(netBalance)}</td></tr></tfoot>
                   </table>
                 </div>
               )}
