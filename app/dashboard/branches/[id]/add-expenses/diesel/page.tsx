@@ -78,24 +78,25 @@ export default function DieselExpensesPage() {
 
   const resetForm = () => { setSelectedMachine(""); setOtherMachine(""); setDate(""); setDiesel(""); setPayable(""); setPaid(""); };
 
+  // ✅ FIXED - 745 + 100 karanne na, 100 witharak yawanawa, API eken total eka gannawa
   const handleAddInitial = async () => {
     const d = Number(tempInitialDiesel); const a = Number(tempInitialAmount);
     if (!d || d <= 0) return alert("Enter Initial Diesel");
     if (!Number.isFinite(a) || a < 0) return alert("Enter Initial Amount");
     if (!tempInitialDate) return alert("Initial Date eka denna");
-    const newDiesel = isInitialSet? initialDieselStock + d : d;
-    const newAmount = isInitialSet? initialTotalAmount + a : a;
     try { setSavingInitial(true);
       const res = await fetch("/api/expences/diesel", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           branch_id: branchId,
-          initialDiesel: newDiesel, initialAmount: newAmount,
+          initialDiesel: d, initialAmount: a,
           addedDiesel: d, addedAmount: a,
           stockDate: tempInitialDate, initialDate: tempInitialDate,
           action: "set_initial"
         }) });
       const data = await res.json(); if (!res.ok) throw new Error(data.error);
-      setInitialDieselStock(newDiesel); setInitialTotalAmount(newAmount); setIsInitialSet(true);
+      setInitialDieselStock(Number(data.totalDiesel || 0));
+      setInitialTotalAmount(Number(data.totalAmount || 0));
+      setIsInitialSet(true);
       if (!initialDate) setInitialDate(tempInitialDate);
       await loadInitialHistory();
       setTempInitialDiesel(""); setTempInitialAmount(""); setTempInitialDate(new Date().toISOString().slice(0,10));
@@ -121,6 +122,7 @@ export default function DieselExpensesPage() {
     if (!id || id === 0 || !confirm("Me past entry eka ain karannada?")) return;
     await fetch(`/api/expences/diesel?id=${id}&branch_id=${branchId}&type=history`, { method: "DELETE" });
     await loadInitialHistory();
+    await loadExpenses();
   };
 
   const filteredExpenses = useMemo(() => {
@@ -151,12 +153,10 @@ export default function DieselExpensesPage() {
   const displayRemainingDiesel = Math.max(0, displayTotalDiesel - displayDieselUsed);
   const displayRemainingBalance = displayRemainingDiesel * DIESEL_PRICE;
 
-  // ✅ FIX 1 - History huss nam diesel_stock eke 745L eka ma ek row ekak widihata pennanawa
-  // Oya photo eke "Thama History na" kiyala thibba thena dan 745L eka penawa
   const effectiveHistory: InitialAdd[] = useMemo(() => {
     if (initialHistory.length === 0 && initialDieselStock > 0) {
       return [{
-        id: 0, // 0 kiyanne diesel_stock eken awe, history table eken newei - delete ba
+        id: 0,
         date: initialDate || new Date().toISOString().slice(0,10),
         diesel: initialDieselStock,
         amount: initialTotalAmount,
@@ -177,7 +177,6 @@ export default function DieselExpensesPage() {
   }, [effectiveHistory]);
 
   const filteredInitialByDate = useMemo(() => initialByDate.filter(r => !initialFilterDate || r.date === initialFilterDate), [initialByDate, initialFilterDate]);
-  // ✅ FIX 2 - History Total ekath effectiveHistory eken gannawa - 0.00 wenne na
   const totalInitialHistoryDiesel = useMemo(() => effectiveHistory.reduce((s, h) => s + numberValue(h.diesel), 0), [effectiveHistory]);
   const totalInitialHistoryAmount = useMemo(() => effectiveHistory.reduce((s, h) => s + numberValue(h.amount), 0), [effectiveHistory]);
 
@@ -373,14 +372,13 @@ export default function DieselExpensesPage() {
                       <input type="date" value={initialFilterDate} onChange={e=>setInitialFilterDate(e.target.value)} className="bg-transparent text-xs outline-none" />
                     </div>
                     {initialFilterDate && <button onClick={()=>setInitialFilterDate("")} className="h-9 px-3 rounded-lg bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold flex items-center gap-1"><X size={12}/>Clear</button>}
-                    {/* ✅ FIX 3 - 0 Days • 0 Adds wenne na, effectiveHistory eken gannawa */}
                     <span className="rounded-lg bg-cyan-500/15 text-cyan-300 px-2.5 py-1 text-[11px] font-bold">{filteredInitialByDate.length} Days • {effectiveHistory.length} Adds</span>
                   </div>
                 </div>
 
                 <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 mb-3">
                   <h4 className="text-xs font-black uppercase tracking-widest text-amber-300">Kalin Add Karapu Ewa • Manual Add</h4>
-                  <p className="text-[11px] text-slate-400 mt-1">745L wenna kalin add karapu ewa date ekka methana danna. Meka Total Diesel eka wadi karanne na, history ekata witharak danawa.</p>
+                  <p className="text-[11px] text-slate-400 mt-1">Kalin add karapu ewa date ekka methana danna. Meka Total Diesel ekata add wenawa.</p>
                   <div className="grid grid-cols-3 gap-2 mt-3">
                     <div><label className="text-[10px] font-bold text-slate-400 uppercase">Date</label><input type="date" value={pastDate} onChange={e => setPastDate(e.target.value)} className="h-10 w-full rounded-xl border border-slate-600 bg-slate-800 px-3 text-sm outline-none" /></div>
                     <div><label className="text-[10px] font-bold text-slate-400 uppercase">Diesel (L)</label><input type="number" value={pastDiesel} onChange={e => setPastDiesel(e.target.value)} placeholder="331" className="h-10 w-full rounded-xl border border-slate-600 bg-slate-800 px-3 text-sm outline-none" /></div>
@@ -414,7 +412,6 @@ export default function DieselExpensesPage() {
                             <td className="px-4 py-3 text-right font-bold text-cyan-300">{formatNumber(row.diesel)} L</td>
                             <td className="px-4 py-3 text-right font-bold">Rs. {formatNumber(row.amount)}</td>
                             <td className="px-4 py-3 text-right">
-                              {/* ✅ diesel_stock eken apu row eka delete karanna ba */}
                               {row.count === 1 && row.ids[0] !== 0 && row.ids[0] !== undefined && <button onClick={() => handleDeletePast(row.ids[0])} className="h-7 w-7 inline-flex items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20"><Trash2 size={13}/></button>}
                             </td>
                           </tr>
