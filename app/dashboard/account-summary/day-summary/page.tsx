@@ -5,7 +5,6 @@ import { Calendar, Wallet, CreditCard, Building2, Loader2, Search, Download, Pho
 const fmt = (n: number) => `LKR ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
 const numeric = (v: any) => Number(v ?? 0) || 0;
 
-// ✅ Salary page eke EXACT parse eka ma
 const parseLikeSalaryPage = (result: any): any[] => {
   if (Array.isArray(result)) return result;
   if (Array.isArray(result?.data)) return result.data;
@@ -116,12 +115,29 @@ export default function DaySummaryPage() {
       }
       setCredits(allCredits);
 
-      // ---------- 4. ✅ FIX ADDED - Expenses TYPE ekakata gane ----------
-      // Kalin waradda: allExpenses.length === 0 nam witharak fallback - Capital awoth Salary skip wenawa
-      // Dan: Type ekak 0 nam e Type eka witharak per-branch fetch wenawa
-      // branchId nathuwa -> branchId walin -> branch_id walin - SEQUENTIAL, ekapara 1 request i
+      // ---------- 4. ✅ FIXED - Expenses ----------
       let allExpenses: any[] = [];
       for (const api of EXPENSE_DEFS) {
+
+        // ✅ SALES EXP walata witharak - wenama handle
+        // Hari URL: /api/expenses/sales (expences newei) + branchId oni
+        // Me API eka branchId nathuwa [] denawa, e nisa mulinma branchId nathuwa try karanne na
+        if (api.key === "salesExp") {
+          for (const id of ids) {
+            const rows = await fetchOne(`/api/expenses/sales?branchId=${encodeURIComponent(id)}`);
+            rows.forEach((r: any) => {
+              allExpenses.push({
+                ...r,
+                _branchId: String(id), // me API eken branch_id enne na
+                _branchName: getName(String(id)),
+                _type: "salesExp" as ExpenseKey,
+              });
+            });
+          }
+          continue;
+        }
+
+        // Anith ewa - Salary / Other / Diesel / Capital
         // Step 1: branchId nathuwa try karanawa
         const rowsNoBranch = await fetchOne(`/api/expences/${api.path}`);
 
@@ -160,9 +176,10 @@ export default function DaySummaryPage() {
       const otherOnly = allExpenses.filter((r: any) => r._type === "other");
       const dieselOnly = allExpenses.filter((r: any) => r._type === "diesel");
       const capitalOnly = allExpenses.filter((r: any) => r._type === "capital");
-      const salesExpOnly = allExpenses.filter((r: any) => r._type === "sales");
+      // ✅ FIXED - kalin "sales" kiyala thibba, hari eka "salesExp"
+      const salesExpOnly = allExpenses.filter((r: any) => r._type === "salesExp");
       setDebug({ salaryCount: salaryOnly.length, otherCount: otherOnly.length, dieselCount: dieselOnly.length, capitalCount: capitalOnly.length, salesExpCount: salesExpOnly.length, salarySample: salaryOnly[0] || null, otherSample: otherOnly[0] || null, ids });
-      console.log("DEBUG IDS:", ids, "SALARY:", salaryOnly.length, salaryOnly[0], "OTHER:", otherOnly.length, otherOnly[0], "CAPITAL:", capitalOnly.length, capitalOnly[0]);
+      console.log("DEBUG IDS:", ids, "SALARY:", salaryOnly.length, salaryOnly[0], "OTHER:", otherOnly.length, otherOnly[0], "CAPITAL:", capitalOnly.length, capitalOnly[0], "SALES_EXP:", salesExpOnly.length, salesExpOnly[0]);
 
       // ---------- 5. Expense rows - date nathnam ain karanne na ----------
       const expMap = new Map<string, any>();
