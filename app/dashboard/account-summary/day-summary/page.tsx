@@ -24,23 +24,22 @@ const fetchRaw = async (url: string): Promise<{ ok: boolean; status: number; jso
   }
 };
 
+// ✅ Salary - branchId + branch_id dekama try karanawa
 const EXPENSE_APIS = [
-  { key: "salary", urls: (id: string) => [`/api/expences/salary?branchId=${id}`] },
-  { key: "other", urls: (id: string) => [`/api/expences/other?branchId=${id}`] },
-  { key: "diesel", urls: (id: string) => [`/api/expences/diesel?branch_id=${id}`] },
+  { key: "salary", urls: (id: string) => [`/api/expences/salary?branchId=${id}`, `/api/expences/salary?branch_id=${id}`] },
+  { key: "other", urls: (id: string) => [`/api/expences/other?branchId=${id}`, `/api/expences/other?branch_id=${id}`] },
+  { key: "diesel", urls: (id: string) => [`/api/expences/diesel?branch_id=${id}`, `/api/expences/diesel?branchId=${id}`] },
   { key: "capital", urls: (id: string) => [`/api/expences/capital?branchId=${id}`, `/api/expences/capital?branch_id=${id}`] },
   { key: "salesExp", urls: (id: string) => [`/api/expences/sales?branch_id=${id}`, `/api/expences/sales-expenses?branch_id=${id}`, `/api/expences/sales-expences?branch_id=${id}`] },
 ] as const;
 type ExpenseKey = typeof EXPENSE_APIS[number]["key"];
 
-// ✅ Payable - Salary/Other: total_payable | Diesel: payable | Capital/Sales: amount
 const getPayable = (r: any) => numeric(
   r.total_payable ?? r.totalPayable ??
   r.payable ?? r.payable_amount ??
   r.amount ?? r.total_amount ?? r.totalAmount ?? r.total ?? r.value ?? 0
 );
 
-// ✅ Date - Salary/Other: expense_date | Diesel/Capital/Sales: date
 const getExpDate = (r: any) => String(
   r.expense_date || r.date || r.expenseDate ||
   r.created_date || r.created_at || r.updated_at || ""
@@ -57,6 +56,7 @@ export default function DaySummaryPage() {
   const [showCreditors, setShowCreditors] = useState(true);
   const [allDates, setAllDates] = useState<string[]>([]);
   const [expenseRows, setExpenseRows] = useState<any[]>([]);
+  const [debug, setDebug] = useState<any>({ salaryCount: 0, salarySample: null, ids: [], rawSalary: [] });
 
   const fetchAll = useCallback(async () => {
     setIsLoading(true);
@@ -99,8 +99,12 @@ export default function DaySummaryPage() {
       });
       setBranches(branchList);
 
-      const ids = branchList.map((b: any) => b.id).filter(Boolean);
-      const getName = (id: any) => branchList.find((x: any) => String(x.id) === String(id))?.branch_name || `Branch ${id}`;
+      // ✅ FIX 1 - IDs: Branches + Summary dekama - ekak hari nathuwa yanawa nam anika gannawa
+      const ids = Array.from(new Set([
+        ...branchList.map((b: any) => String(b.id)),
+        ...normalizedSummary.map((r: any) => String(r.branchId)),
+      ])).filter(Boolean);
+      const getName = (id: any) => branchList.find((x: any) => String(x.id) === String(id))?.branch_name || normalizedSummary.find((x: any) => String(x.branchId) === String(id))?.branchName || `Branch ${id}`;
 
       const creditResults = await Promise.allSettled(
         ids.map((id: any) =>
@@ -113,7 +117,6 @@ export default function DaySummaryPage() {
       creditResults.forEach((res: any) => { if (res.status === "fulfilled") allCredits.push(...res.value); });
       setCredits(allCredits);
 
- 
       const expenseResults = await Promise.allSettled(
         ids.flatMap((id: any) =>
           EXPENSE_APIS.map(async (api) => {
@@ -130,7 +133,13 @@ export default function DaySummaryPage() {
       const allExpenses: any[] = [];
       expenseResults.forEach((res: any) => { if (res.status === "fulfilled") allExpenses.push(...res.value); });
 
-      // ✅ Expenses 
+      // ✅ DEBUG - Salary data enawa da balanna
+      const salaryOnly = allExpenses.filter((r: any) => r._type === "salary");
+      setDebug({ salaryCount: salaryOnly.length, salarySample: salaryOnly[0] || null, ids, rawSalary: salaryOnly.slice(0, 3) });
+      console.log("DEBUG IDS:", ids);
+      console.log("DEBUG SALARY COUNT:", salaryOnly.length);
+      console.log("DEBUG SALARY SAMPLE:", salaryOnly[0]);
+
       const expMap = new Map<string, any>();
       allExpenses.forEach((r: any) => {
         const d = getExpDate(r);
@@ -171,7 +180,6 @@ export default function DaySummaryPage() {
     return list.sort((a, b) => numeric(b.credit_amount) - numeric(a.credit_amount));
   }, [credits, date, branchFilter, search]);
 
-  // ✅ Day Rows 
   const dayRows = useMemo(() => {
     const map = new Map<string, any>();
     summaryRows.forEach(r => {
@@ -185,7 +193,6 @@ export default function DaySummaryPage() {
       row.amount += numeric(r.amount);
       row.discount += r.discount; row.count += r.count;
     });
-
     expenseRows.forEach(r => {
       if (branchFilter !== "all" && String(r.branchId) !== branchFilter) return;
       if (date !== "all" && r.date !== date) return;
@@ -214,8 +221,6 @@ export default function DaySummaryPage() {
   const totalDiscount = useMemo(() => dayRows.reduce((t, r) => t + r.discount, 0), [dayRows]);
   const totalCreditFromCreditors = useMemo(() => creditorRows.reduce((t, r) => t + numeric(r.credit_amount), 0), [creditorRows]);
   const totalBills = useMemo(() => dayRows.reduce((t, r) => t + r.count, 0), [dayRows]);
-
-  // ✅ Expenses Totals
   const totalSalary = useMemo(() => dayRows.reduce((t, r) => t + numeric(r.salary), 0), [dayRows]);
   const totalOther = useMemo(() => dayRows.reduce((t, r) => t + numeric(r.other), 0), [dayRows]);
   const totalDiesel = useMemo(() => dayRows.reduce((t, r) => t + numeric(r.diesel), 0), [dayRows]);
@@ -249,6 +254,15 @@ export default function DaySummaryPage() {
           </div>
         </div>
 
+        {/* ✅ DEBUG BOX - meka balala kiyanna - passe ain karannam */}
+        <div className="rounded-2xl border border-yellow-500/40 bg-yellow-500/10 p-4 text-[11px]">
+          <p className="font-black text-yellow-300">DEBUG - Salary</p>
+          <p>IDs used: {JSON.stringify(debug.ids)}</p>
+          <p>Salary records fetched: {debug.salaryCount}</p>
+          <p>Salary sample: {JSON.stringify(debug.salarySample)}</p>
+          <p className="text-slate-400">Salary count 0 nam - Salary API eken data enne na. Sample eke expense_date / total_payable balanna.</p>
+        </div>
+
         <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/[0.06] bg-[#0B1226] p-4">
           <div className="flex items-center gap-2"><Calendar size={14} className="text-slate-400" />
             <select value={date} onChange={e => setDate(e.target.value)} className="rounded-xl bg-slate-950 px-3 py-2.5 text-slate-200 ring-1 ring-white/10 focus:outline-none">
@@ -268,7 +282,6 @@ export default function DaySummaryPage() {
 
         {isLoading ? <div className="flex justify-center py-16 text-slate-400"><Loader2 className="animate-spin" /> Loading...</div> : (
           <>
-            {/* ✅ Cards - 5k */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
               <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.05] p-5">
                 <p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase flex items-center gap-2"><Wallet size={13} /> Total Paid • {date === "all" ? "All Dates" : date}</p>
