@@ -24,6 +24,7 @@ const fetchRaw = async (url: string): Promise<{ ok: boolean; status: number; jso
   }
 };
 
+// ✅ Salary - branchId + branch_id dekama try karanawa
 const EXPENSE_APIS = [
   { key: "salary", urls: (id: string) => [`/api/expences/salary?branchId=${id}`, `/api/expences/salary?branch_id=${id}`] },
   { key: "other", urls: (id: string) => [`/api/expences/other?branchId=${id}`, `/api/expences/other?branch_id=${id}`] },
@@ -55,7 +56,7 @@ export default function DaySummaryPage() {
   const [showCreditors, setShowCreditors] = useState(true);
   const [allDates, setAllDates] = useState<string[]>([]);
   const [expenseRows, setExpenseRows] = useState<any[]>([]);
-  const [debug, setDebug] = useState<any>({ salaryCount: 0, otherCount: 0, salarySample: null, otherSample: null, ids: [] });
+  const [debug, setDebug] = useState<any>({ salaryCount: 0, salarySample: null, ids: [], rawSalary: [] });
 
   const fetchAll = useCallback(async () => {
     setIsLoading(true);
@@ -89,25 +90,16 @@ export default function DaySummaryPage() {
       });
       setSummaryRows(normalizedSummary);
 
-      // ✅ FIX - /api/branch (singular - Other page eka use karana eka) + /api/branches (plural) DEKAMA
-      // Ekak hari nathuwa yanawa nam anika gannawa. branchName / bName dekama balanawa.
-      const bRes1 = await fetchRaw(`/api/branch`);
-      const bRes2 = await fetchRaw(`/api/branches`);
-      const allBranchRaw = [...(bRes1.data || []), ...(bRes2.data || [])];
-      let branchList = allBranchRaw.length > 0
-        ? allBranchRaw.map((b: any) => ({
-            id: String(b.id ?? b.branch_id ?? b.branchId),
-            branch_name: b.branchName || b.bName || b.branch_name || b.name || `Branch ${b.id ?? b.branch_id}`,
-          }))
+      const bRes = await fetchRaw(`/api/branches`);
+      let branchList = bRes.data.length > 0
+        ? bRes.data.map((b: any) => ({ id: String(b.id ?? b.branch_id ?? b.branchId), branch_name: b.branch_name || b.name || `Branch ${b.id ?? b.branch_id}` }))
         : normalizedSummary.map((r: any) => ({ id: r.branchId, branch_name: r.branchName }));
-      // Duplicate IDs ain karanawa
-      branchList = Array.from(new Map(branchList.map((b: any) => [String(b.id), b])).values());
       normalizedSummary.forEach((r: any) => {
         if (!branchList.find((b: any) => String(b.id) === String(r.branchId))) branchList.push({ id: r.branchId, branch_name: r.branchName });
       });
       setBranches(branchList);
 
-      // ✅ FIX - IDs: Branches (dekama API) + Summary dekama - ekak hari nathuwa yanawa nam anika gannawa
+      // ✅ FIX 1 - IDs: Branches + Summary dekama - ekak hari nathuwa yanawa nam anika gannawa
       const ids = Array.from(new Set([
         ...branchList.map((b: any) => String(b.id)),
         ...normalizedSummary.map((r: any) => String(r.branchId)),
@@ -141,13 +133,12 @@ export default function DaySummaryPage() {
       const allExpenses: any[] = [];
       expenseResults.forEach((res: any) => { if (res.status === "fulfilled") allExpenses.push(...res.value); });
 
-      // ✅ DEBUG - Salary + Other dekama enawa da balanna
+      // ✅ DEBUG - Salary data enawa da balanna
       const salaryOnly = allExpenses.filter((r: any) => r._type === "salary");
-      const otherOnly = allExpenses.filter((r: any) => r._type === "other");
-      setDebug({ salaryCount: salaryOnly.length, otherCount: otherOnly.length, salarySample: salaryOnly[0] || null, otherSample: otherOnly[0] || null, ids });
+      setDebug({ salaryCount: salaryOnly.length, salarySample: salaryOnly[0] || null, ids, rawSalary: salaryOnly.slice(0, 3) });
       console.log("DEBUG IDS:", ids);
-      console.log("DEBUG SALARY COUNT:", salaryOnly.length, "SAMPLE:", salaryOnly[0]);
-      console.log("DEBUG OTHER COUNT:", otherOnly.length, "SAMPLE:", otherOnly[0]);
+      console.log("DEBUG SALARY COUNT:", salaryOnly.length);
+      console.log("DEBUG SALARY SAMPLE:", salaryOnly[0]);
 
       const expMap = new Map<string, any>();
       allExpenses.forEach((r: any) => {
@@ -263,12 +254,13 @@ export default function DaySummaryPage() {
           </div>
         </div>
 
+        {/* ✅ DEBUG BOX - meka balala kiyanna - passe ain karannam */}
         <div className="rounded-2xl border border-yellow-500/40 bg-yellow-500/10 p-4 text-[11px]">
-          <p className="font-black text-yellow-300">DEBUG - Salary + Other</p>
+          <p className="font-black text-yellow-300">DEBUG - Salary</p>
           <p>IDs used: {JSON.stringify(debug.ids)}</p>
-          <p>Salary records: {debug.salaryCount} | Other records: {debug.otherCount}</p>
+          <p>Salary records fetched: {debug.salaryCount}</p>
           <p>Salary sample: {JSON.stringify(debug.salarySample)}</p>
-          <p>Other sample: {JSON.stringify(debug.otherSample)}</p>
+          <p className="text-slate-400">Salary count 0 nam - Salary API eken data enne na. Sample eke expense_date / total_payable balanna.</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/[0.06] bg-[#0B1226] p-4">
