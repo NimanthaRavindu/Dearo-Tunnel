@@ -78,7 +78,6 @@ export default function DieselExpensesPage() {
 
   const resetForm = () => { setSelectedMachine(""); setOtherMachine(""); setDate(""); setDiesel(""); setPayable(""); setPaid(""); };
 
-  // ✅ FIXED - 745 + 100 karanne na, 100 witharak yawanawa, API eken total eka gannawa
   const handleAddInitial = async () => {
     const d = Number(tempInitialDiesel); const a = Number(tempInitialAmount);
     if (!d || d <= 0) return alert("Enter Initial Diesel");
@@ -165,18 +164,12 @@ export default function DieselExpensesPage() {
     return initialHistory;
   }, [initialHistory, initialDieselStock, initialTotalAmount, initialDate]);
 
-  const initialByDate = useMemo(() => {
-    const map = new Map<string, { date: string; diesel: number; amount: number; count: number; ids: (number|undefined)[] }>();
-    effectiveHistory.forEach((h) => {
-      const d = String(h.date || "").slice(0,10);
-      const cur = map.get(d) || { date: d, diesel: 0, amount: 0, count: 0, ids: [] };
-      cur.diesel += numberValue(h.diesel); cur.amount += numberValue(h.amount); cur.count += 1; cur.ids.push(h.id);
-      map.set(d, cur);
-    });
-    return Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date));
-  }, [effectiveHistory]);
+  // ✅ FIX - Date eken group karanne na, entry ekak gane wen wenama pennanawa
+  const filteredHistory = useMemo(() => {
+    const sorted = [...effectiveHistory].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    return sorted.filter(h => !initialFilterDate || String(h.date).slice(0,10) === initialFilterDate);
+  }, [effectiveHistory, initialFilterDate]);
 
-  const filteredInitialByDate = useMemo(() => initialByDate.filter(r => !initialFilterDate || r.date === initialFilterDate), [initialByDate, initialFilterDate]);
   const totalInitialHistoryDiesel = useMemo(() => effectiveHistory.reduce((s, h) => s + numberValue(h.diesel), 0), [effectiveHistory]);
   const totalInitialHistoryAmount = useMemo(() => effectiveHistory.reduce((s, h) => s + numberValue(h.amount), 0), [effectiveHistory]);
 
@@ -372,7 +365,7 @@ export default function DieselExpensesPage() {
                       <input type="date" value={initialFilterDate} onChange={e=>setInitialFilterDate(e.target.value)} className="bg-transparent text-xs outline-none" />
                     </div>
                     {initialFilterDate && <button onClick={()=>setInitialFilterDate("")} className="h-9 px-3 rounded-lg bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold flex items-center gap-1"><X size={12}/>Clear</button>}
-                    <span className="rounded-lg bg-cyan-500/15 text-cyan-300 px-2.5 py-1 text-[11px] font-bold">{filteredInitialByDate.length} Days • {effectiveHistory.length} Adds</span>
+                    <span className="rounded-lg bg-cyan-500/15 text-cyan-300 px-2.5 py-1 text-[11px] font-bold">{filteredHistory.length} Entries • {effectiveHistory.length} Adds</span>
                   </div>
                 </div>
 
@@ -390,7 +383,7 @@ export default function DieselExpensesPage() {
                   <p className="text-[11px] text-slate-500 mt-2">History Total: {formatNumber(totalInitialHistoryDiesel)} L / Rs. {formatNumber(totalInitialHistoryAmount)} • DB Total: {formatNumber(initialDieselStock)} L / Rs. {formatNumber(initialTotalAmount)} • Dekama samana wenna ona.</p>
                 </div>
 
-                {filteredInitialByDate.length === 0 ? (
+                {filteredHistory.length === 0 ? (
                   <p className="rounded-2xl border border-slate-800 bg-slate-900/50 px-4 py-6 text-center text-sm text-slate-500">Thama Initial Add History na. Uda form eken kalin ewa date ekka add karanna.<br/><span className="text-[11px]">DB Total: {formatNumber(initialDieselStock)} L / Rs. {formatNumber(initialTotalAmount)}</span></p>
                 ) : (
                   <div className="overflow-hidden rounded-2xl border border-cyan-500/20">
@@ -398,21 +391,19 @@ export default function DieselExpensesPage() {
                       <thead className="bg-slate-900">
                         <tr className="text-left text-[10px] uppercase tracking-wider text-slate-500">
                           <th className="px-4 py-3">Date</th>
-                          <th className="px-4 py-3 text-center">Adds</th>
                           <th className="px-4 py-3 text-right">Initial Diesel</th>
                           <th className="px-4 py-3 text-right">Initial Amount</th>
                           <th className="px-4 py-3"></th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800/70">
-                        {filteredInitialByDate.map((row) => (
-                          <tr key={row.date} className="hover:bg-slate-800/40">
-                            <td className="px-4 py-3 font-bold">{row.date} {row.ids.includes(0) && <span className="ml-1 rounded bg-cyan-500/20 text-cyan-300 px-1.5 py-0.5 text-[9px]">CURRENT STOCK</span>}</td>
-                            <td className="px-4 py-3 text-center"><span className="rounded-lg bg-slate-800 px-2 py-1 text-[11px] font-bold">{row.count}</span></td>
-                            <td className="px-4 py-3 text-right font-bold text-cyan-300">{formatNumber(row.diesel)} L</td>
-                            <td className="px-4 py-3 text-right font-bold">Rs. {formatNumber(row.amount)}</td>
+                        {filteredHistory.map((h, i) => (
+                          <tr key={`${h.id}-${i}`} className="hover:bg-slate-800/40">
+                            <td className="px-4 py-3 font-bold">{String(h.date).slice(0,10)} {h.id === 0 && <span className="ml-1 rounded bg-cyan-500/20 text-cyan-300 px-1.5 py-0.5 text-[9px]">CURRENT STOCK</span>}</td>
+                            <td className="px-4 py-3 text-right font-bold text-cyan-300">{formatNumber(h.diesel)} L</td>
+                            <td className="px-4 py-3 text-right font-bold">Rs. {formatNumber(h.amount)}</td>
                             <td className="px-4 py-3 text-right">
-                              {row.count === 1 && row.ids[0] !== 0 && row.ids[0] !== undefined && <button onClick={() => handleDeletePast(row.ids[0])} className="h-7 w-7 inline-flex items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20"><Trash2 size={13}/></button>}
+                              {h.id !== 0 && h.id !== undefined && <button onClick={() => handleDeletePast(h.id)} className="h-7 w-7 inline-flex items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20"><Trash2 size={13}/></button>}
                             </td>
                           </tr>
                         ))}
@@ -420,13 +411,12 @@ export default function DieselExpensesPage() {
                       <tfoot className="bg-slate-900">
                         <tr className="font-black">
                           <td className="px-4 py-3 text-slate-400">Total (History)</td>
-                          <td className="px-4 py-3 text-center">{effectiveHistory.length}</td>
                           <td className="px-4 py-3 text-right text-cyan-300">{formatNumber(totalInitialHistoryDiesel)} L</td>
                           <td className="px-4 py-3 text-right">Rs. {formatNumber(totalInitialHistoryAmount)}</td>
                           <td></td>
                         </tr>
                         <tr className="font-black text-[11px] text-slate-500">
-                          <td colSpan={2} className="px-4 py-2">DB Total</td>
+                          <td className="px-4 py-2">DB Total</td>
                           <td className="px-4 py-2 text-right">{formatNumber(initialDieselStock)} L</td>
                           <td className="px-4 py-2 text-right">Rs. {formatNumber(initialTotalAmount)}</td>
                           <td></td>
