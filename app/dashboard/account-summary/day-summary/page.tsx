@@ -5,44 +5,67 @@ import { Calendar, Wallet, CreditCard, Building2, Loader2, Search, Download, Pho
 const fmt = (n: number) => `LKR ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
 const numeric = (v: any) => Number(v ?? 0) || 0;
 
+// ✅ FIX - API eken ena okkoma shape handle karanawa
+// { data: [...] }, { data: { data: [...] } }, { salary: [...] }, { expenses: [...] }, [...] okkoma
+const extractArray = (j: any): any[] => {
+  if (!j) return [];
+  if (Array.isArray(j)) return j;
+  if (Array.isArray(j.data)) return j.data;
+  if (j.data && Array.isArray(j.data.data)) return j.data.data;
+  if (j.data && typeof j.data === "object") {
+    // { data: { salary: [...] } } wage nested object ekak nam
+    for (const k of ["salary", "other", "expenses", "records", "rows", "items", "list", "result", "summary", "branches"]) {
+      if (Array.isArray(j.data[k])) return j.data[k];
+    }
+  }
+  if (j.success && Array.isArray(j.data)) return j.data;
+  if (Array.isArray(j.branches)) return j.branches;
+  if (Array.isArray(j.expenses)) return j.expenses;
+  if (Array.isArray(j.records)) return j.records;
+  if (Array.isArray(j.rows)) return j.rows;
+  if (Array.isArray(j.summary)) return j.summary;
+  if (Array.isArray(j.salary)) return j.salary;
+  if (Array.isArray(j.other)) return j.other;
+  if (Array.isArray(j.items)) return j.items;
+  if (Array.isArray(j.list)) return j.list;
+  if (Array.isArray(j.result)) return j.result;
+  return [];
+};
+
 const fetchRaw = async (url: string): Promise<{ ok: boolean; status: number; json: any; data: any[] }> => {
   try {
     const r = await fetch(url, { cache: "no-store" });
     const j = await r.json().catch(() => null);
-    let data: any[] = [];
-    if (Array.isArray(j)) data = j;
-    else if (j?.success && Array.isArray(j.data)) data = j.data;
-    else if (Array.isArray(j?.data)) data = j.data;
-    else if (Array.isArray(j?.branches)) data = j.branches;
-    else if (Array.isArray(j?.expenses)) data = j.expenses;
-    else if (Array.isArray(j?.records)) data = j.records;
-    else if (Array.isArray(j?.rows)) data = j.rows;
-    else if (Array.isArray(j?.summary)) data = j.summary;
-    return { ok: r.ok, status: r.status, json: j, data };
+    return { ok: r.ok, status: r.status, json: j, data: extractArray(j) };
   } catch (e: any) {
     return { ok: false, status: 0, json: { error: String(e?.message || e) }, data: [] };
   }
 };
 
 const EXPENSE_APIS = [
-  { key: "salary", urls: (id: string) => [`/api/expences/salary?branchId=${id}`, `/api/expences/salary?branch_id=${id}`] },
-  { key: "other", urls: (id: string) => [`/api/expences/other?branchId=${id}`, `/api/expences/other?branch_id=${id}`] },
+  { key: "salary", urls: (id: string) => [`/api/expences/salary?branchId=${id}`, `/api/expences/salary?branch_id=${id}`, `/api/expences/salary?branch=${id}`, `/api/expences/salary?id=${id}`] },
+  { key: "other", urls: (id: string) => [`/api/expences/other?branchId=${id}`, `/api/expences/other?branch_id=${id}`, `/api/expences/other?branch=${id}`, `/api/expences/other?id=${id}`] },
   { key: "diesel", urls: (id: string) => [`/api/expences/diesel?branch_id=${id}`, `/api/expences/diesel?branchId=${id}`] },
   { key: "capital", urls: (id: string) => [`/api/expences/capital?branchId=${id}`, `/api/expences/capital?branch_id=${id}`] },
-  { key: "salesExp", urls: (id: string) => [`/api/expences/sales?branch_id=${id}`, `/api/expences/sales-expenses?branch_id=${id}`, `/api/expences/sales-expences?branch_id=${id}`] },
+  { key: "salesExp", urls: (id: string) => [`/api/expences/sales?branch_id=${id}`, `/api/expences/sales-expenses?branch_id=${id}`, `/api/expences/sales-expences?branch_id=${id}`, `/api/expences/sales?branchId=${id}`] },
 ] as const;
 type ExpenseKey = typeof EXPENSE_APIS[number]["key"];
 
+// ✅ FIX - payable field okkoma balanawa
 const getPayable = (r: any) => numeric(
   r.total_payable ?? r.totalPayable ??
-  r.payable ?? r.payable_amount ??
-  r.amount ?? r.total_amount ?? r.totalAmount ?? r.total ?? r.value ?? 0
+  r.payable ?? r.payable_amount ?? r.payableAmount ??
+  r.amount ?? r.total_amount ?? r.totalAmount ?? r.total ?? r.value ??
+  r.salary_amount ?? r.salaryAmount ?? r.price ?? r.cost ?? 0
 );
 
 const getExpDate = (r: any) => String(
   r.expense_date || r.date || r.expenseDate ||
-  r.created_date || r.created_at || r.updated_at || ""
+  r.created_date || r.created_at || r.updated_at || r.expenseDate || r.entry_date || ""
 ).slice(0, 10);
+
+// Branch ID eka record ekenma ganna - API eken ena record eke branchId eka thiyenawa nam eka gannawa
+const getRecordBranchId = (r: any, fallback: string) => String(r.branchId ?? r.branch_id ?? r.branch ?? r.branchID ?? fallback ?? "");
 
 export default function DaySummaryPage() {
   const [date, setDate] = useState("all");
@@ -55,11 +78,22 @@ export default function DaySummaryPage() {
   const [showCreditors, setShowCreditors] = useState(true);
   const [allDates, setAllDates] = useState<string[]>([]);
   const [expenseRows, setExpenseRows] = useState<any[]>([]);
-  const [debug, setDebug] = useState<any>({ salaryCount: 0, otherCount: 0, salarySample: null, otherSample: null, ids: [] });
+  const [debug, setDebug] = useState<any>({ salaryCount: 0, otherCount: 0, salarySample: null, otherSample: null, ids: [], raw1Status: "", raw1: "", raw2Status: "", raw2: "" });
 
   const fetchAll = useCallback(async () => {
     setIsLoading(true);
     try {
+      // ✅ RAW TEST - branchId=1 walin API eken mona da enne kiyala direct balanawa
+      try {
+        const t1 = await fetch(`/api/expences/salary?branchId=1`, { cache: "no-store" });
+        const j1 = await t1.json().catch(() => null);
+        const t2 = await fetch(`/api/expences/salary?branch_id=1`, { cache: "no-store" });
+        const j2 = await t2.json().catch(() => null);
+        console.log("RAW branchId=1:", t1.status, j1);
+        console.log("RAW branch_id=1:", t2.status, j2);
+        setDebug((p: any) => ({ ...p, raw1Status: t1.status, raw1: JSON.stringify(j1)?.slice(0, 1000), raw2Status: t2.status, raw2: JSON.stringify(j2)?.slice(0, 1000) }));
+      } catch (e) { console.log("RAW TEST ERROR", e); }
+
       const summaryUrl = date === "all"
         ? `/api/expences/sales-incomes?summary=true`
         : `/api/expences/sales-incomes?summary=true&date=${encodeURIComponent(date)}`;
@@ -89,26 +123,28 @@ export default function DaySummaryPage() {
       });
       setSummaryRows(normalizedSummary);
 
-      // ✅ FIX - /api/branch (singular - Other page eka use karana eka) + /api/branches (plural) DEKAMA
-      // Ekak hari nathuwa yanawa nam anika gannawa. branchName / bName dekama balanawa.
+      // ✅ /api/branch (singular) + /api/branches (plural) dekama + single object ekak awoth handle karanawa
       const bRes1 = await fetchRaw(`/api/branch`);
       const bRes2 = await fetchRaw(`/api/branches`);
-      const allBranchRaw = [...(bRes1.data || []), ...(bRes2.data || [])];
+      // Single object ekak awoth array ekata convert karanawa
+      const b1Arr = bRes1.data.length > 0 ? bRes1.data : (bRes1.json && typeof bRes1.json === "object" && !Array.isArray(bRes1.json) && (bRes1.json.id || bRes1.json.branch_id) ? [bRes1.json] : []);
+      const b2Arr = bRes2.data.length > 0 ? bRes2.data : (bRes2.json && typeof bRes2.json === "object" && !Array.isArray(bRes2.json) && (bRes2.json.id || bRes2.json.branch_id) ? [bRes2.json] : []);
+      const allBranchRaw = [...b1Arr, ...b2Arr];
       let branchList = allBranchRaw.length > 0
         ? allBranchRaw.map((b: any) => ({
             id: String(b.id ?? b.branch_id ?? b.branchId),
             branch_name: b.branchName || b.bName || b.branch_name || b.name || `Branch ${b.id ?? b.branch_id}`,
           }))
         : normalizedSummary.map((r: any) => ({ id: r.branchId, branch_name: r.branchName }));
-      // Duplicate IDs ain karanawa
       branchList = Array.from(new Map(branchList.map((b: any) => [String(b.id), b])).values());
       normalizedSummary.forEach((r: any) => {
         if (!branchList.find((b: any) => String(b.id) === String(r.branchId))) branchList.push({ id: r.branchId, branch_name: r.branchName });
       });
       setBranches(branchList);
 
-      // ✅ FIX - IDs: Branches (dekama API) + Summary dekama - ekak hari nathuwa yanawa nam anika gannawa
+      // ✅ IDs: Branch list + Summary + Salary page eke hari ID eka "1" - "1" mulinma dannawa
       const ids = Array.from(new Set([
+        "1",
         ...branchList.map((b: any) => String(b.id)),
         ...normalizedSummary.map((r: any) => String(r.branchId)),
       ])).filter(Boolean);
@@ -131,20 +167,37 @@ export default function DaySummaryPage() {
             for (const url of api.urls(encodeURIComponent(id))) {
               const res = await fetchRaw(url);
               if (res.ok && res.data.length > 0) {
-                return (res.data || []).map((r: any) => ({ ...r, _branchId: String(id), _branchName: getName(id), _type: api.key as ExpenseKey }));
+                return (res.data || []).map((r: any) => {
+                  const realBid = getRecordBranchId(r, String(id));
+                  return { ...r, _branchId: realBid, _branchName: getName(realBid), _type: api.key as ExpenseKey };
+                });
               }
             }
             return [];
           })
         )
       );
-      const allExpenses: any[] = [];
+      let allExpenses: any[] = [];
       expenseResults.forEach((res: any) => { if (res.status === "fulfilled") allExpenses.push(...res.value); });
 
-      // ✅ DEBUG - Salary + Other dekama enawa da balanna
+      // ✅ FALLBACK - IDs walin 0 nam, branchId nathuwa okkoma gannawa
+      if (allExpenses.length === 0) {
+        console.log("No expenses with IDs, trying WITHOUT branchId...");
+        const noBranchResults = await Promise.allSettled([
+          fetchRaw(`/api/expences/salary`).then((res) => (res.data || []).map((r: any) => ({ ...r, _branchId: getRecordBranchId(r, ids[0] ?? "1"), _branchName: getName(getRecordBranchId(r, ids[0] ?? "1")), _type: "salary" as ExpenseKey }))),
+          fetchRaw(`/api/expences/other`).then((res) => (res.data || []).map((r: any) => ({ ...r, _branchId: getRecordBranchId(r, ids[0] ?? "1"), _branchName: getName(getRecordBranchId(r, ids[0] ?? "1")), _type: "other" as ExpenseKey }))),
+          fetchRaw(`/api/expences/diesel`).then((res) => (res.data || []).map((r: any) => ({ ...r, _branchId: getRecordBranchId(r, ids[0] ?? "1"), _branchName: getName(getRecordBranchId(r, ids[0] ?? "1")), _type: "diesel" as ExpenseKey }))),
+          fetchRaw(`/api/expences/capital`).then((res) => (res.data || []).map((r: any) => ({ ...r, _branchId: getRecordBranchId(r, ids[0] ?? "1"), _branchName: getName(getRecordBranchId(r, ids[0] ?? "1")), _type: "capital" as ExpenseKey }))),
+          fetchRaw(`/api/expences/sales`).then((res) => (res.data || []).map((r: any) => ({ ...r, _branchId: getRecordBranchId(r, ids[0] ?? "1"), _branchName: getName(getRecordBranchId(r, ids[0] ?? "1")), _type: "salesExp" as ExpenseKey }))),
+        ]);
+        noBranchResults.forEach((res: any) => { if (res.status === "fulfilled") allExpenses.push(...res.value); });
+        console.log("No-branch expenses:", allExpenses.length, allExpenses[0]);
+      }
+
+      // ✅ DEBUG
       const salaryOnly = allExpenses.filter((r: any) => r._type === "salary");
       const otherOnly = allExpenses.filter((r: any) => r._type === "other");
-      setDebug({ salaryCount: salaryOnly.length, otherCount: otherOnly.length, salarySample: salaryOnly[0] || null, otherSample: otherOnly[0] || null, ids });
+      setDebug((p: any) => ({ ...p, salaryCount: salaryOnly.length, otherCount: otherOnly.length, salarySample: salaryOnly[0] || null, otherSample: otherOnly[0] || null, ids }));
       console.log("DEBUG IDS:", ids);
       console.log("DEBUG SALARY COUNT:", salaryOnly.length, "SAMPLE:", salaryOnly[0]);
       console.log("DEBUG OTHER COUNT:", otherOnly.length, "SAMPLE:", otherOnly[0]);
@@ -263,12 +316,16 @@ export default function DaySummaryPage() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-yellow-500/40 bg-yellow-500/10 p-4 text-[11px]">
-          <p className="font-black text-yellow-300">DEBUG - Salary + Other</p>
+        <div className="rounded-2xl border border-yellow-500/40 bg-yellow-500/10 p-4 text-[11px] break-all">
+          <p className="font-black text-yellow-300">DEBUG - Salary + Other + RAW</p>
           <p>IDs used: {JSON.stringify(debug.ids)}</p>
           <p>Salary records: {debug.salaryCount} | Other records: {debug.otherCount}</p>
           <p>Salary sample: {JSON.stringify(debug.salarySample)}</p>
           <p>Other sample: {JSON.stringify(debug.otherSample)}</p>
+          <p className="mt-2 font-bold text-white">RAW branchId=1 - Status: {debug.raw1Status}</p>
+          <p>{debug.raw1}</p>
+          <p className="mt-2 font-bold text-white">RAW branch_id=1 - Status: {debug.raw2Status}</p>
+          <p>{debug.raw2}</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/[0.06] bg-[#0B1226] p-4">
