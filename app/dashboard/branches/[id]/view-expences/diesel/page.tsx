@@ -1,34 +1,32 @@
 "use client";
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { AlertCircle, ArrowLeft, Droplets, Fuel, Plus, RefreshCw, Trash2, Wallet, PackagePlus, Save, CreditCard, Filter, X, Calendar, Eye, BarChart3 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { AlertCircle, ArrowLeft, Droplets, Fuel, RefreshCw, Wallet, CreditCard, Filter, X, Calendar, Eye, BarChart3 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 
 type DieselExpense = { id: number; branch_id: string; date: string; machine: string; diesel: number | string; amount: number | string; payable: number | string; paid: number | string; };
+type InitialAdd = { id?: number; date: string; diesel: number; amount: number };
 type CardColor = "cyan" | "blue" | "orange" | "green" | "red";
 const machines = ["Komatsu","CAT","JCB","Excavator","Loader","Backhoe Loader","Wheel Loader","Breker Machine","Compressor","Tractor"];
-const inputClass = "h-12 w-full rounded-xl border border-slate-600/80 bg-slate-800/80 px-4 text-sm text-white outline-none transition placeholder:text-slate-500 hover:border-slate-500 focus:border-cyan-400 focus:ring-4 focus:ring-cyan-500/10";
 const numberValue = (v: any) => Number(v || 0);
 const formatNumber = (v: any) => Number(v || 0).toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-// ✅ Diesel 1L mila
 const DIESEL_PRICE = 397;
 
-export default function DieselExpensesPage() {
+export default function ViewDieselExpensesPage() {
   const params = useParams(); const router = useRouter();
   const branchId = Array.isArray(params?.id)? params.id[0] : String(params?.id || "");
   const [expenses, setExpenses] = useState<DieselExpense[]>([]);
-  const [loading, setLoading] = useState(false); const [saving, setSaving] = useState(false); const [savingInitial, setSavingInitial] = useState(false);
-  const [initialDieselStock, setInitialDieselStock] = useState(0); const [initialTotalAmount, setInitialTotalAmount] = useState(0);
-  const [tempInitialDiesel, setTempInitialDiesel] = useState(""); const [tempInitialAmount, setTempInitialAmount] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [initialDieselStock, setInitialDieselStock] = useState(0);
+  const [initialTotalAmount, setInitialTotalAmount] = useState(0);
   const [isInitialSet, setIsInitialSet] = useState(false);
-  const [selectedMachine, setSelectedMachine] = useState(""); const [otherMachine, setOtherMachine] = useState("");
-  const [date, setDate] = useState(""); const [diesel, setDiesel] = useState(""); const [payable, setPayable] = useState(""); const [paid, setPaid] = useState("");
-  
-  // ✅ VIEW MODAL - Initial + Date wise summary
   const [showInitialSummary, setShowInitialSummary] = useState(false);
 
+  // ✅ Initial History - View modal eke pennanna witharak
+  const [initialHistory, setInitialHistory] = useState<InitialAdd[]>([]);
+  const [initialFilterDate, setInitialFilterDate] = useState("");
+
   // FILTER - SINGLE DATE ONLY
-  const [filterDate, setFilterDate] = useState(""); 
+  const [filterDate, setFilterDate] = useState("");
   const [filterMachine, setFilterMachine] = useState("");
 
   const loadExpenses = async () => {
@@ -41,33 +39,36 @@ export default function DieselExpensesPage() {
         const d = Number(data.summary.totalDiesel || 0); const a = Number(data.summary.totalAmount || 0);
         setInitialDieselStock(d); setInitialTotalAmount(a); setIsInitialSet(d > 0 || a > 0);
       }
+      if (Array.isArray(data.history)) {
+        setInitialHistory(data.history.map((h: any) => ({
+          id: h.id, date: String(h.stock_date || "").slice(0,10),
+          diesel: Number(h.added_diesel || 0), amount: Number(h.added_amount || 0),
+        })));
+      }
     } catch (e) { console.error(e); } finally { setLoading(false); }
   };
-  useEffect(() => { if (branchId) loadExpenses(); }, [branchId]);
 
-  // ✅ ESC walin modal close
+  const loadInitialHistory = async () => {
+    if (!branchId) return;
+    try {
+      const r = await fetch(`/api/expences/diesel?branch_id=${encodeURIComponent(branchId)}&type=history`, { cache: "no-store" });
+      if (!r.ok) return;
+      const j = await r.json();
+      setInitialHistory((Array.isArray(j) ? j : []).map((h: any) => ({
+        id: h.id, date: String(h.stock_date || "").slice(0,10),
+        diesel: Number(h.added_diesel || 0), amount: Number(h.added_amount || 0),
+      })));
+    } catch {}
+  };
+
+  useEffect(() => { if (branchId) { loadExpenses(); loadInitialHistory(); } }, [branchId]);
+
   useEffect(() => {
     if (!showInitialSummary) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setShowInitialSummary(false); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [showInitialSummary]);
-
-  const resetForm = () => { setSelectedMachine(""); setOtherMachine(""); setDate(""); setDiesel(""); setPayable(""); setPaid(""); };
-
-  const handleAddInitial = async () => {
-    const d = Number(tempInitialDiesel); const a = Number(tempInitialAmount);
-    if (!d || d <= 0) return alert("Enter Initial Diesel");
-    if (!Number.isFinite(a) || a < 0) return alert("Enter Initial Amount");
-    const newDiesel = isInitialSet? initialDieselStock + d : d;
-    const newAmount = isInitialSet? initialTotalAmount + a : a;
-    try { setSavingInitial(true);
-      const res = await fetch("/api/expences/diesel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ branch_id: branchId, initialDiesel: newDiesel, initialAmount: newAmount, action: "set_initial" }) });
-      const data = await res.json(); if (!res.ok) throw new Error(data.error);
-      setInitialDieselStock(newDiesel); setInitialTotalAmount(newAmount); setIsInitialSet(true);
-      setTempInitialDiesel(""); setTempInitialAmount(""); await loadExpenses();
-    } catch (e) { alert((e as Error).message); } finally { setSavingInitial(false); }
-  };
 
   // FILTER LOGIC - EKA DATE EKIN WITHARAK
   const filteredExpenses = useMemo(() => {
@@ -88,16 +89,27 @@ export default function DieselExpensesPage() {
   const activeDieselUsed = isFiltered? fDiesel : totalUsedDiesel;
   const activePayable = isFiltered? fPayable : totalPayable;
 
-  const formDiesel = numberValue(diesel);
-  const formPayable = numberValue(payable);
-  const formPaid = numberValue(paid);
-
-  // ✅ CARD LOGIC - Oya kiyapu eka
+  // ✅ CARD LOGIC - View eke form na nisa formDiesel / formPayable add karanne na
   const displayTotalDiesel = initialDieselStock;
-  const displayDieselUsed = activeDieselUsed + formDiesel;
-  const displayTotalAmount = activePayable + formPayable;
-  const displayRemainingDiesel = Math.max(0, displayTotalDiesel - displayDieselUsed);
+  const displayDieselUsed = activeDieselUsed;
+  const displayTotalAmount = activePayable;
+  const displayRemainingDiesel = Math.max(0, displayTotalDiesel - totalUsedDiesel);
   const displayRemainingBalance = displayRemainingDiesel * DIESEL_PRICE;
+
+  // ✅ INITIAL HISTORY - Date wise group
+  const initialByDate = useMemo(() => {
+    const map = new Map<string, { date: string; diesel: number; amount: number; count: number }>();
+    initialHistory.forEach((h) => {
+      const d = String(h.date || "").slice(0,10);
+      const cur = map.get(d) || { date: d, diesel: 0, amount: 0, count: 0 };
+      cur.diesel += numberValue(h.diesel); cur.amount += numberValue(h.amount); cur.count += 1;
+      map.set(d, cur);
+    });
+    return Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date));
+  }, [initialHistory]);
+  const filteredInitialByDate = useMemo(() => initialByDate.filter(r => !initialFilterDate || r.date === initialFilterDate), [initialByDate, initialFilterDate]);
+  const totalInitialHistoryDiesel = useMemo(() => initialHistory.reduce((s, h) => s + numberValue(h.diesel), 0), [initialHistory]);
+  const totalInitialHistoryAmount = useMemo(() => initialHistory.reduce((s, h) => s + numberValue(h.amount), 0), [initialHistory]);
 
   // ✅ DATE WISE SUMMARY - Modal eke pennanna
   const dateWiseSummary = useMemo(() => {
@@ -131,46 +143,19 @@ export default function DieselExpensesPage() {
 
   const clearFilters = () => { setFilterDate(""); setFilterMachine(""); };
 
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!isInitialSet) return alert("Set Initial Stock first");
-    if (!selectedMachine) return alert("Select machine"); if (!date) return alert("Select date");
-    if (formDiesel <= 0) return alert("Valid diesel"); if (formPaid > formPayable) return alert("Paid > Payable");
-    const m = selectedMachine === "Other Machine"? otherMachine.trim() : selectedMachine; if (!m) return alert("Enter other machine");
-    try { setSaving(true);
-      const res = await fetch("/api/expences/diesel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ branch_id: branchId, date, machine: m, diesel: formDiesel, payable: formPayable, paid: formPaid }) });
-      const data = await res.json(); if (!res.ok) throw new Error(data.error);
-      resetForm(); await loadExpenses();
-    } catch (err) { alert((err as Error).message); } finally { setSaving(false); }
-  };
-  const handleDelete = async (id: number) => { if (!confirm("Delete?")) return; const res = await fetch(`/api/expences/diesel?id=${id}`, { method: "DELETE" }); if (res.ok) await loadExpenses(); };
-
   return (
     <main className="min-h-screen bg-slate-950 p-4 text-white md:p-6">
       <div className="mx-auto max-w-7xl space-y-6">
         <button onClick={() => router.back()} className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-bold"><ArrowLeft size={16}/> Back</button>
         <header className="flex justify-between rounded-3xl border border-slate-700/80 bg-slate-900 p-5">
-          <div className="flex items-center gap-4"><div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400"><Fuel size={29}/></div><div><h1 className="text-2xl font-bold">Diesel Expenses</h1><p className="text-sm text-slate-400">Type karaddi ma card adu wenawa - Minus na</p></div></div>
-          <button onClick={loadExpenses} className="h-11 inline-flex items-center gap-2 rounded-xl border border-slate-600 bg-slate-800 px-5 text-sm font-bold"><RefreshCw size={17} className={loading? "animate-spin" : ""}/>Refresh</button>
+          <div className="flex items-center gap-4"><div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400"><Fuel size={29}/></div><div><h1 className="text-2xl font-bold">Diesel Expenses</h1><p className="text-sm text-slate-400">View Only - Card + Filter + Table</p></div></div>
+          <div className="flex gap-2">
+            <button onClick={async () => { await loadInitialHistory(); setShowInitialSummary(true); }} className="h-11 inline-flex items-center gap-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 px-4 text-sm font-bold"><Eye size={16}/> View</button>
+            <button onClick={() => { loadExpenses(); loadInitialHistory(); }} className="h-11 inline-flex items-center gap-2 rounded-xl border border-slate-600 bg-slate-800 px-5 text-sm font-bold"><RefreshCw size={17} className={loading? "animate-spin" : ""}/>Refresh</button>
+          </div>
         </header>
 
-        {/* ✅ INITIAL STOCK + VIEW BUTTON */}
-        <section className="rounded-3xl border border-cyan-500/30 bg-slate-900 p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-bold uppercase flex items-center gap-2"><PackagePlus size={18} className="text-cyan-400"/>Initial Stock - Add kalama wadi wenawa</h2>
-            {/* ✅ VIEW BUTTON - Me venakam Initial + Date wise summary */}
-            <button onClick={() => setShowInitialSummary(true)} className="h-10 inline-flex items-center gap-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 px-4 text-sm font-bold">
-              <Eye size={16}/> View
-            </button>
-          </div>
-          <div className="grid gap-4 md:grid-cols-[1fr_1fr_auto]">
-            <Field label="Initial Diesel (L)"><input type="number" value={tempInitialDiesel} onChange={e => setTempInitialDiesel(e.target.value)} placeholder="331" className={inputClass}/></Field>
-            <Field label="Initial Amount (Rs.)"><input type="number" value={tempInitialAmount} onChange={e => setTempInitialAmount(e.target.value)} placeholder="317000" className={inputClass}/></Field>
-            <button onClick={handleAddInitial} disabled={savingInitial} className="h-12 self-end inline-flex items-center gap-2 rounded-xl bg-cyan-600 px-6 font-bold">{savingInitial? <RefreshCw size={17} className="animate-spin"/> : <Save size={17}/>}Add</button>
-          </div>
-          {isInitialSet && <p className="mt-3 text-xs text-green-400">✓ Initial: {initialDieselStock} L / Rs. {initialTotalAmount.toLocaleString()} | Used: {totalUsedDiesel} L | Remaining: {Math.max(0, initialDieselStock - totalUsedDiesel)} L</p>}
-        </section>
-
+        {/* ✅ CARD TIKA WITHARAK - Form na */}
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <SummaryCard title="Diesel Used" subtitle={isFiltered ? `Filtered: ${fDiesel}L` : "Table eke diesel wala ekathuwa"} value={`${formatNumber(displayDieselUsed)} L`} icon={<Droplets size={22}/>} color="cyan"/>
           <SummaryCard title="Total Amount" subtitle={isFiltered ? `Filtered payable` : "Table eke viyadam wela thiyena amount"} value={`Rs. ${formatNumber(displayTotalAmount)}`} icon={<Wallet size={22}/>} color="blue"/>
@@ -179,24 +164,7 @@ export default function DieselExpensesPage() {
           <SummaryCard title="Total Diesel" subtitle="Initial stock" value={`${formatNumber(displayTotalDiesel)} L`} icon={<AlertCircle size={22}/>} color="red"/>
         </section>
 
-        <section className="rounded-3xl border border-slate-700/80 bg-slate-900 overflow-hidden">
-          <div className="border-b border-slate-700/80 bg-slate-800/30 px-6 py-5"><h2 className="text-xl font-bold">Add Diesel Expense</h2><p className="text-xs text-slate-400 mt-1">Qty / Payable type karaddi ma uda card adu wenawa - Balance auto pennanawa</p></div>
-          <form onSubmit={handleSubmit} className="space-y-6 p-6">
-            <div className="grid gap-6 md:grid-cols-2">
-              <Field label="Machine"><select value={selectedMachine} onChange={e => { setSelectedMachine(e.target.value); if (e.target.value!== "Other Machine") setOtherMachine(""); }} className={inputClass}><option value="">Select Machine</option>{machines.map(m => <option key={m} value={m}>{m}</option>)}<option value="Other Machine">Other Machine</option></select>{selectedMachine === "Other Machine" && <input value={otherMachine} onChange={e => setOtherMachine(e.target.value)} placeholder="Other machine name" className={`${inputClass} mt-3`}/>}</Field>
-              <Field label="Date"><input type="date" value={date} onChange={e => setDate(e.target.value)} className={inputClass}/></Field>
-            </div>
-            <div className="grid gap-6 md:grid-cols-3">
-              <Field label="Diesel Quantity (L)"><input type="number" min="0" step="0.01" value={diesel} onChange={e => setDiesel(e.target.value)} placeholder="0.00" className={inputClass}/></Field>
-              <Field label="Payable Amount (Rs.)"><input type="number" value={payable} onChange={e => setPayable(e.target.value)} placeholder="0.00" className={inputClass}/></Field>
-              <Field label="Paid Amount (Rs.)"><input type="number" value={paid} onChange={e => setPaid(e.target.value)} placeholder="0.00" className={inputClass}/></Field>
-            </div>
-            <div className="flex justify-end border-t border-slate-700/80 pt-6">
-              <button type="submit" disabled={saving ||!isInitialSet} className="h-12 inline-flex items-center gap-2 rounded-xl bg-cyan-600 px-7 font-bold disabled:opacity-40">{saving? <RefreshCw size={18} className="animate-spin"/> : <Plus size={18}/>}Save Expense</button>
-            </div>
-          </form>
-        </section>
-
+        {/* ✅ FILTER + TABLE WITHARAK */}
         <section className="rounded-3xl border border-slate-700/80 bg-slate-900 overflow-hidden">
           <div className="p-5 border-b border-slate-700/80 space-y-4">
             <div className="flex justify-between items-center">
@@ -211,6 +179,7 @@ export default function DieselExpensesPage() {
               <select value={filterMachine} onChange={e=>setFilterMachine(e.target.value)} className="h-9 rounded-lg border border-slate-600 bg-slate-900 px-3 text-xs outline-none">
                 <option value="">All Machines</option>
                 {machines.map(m=> <option key={m} value={m}>{m}</option>)}
+                {expenses.map(e=>e.machine).filter((v,i,a)=>v && !machines.includes(v) && a.indexOf(v)===i).map(m=> <option key={m} value={m}>{m}</option>)}
               </select>
               <div className="flex items-center gap-1.5 h-9 rounded-lg border border-slate-600 bg-slate-50 px-3">
                 <Calendar size={14} className="text-slate-900"/>
@@ -223,15 +192,14 @@ export default function DieselExpensesPage() {
               )}
             </div>
           </div>
-          <div className="overflow-x-auto"><table className="w-full min-w-[900px]"><thead className="bg-slate-800/80"><tr className="text-xs text-slate-400 uppercase"><th className="px-5 py-4 text-left">Date</th><th className="px-5 py-4 text-left">Machine</th><th className="px-5 py-4 text-right">Diesel</th><th className="px-5 py-4 text-right">Payable</th><th className="px-5 py-4 text-right">Paid</th><th className="px-5 py-4 text-right">Balance</th><th className="px-5 py-4 text-center">Action</th></tr></thead><tbody>{filteredExpenses.length===0 ? <tr><td colSpan={7} className="px-5 py-10 text-center text-sm text-slate-500">No records for {filterDate} {filterMachine} - filter clear karala balanna</td></tr> : filteredExpenses.map(item => { const p = numberValue(item.payable); const pd = numberValue(item.paid); return <tr key={item.id} className="border-b border-slate-800 hover:bg-slate-800/40"><td className="px-5 py-4 text-sm">{item.date?.slice(0, 10)}</td><td className="px-5 py-4 font-semibold">{item.machine}</td><td className="px-5 py-4 text-right">{formatNumber(item.diesel)}</td><td className="px-5 py-4 text-right font-bold text-blue-400">Rs. {formatNumber(p)}</td><td className="px-5 py-4 text-right font-bold text-green-400">Rs. {formatNumber(pd)}</td><td className="px-5 py-4 text-right font-bold text-red-400">Rs. {formatNumber(Math.max(0, p - pd))}</td><td className="px-5 py-4 text-center"><button onClick={() => handleDelete(item.id)} className="h-9 w-9 inline-flex items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20"><Trash2 size={16}/></button></td></tr> })}</tbody></table></div>
+          <div className="overflow-x-auto"><table className="w-full min-w-[900px]"><thead className="bg-slate-800/80"><tr className="text-xs text-slate-400 uppercase"><th className="px-5 py-4 text-left">Date</th><th className="px-5 py-4 text-left">Machine</th><th className="px-5 py-4 text-right">Diesel</th><th className="px-5 py-4 text-right">Payable</th><th className="px-5 py-4 text-right">Paid</th><th className="px-5 py-4 text-right">Balance</th></tr></thead><tbody>{filteredExpenses.length===0 ? <tr><td colSpan={6} className="px-5 py-10 text-center text-sm text-slate-500">No records for {filterDate} {filterMachine} - filter clear karala balanna</td></tr> : filteredExpenses.map(item => { const p = numberValue(item.payable); const pd = numberValue(item.paid); return <tr key={item.id} className="border-b border-slate-800 hover:bg-slate-800/40"><td className="px-5 py-4 text-sm">{item.date?.slice(0, 10)}</td><td className="px-5 py-4 font-semibold">{item.machine}</td><td className="px-5 py-4 text-right">{formatNumber(item.diesel)}</td><td className="px-5 py-4 text-right font-bold text-blue-400">Rs. {formatNumber(p)}</td><td className="px-5 py-4 text-right font-bold text-green-400">Rs. {formatNumber(pd)}</td><td className="px-5 py-4 text-right font-bold text-red-400">Rs. {formatNumber(Math.max(0, p - pd))}</td></tr> })}</tbody></table></div>
         </section>
       </div>
 
-      {/* ✅ VIEW MODAL - Initial + Date Wise Summary - Professional */}
+      {/* ✅ VIEW MODAL - Summary witharak, Form na */}
       {showInitialSummary && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm overflow-y-auto" onClick={() => setShowInitialSummary(false)}>
           <div className="w-full max-w-2xl my-6 rounded-3xl border border-slate-700 bg-[#0d1527] shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            {/* Header - sticky */}
             <div className="flex items-center justify-between border-b border-slate-800 bg-slate-900/80 px-6 py-4">
               <div className="flex items-center gap-3">
                 <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400"><BarChart3 size={20}/></div>
@@ -244,7 +212,6 @@ export default function DieselExpensesPage() {
             </div>
 
             <div className="max-h-[70vh] overflow-y-auto p-6 space-y-5">
-              {/* Initial Stock Cards */}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-4">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Initial Diesel</p>
@@ -268,7 +235,6 @@ export default function DieselExpensesPage() {
                 </div>
               </div>
 
-              {/* Progress Bar - Professional */}
               <div>
                 <div className="flex justify-between text-[11px] font-bold text-slate-400 mb-2">
                   <span>Used {initialDieselStock > 0 ? Math.round((totalUsedDiesel / initialDieselStock) * 100) : 0}%</span>
@@ -279,7 +245,60 @@ export default function DieselExpensesPage() {
                 </div>
               </div>
 
-              {/* Date Wise Summary */}
+              {/* Initial Add History - Date Wise - Read Only */}
+              <div>
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                  <h3 className="text-xs font-black uppercase tracking-widest text-cyan-300">Initial Add History • Date Wise</h3>
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 h-9 rounded-lg border border-slate-600 bg-slate-900 px-3">
+                      <Calendar size={14} className="text-slate-400"/>
+                      <input type="date" value={initialFilterDate} onChange={e=>setInitialFilterDate(e.target.value)} className="bg-transparent text-xs outline-none" />
+                    </div>
+                    {initialFilterDate && <button onClick={()=>setInitialFilterDate("")} className="h-9 px-3 rounded-lg bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold flex items-center gap-1"><X size={12}/>Clear</button>}
+                    <span className="rounded-lg bg-cyan-500/15 text-cyan-300 px-2.5 py-1 text-[11px] font-bold">{filteredInitialByDate.length} Days • {initialHistory.length} Adds</span>
+                  </div>
+                </div>
+                {filteredInitialByDate.length === 0 ? (
+                  <p className="rounded-2xl border border-slate-800 bg-slate-900/50 px-4 py-6 text-center text-sm text-slate-500">Thama Initial Add History na<br/><span className="text-[11px]">DB Total: {formatNumber(initialDieselStock)} L / Rs. {formatNumber(initialTotalAmount)}</span></p>
+                ) : (
+                  <div className="overflow-hidden rounded-2xl border border-cyan-500/20">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-900">
+                        <tr className="text-left text-[10px] uppercase tracking-wider text-slate-500">
+                          <th className="px-4 py-3">Date</th>
+                          <th className="px-4 py-3 text-center">Adds</th>
+                          <th className="px-4 py-3 text-right">Initial Diesel</th>
+                          <th className="px-4 py-3 text-right">Initial Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/70">
+                        {filteredInitialByDate.map((row) => (
+                          <tr key={row.date} className="hover:bg-slate-800/40">
+                            <td className="px-4 py-3 font-bold">{row.date}</td>
+                            <td className="px-4 py-3 text-center"><span className="rounded-lg bg-slate-800 px-2 py-1 text-[11px] font-bold">{row.count}</span></td>
+                            <td className="px-4 py-3 text-right font-bold text-cyan-300">{formatNumber(row.diesel)} L</td>
+                            <td className="px-4 py-3 text-right font-bold">Rs. {formatNumber(row.amount)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot className="bg-slate-900">
+                        <tr className="font-black">
+                          <td className="px-4 py-3 text-slate-400">Total (History)</td>
+                          <td className="px-4 py-3 text-center">{initialHistory.length}</td>
+                          <td className="px-4 py-3 text-right text-cyan-300">{formatNumber(totalInitialHistoryDiesel)} L</td>
+                          <td className="px-4 py-3 text-right">Rs. {formatNumber(totalInitialHistoryAmount)}</td>
+                        </tr>
+                        <tr className="font-black text-[11px] text-slate-500">
+                          <td colSpan={2} className="px-4 py-2">DB Total</td>
+                          <td className="px-4 py-2 text-right">{formatNumber(initialDieselStock)} L</td>
+                          <td className="px-4 py-2 text-right">Rs. {formatNumber(initialTotalAmount)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+              </div>
+
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-xs font-black uppercase tracking-widest text-slate-400">Date Wise Summary</h3>
@@ -324,7 +343,6 @@ export default function DieselExpensesPage() {
                 )}
               </div>
 
-              {/* Machine Wise - Compact */}
               <div>
                 <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-3">Machine Wise</h3>
                 <div className="space-y-2">
@@ -352,4 +370,3 @@ function SummaryCard({ title, subtitle, value, icon, color }: { title: string; s
   const s: any = { cyan: { b: "border-cyan-500/25", i: "bg-cyan-500/10 text-cyan-400", v: "text-cyan-300" }, blue: { b: "border-blue-500/25", i: "bg-blue-500/10 text-blue-400", v: "text-blue-300" }, orange: { b: "border-orange-500/25", i: "bg-orange-500/10 text-orange-400", v: "text-orange-300" }, green: { b: "border-green-500/25", i: "bg-green-500/10 text-green-400", v: "text-green-300" }, red: { b: "border-red-500/25", i: "bg-red-500/10 text-red-400", v: "text-red-300" } };
   const c = s[color]; return (<div className={`rounded-2xl border bg-slate-900 p-5 ${c.b}`}><div className="flex justify-between"><div><p className="text-sm font-bold">{title}</p><p className="text-xs text-slate-500 mt-1">{subtitle}</p><h2 className={`mt-4 text-xl font-bold ${c.v}`}>{value}</h2></div><span className={`h-10 w-10 flex items-center justify-center rounded-xl ${c.i}`}>{icon}</span></div></div>);
 }
-function Field({ label, children }: { label: string; children: React.ReactNode; }) { return (<label className="block"><span className="mb-2 block text-xs font-bold uppercase text-slate-400">{label}</span>{children}</label>); }
