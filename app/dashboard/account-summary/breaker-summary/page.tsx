@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 
 const fmt = (n: number) => `LKR ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+const qtyFmt = (n: number) => `${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Cube`;
 const numeric = (v: any) => Number(v ?? 0) || 0;
 const isBreker = (s: any) => {
   const t = String(s || "").toLowerCase();
@@ -14,9 +15,17 @@ const isBreker = (s: any) => {
 const isBrekerSalary = (r: any) => {
   return isBreker(r.employee_name) || isBreker(r.employeeName) || isBreker(r.name) || isBreker(r.reason) || isBreker(r.description) || isBreker(r.employee);
 };
-// ✅ BREKER MACHINE eke DIESEL COST witharak - machine column eken check karanawa
 const isBrekerMachine = (r: any) => {
   return isBreker(r.machine) || isBreker(r.machine_name) || isBreker(r.machineName);
+};
+
+
+const getCrusherQty = (r: any) => numeric(r.crusher_load_qty ?? r.crusher_load_quantity ?? r.crusher_qty ?? r.crusher_load ?? 0);
+const getOutsideQty = (r: any) => numeric(r.outside_load_qty ?? r.outside_load_quantity ?? r.outside_qty ?? r.outside_load ?? 0);
+const getTotalCube = (r: any) => {
+  const direct = numeric(r.total_cube ?? r.total_cube_qty ?? r.total_cube_quantity ?? r.total_quantity ?? 0);
+  if (direct > 0) return direct;
+  return getCrusherQty(r) + getOutsideQty(r);
 };
 
 const fetchJSON = async (url: string) => {
@@ -105,7 +114,6 @@ export default function BreakerSummaryPage() {
     return true;
   }), [otherExpenses, branchFilter, search]);
 
-  // ✅ DIESEL = BREKER MACHINE WITHARAK - All Machines newei
   const breakerDieselAll = useMemo(() => (dieselRows || []).filter(r => {
     if (!r) return false;
     if (!isBrekerMachine(r)) return false;
@@ -120,8 +128,11 @@ export default function BreakerSummaryPage() {
 
   const breakerIncomeTotal = useMemo(() => breakerIncomeAll.reduce((t, r) => t + numeric(r.total_payable ?? r.amount), 0), [breakerIncomeAll]);
 
-  // ✅ Card eke amount eka = Breker Machine eke Diesel Cost witharak
-  // SUM(payable) - Okkoma Branches + Okkoma Dates
+  // ✅ NEW - Quantity Totals (All Dates + Branch Filter)
+  const crusherTotalAll = useMemo(() => breakerIncomeAll.reduce((t, r) => t + getCrusherQty(r), 0), [breakerIncomeAll]);
+  const outsideTotalAll = useMemo(() => breakerIncomeAll.reduce((t, r) => t + getOutsideQty(r), 0), [breakerIncomeAll]);
+  const totalCubeAll = useMemo(() => breakerIncomeAll.reduce((t, r) => t + getTotalCube(r), 0), [breakerIncomeAll]);
+
   const dieselQtyAll = useMemo(() => breakerDieselAll.reduce((t, r) => t + numeric(r.diesel ?? r.qty ?? r.quantity ?? r.liters), 0), [breakerDieselAll]);
   const dieselTotal = useMemo(() => breakerDieselAll.reduce((t, r) => t + numeric(r.payable ?? r.total_payable ?? r.amount), 0), [breakerDieselAll]);
 
@@ -140,16 +151,30 @@ export default function BreakerSummaryPage() {
   const balanceDateTotal = incomeDateTotal - dieselDateTotal - salaryDateTotal;
   const balanceDatePositive = balanceDateTotal >= 0;
 
+  // ✅ NEW - Date wise Quantity Totals
+  const crusherDateTotal = useMemo(() => breakerIncomeDate.reduce((t, r) => t + getCrusherQty(r), 0), [breakerIncomeDate]);
+  const outsideDateTotal = useMemo(() => breakerIncomeDate.reduce((t, r) => t + getOutsideQty(r), 0), [breakerIncomeDate]);
+  const totalCubeDateTotal = useMemo(() => breakerIncomeDate.reduce((t, r) => t + getTotalCube(r), 0), [breakerIncomeDate]);
+
   const summaryRows = useMemo(() => {
-    const map = new Map<string, { key: string, branchId: string, branchName: string, date: string, income: number, diesel: number, dieselQty: number, salary: number, incomeCount: number, dieselCount: number, salaryCount: number }>();
+    const map = new Map<string, { key: string, branchId: string, branchName: string, date: string, income: number, diesel: number, dieselQty: number, salary: number, incomeCount: number, dieselCount: number, salaryCount: number, crusherQty: number, outsideQty: number, totalCube: number }>();
     const getRow = (r: any) => {
       const d = getDateStr(r);
       const key = date === "all" ? `${d}|${getBranchKey(r)}` : getBranchKey(r);
-      if (!map.has(key)) map.set(key, { key, branchId: getBranchKey(r), branchName: getBranchName(r), date: d, income: 0, diesel: 0, dieselQty: 0, salary: 0, incomeCount: 0, dieselCount: 0, salaryCount: 0 });
+      if (!map.has(key)) map.set(key, { key, branchId: getBranchKey(r), branchName: getBranchName(r), date: d, income: 0, diesel: 0, dieselQty: 0, salary: 0, incomeCount: 0, dieselCount: 0, salaryCount: 0, crusherQty: 0, outsideQty: 0, totalCube: 0 });
       return map.get(key)!;
     };
-    breakerIncomeDate.forEach(r => { const row = getRow(r); row.income += numeric(r.total_payable ?? r.amount); row.incomeCount += 1; row.branchName = getBranchName(r); });
-    // ✅ Table eke DIESEL column eka = E Date + E Branch eke Breker Machine eke Diesel Cost witharak
+    
+    breakerIncomeDate.forEach(r => {
+      const row = getRow(r);
+      row.income += numeric(r.total_payable ?? r.amount);
+      row.incomeCount += 1;
+      row.branchName = getBranchName(r);
+      // ✅ QUANTITY ADD
+      row.crusherQty += getCrusherQty(r);
+      row.outsideQty += getOutsideQty(r);
+      row.totalCube += getTotalCube(r);
+    });
     breakerDieselDate.forEach(r => { const row = getRow(r); row.diesel += numeric(r.payable ?? r.total_payable ?? r.amount); row.dieselQty += numeric(r.diesel ?? r.qty ?? r.quantity); row.dieselCount += 1; row.branchName = getBranchName(r); });
     breakerSalaryDate.forEach(r => { const row = getRow(r); row.salary += numeric(r.total_payable ?? r.amount ?? r.salary); row.salaryCount += 1; row.branchName = getBranchName(r); });
     return Array.from(map.values()).map(r => ({ ...r, balance: r.income - r.diesel - r.salary })).sort((a, b) => String(b.date).localeCompare(String(a.date)) || b.income - a.income);
@@ -195,10 +220,10 @@ export default function BreakerSummaryPage() {
   const resetTopFilter = () => { setDate("all"); setBranchFilter("all"); };
 
   const exportCSV = () => {
-    const head = "Date,Branch,Income,Diesel (Breaker Only),Operator Salary,Balance";
+    const head = "Date,Branch,Income,Diesel (Breaker Only),Operator Salary,Crusher Load Cube Quantity,Outside Load Cube Quantity,Total Cube Quantity,Balance";
     const body = [
-      ...summaryRows.map(r => [r.date, `"${r.branchName}"`, r.income, r.diesel, r.salary, r.balance].join(",")),
-      `Total ${dateLabel},,${incomeDateTotal},${dieselDateTotal},${salaryDateTotal},${balanceDateTotal}`
+      ...summaryRows.map(r => [r.date, `"${r.branchName}"`, r.income, r.diesel, r.salary, r.crusherQty, r.outsideQty, r.totalCube, r.balance].join(",")),
+      `Total ${dateLabel},,${incomeDateTotal},${dieselDateTotal},${salaryDateTotal},${crusherDateTotal},${outsideDateTotal},${totalCubeDateTotal},${balanceDateTotal}`
     ].join("\n");
     const blob = new Blob([head + "\n" + body], { type: "text/csv" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `breaker-summary-${dateLabel}.csv`; a.click();
@@ -257,6 +282,12 @@ export default function BreakerSummaryPage() {
                   <p className="flex justify-between text-slate-400"><span>Diesel - Breaker Only (Total)</span><span className="font-bold text-blue-400">- {fmt(dieselTotal)}</span></p>
                   <p className="flex justify-between text-slate-400"><span>Operator Salary (Total)</span><span className="font-bold text-violet-400">- {fmt(salaryTotal)}</span></p>
                 </div>
+                {/* ✅ NEW - Quantity inside Income Card */}
+                <div className="mt-3 border-t border-white/[0.06] pt-3 space-y-1 text-[11px]">
+                  <p className="flex justify-between text-slate-400"><span>Crusher Load</span><span className="font-bold text-cyan-300">{qtyFmt(crusherTotalAll)}</span></p>
+                  <p className="flex justify-between text-slate-400"><span>Outside Load</span><span className="font-bold text-cyan-300">{qtyFmt(outsideTotalAll)}</span></p>
+                  <p className="flex justify-between text-slate-400"><span>Total Cube</span><span className="font-black text-white">{qtyFmt(totalCubeAll)}</span></p>
+                </div>
               </div>
               <div className="rounded-2xl border border-white/[0.06] bg-[#0B1226] p-5">
                 <div className="flex items-center justify-between"><p className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">Breaker Diesel • Total</p><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/15 text-blue-400"><Fuel size={15} /></span></div>
@@ -276,6 +307,25 @@ export default function BreakerSummaryPage() {
               </div>
             </div>
 
+        
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/[0.05] p-5">
+                <p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase">Crusher Load Quantity • Total</p>
+                <p className="mt-3 text-2xl font-black text-cyan-300">{qtyFmt(crusherTotalAll)}</p>
+                <p className="mt-1 text-[10px] text-slate-500">Selected Filter • {dateLabel}</p>
+              </div>
+              <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/[0.05] p-5">
+                <p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase">Outside Load Quantity • Total</p>
+                <p className="mt-3 text-2xl font-black text-cyan-300">{qtyFmt(outsideTotalAll)}</p>
+                <p className="mt-1 text-[10px] text-slate-500">Selected Filter • {dateLabel}</p>
+              </div>
+              <div className="rounded-2xl border border-white/[0.06] bg-[#0B1226] p-5">
+                <p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase">Total Cube Quantity • Total</p>
+                <p className="mt-3 text-2xl font-black text-white">{qtyFmt(totalCubeAll)}</p>
+                <p className="mt-1 text-[10px] text-slate-500">Crusher + Outside • {dateLabel}</p>
+              </div>
+            </div>
+
             <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.05] p-5">
               <p className="text-[10px] font-black tracking-widest text-amber-400 uppercase mb-3">Calculation • Total (All Dates)</p>
               <div className="flex flex-wrap items-center gap-2 text-sm font-bold">
@@ -290,7 +340,7 @@ export default function BreakerSummaryPage() {
               <p className="text-[10px] text-slate-500 mt-1">Diesel column eka = E Date + E Branch eke BREKER MACHINE eke Diesel Cost witharak • Balance = Income - (Breaker Diesel + Operator Salary)</p>
               {summaryRows.length === 0 ? <p className="py-8 text-center text-slate-500">Me date / branch ekata Breker data na.</p> : (
                 <div className="overflow-x-auto">
-                <table className="mt-4 w-full text-left min-w-[720px]">
+                <table className="mt-4 w-full text-left min-w-[1080px]">
                   <thead>
                     <tr className="border-b border-white/[0.06] text-[10px] uppercase text-slate-500">
                       <th className="py-3">Date</th>
@@ -298,6 +348,10 @@ export default function BreakerSummaryPage() {
                       <th className="py-3 text-right">Income</th>
                       <th className="py-3 text-right">Diesel (Breaker Only)</th>
                       <th className="py-3 text-right">Operator Salary</th>
+                      {/* ✅ NEW - COLUMN 3KA */}
+                      <th className="py-3 text-right text-cyan-300">Crusher Load Cube Quantity</th>
+                      <th className="py-3 text-right text-cyan-300">Outside Load Cube Quantity</th>
+                      <th className="py-3 text-right text-white">Total Cube Quantity</th>
                       <th className="py-3 text-right">Balance</th>
                     </tr>
                   </thead>
@@ -309,6 +363,10 @@ export default function BreakerSummaryPage() {
                         <td className="py-3 text-right font-black text-emerald-400">{fmt(r.income)}</td>
                         <td className="py-3 text-right font-bold text-blue-400">{fmt(r.diesel)}<p className="text-[10px] font-normal text-slate-500">{r.dieselQty.toLocaleString()} L</p></td>
                         <td className="py-3 text-right font-bold text-violet-400">{fmt(r.salary)}</td>
+                        
+                        <td className="py-3 text-right font-medium text-cyan-300">{qtyFmt(r.crusherQty)}</td>
+                        <td className="py-3 text-right font-medium text-cyan-300">{qtyFmt(r.outsideQty)}</td>
+                        <td className="py-3 text-right font-bold text-white">{qtyFmt(r.totalCube)}</td>
                         <td className={`py-3 text-right font-black ${r.balance >= 0 ? "text-emerald-400" : "text-red-400"}`}>{fmt(r.balance)}</td>
                       </tr>
                     ))}
@@ -320,6 +378,10 @@ export default function BreakerSummaryPage() {
                       <td className="py-4 text-right text-emerald-400">{fmt(incomeDateTotal)}</td>
                       <td className="py-4 text-right text-blue-400">{fmt(dieselDateTotal)}</td>
                       <td className="py-4 text-right text-violet-400">{fmt(salaryDateTotal)}</td>
+                      {/* ✅ NEW - FOOTER TOTALS */}
+                      <td className="py-4 text-right text-cyan-300">{qtyFmt(crusherDateTotal)}</td>
+                      <td className="py-4 text-right text-cyan-300">{qtyFmt(outsideDateTotal)}</td>
+                      <td className="py-4 text-right text-white">{qtyFmt(totalCubeDateTotal)}</td>
                       <td className={`py-4 text-right ${balanceDatePositive ? "text-emerald-400" : "text-red-400"}`}>{fmt(balanceDateTotal)}</td>
                     </tr>
                   </tfoot>
