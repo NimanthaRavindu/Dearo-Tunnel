@@ -62,12 +62,12 @@ export default function DaySummaryPage() {
     setIsLoading(true);
     try {
       // ---------- 1. Branches MULINMA - okkoma branches ganna ----------
-      const bData = await fetchOne(`/api/branches`);
+      const bData = await fetchOne(`/api/branch`);
       let branchList: any[] = bData.length > 0
         ? bData.map((b: any) => ({ id: String(b.id ?? b.branch_id ?? b.branchId), branch_name: b.branchName || b.bName || b.branch_name || b.name || `Branch ${b.id ?? b.branch_id}` }))
         : [];
       branchList = Array.from(new Map(branchList.map((b: any) => [String(b.id), b])).values());
-      
+
       const idsFromBranch = branchList.map((b: any) => String(b.id)).filter(Boolean);
       const getName = (id: any, fallbackName?: string) => branchList.find((x: any) => String(x.id) === String(id))?.branch_name || fallbackName || `Branch ${id}`;
 
