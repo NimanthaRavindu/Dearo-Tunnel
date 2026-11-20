@@ -11,6 +11,45 @@ interface PageProps {
 // ✅ Loading / Breker select kalama witharai cube fields pennanne
 const CUBE_REASONS = ["Loading Expenses", "Breker Expenses", "Breaker Expenses"];
 
+// ✅ HEMA INPUT FIELD EKAKATA - Arrow na, nikamma type karanna puluwan
+function NoSpinnerInput({
+  value,
+  onChange,
+  placeholder,
+  readOnly = false,
+  className = "",
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  readOnly?: boolean;
+  className?: string;
+}) {
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      autoComplete="off"
+      readOnly={readOnly}
+      placeholder={placeholder}
+      value={value}
+      onChange={(e) => {
+        // ✅ Number + . witharak allow - akuru, -, + wage ewa enne na
+        const v = e.target.value.replace(/[^0-9.]/g, "");
+        // . 1k witharak
+        if (v.split(".").length > 2) return;
+        onChange(v);
+      }}
+      onWheel={(e) => (e.target as HTMLInputElement).blur()}
+      onKeyDown={(e) => {
+        // ✅ Up / Down arrow walin value wenas wenna epa
+        if (e.key === "ArrowUp" || e.key === "ArrowDown") e.preventDefault();
+      }}
+      className={`no-spinner ${className}`}
+    />
+  );
+}
+
 export default function AddOperationalExpensePage({ params }: PageProps) {
   const router = useRouter();
   const unwrappedParams = use(params);
@@ -124,7 +163,6 @@ export default function AddOperationalExpensePage({ params }: PageProps) {
           total_cube_quantity: isCubeExpense ? totalCubeQuantity : null,
           unitCubeQuantity: isCubeExpense ? parseFloat(form.unitCubeQuantity) || 0 : null,
           unit_cube_quantity: isCubeExpense ? parseFloat(form.unitCubeQuantity) || 0 : null,
-          // ✅ API eka parana namin balanawanam weda karanna
           unitCubePrice: isCubeExpense ? parseFloat(form.unitCubeQuantity) || 0 : null,
           unit_cube_price: isCubeExpense ? parseFloat(form.unitCubeQuantity) || 0 : null,
         }),
@@ -140,6 +178,34 @@ export default function AddOperationalExpensePage({ params }: PageProps) {
 
   return (
     <div className="min-h-screen bg-[#090d16] text-slate-200 p-4 md:p-6 lg:p-8 font-sans antialiased">
+      {/* ✅ HEMA INPUT EKE ARROW AIN KARANNA - GLOBAL CSS */}
+      <style jsx global>{`
+        input.no-spinner::-webkit-outer-spin-button,
+        input.no-spinner::-webkit-inner-spin-button {
+          -webkit-appearance: none !important;
+          margin: 0 !important;
+          display: none !important;
+        }
+        input.no-spinner {
+          -moz-appearance: textfield !important;
+          appearance: textfield !important;
+        }
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button {
+          -webkit-appearance: none !important;
+          margin: 0 !important;
+          display: none !important;
+        }
+        input[type="number"] {
+          -moz-appearance: textfield !important;
+          appearance: textfield !important;
+        }
+        input[type="date"]::-webkit-inner-spin-button {
+          -webkit-appearance: none !important;
+          display: none !important;
+        }
+      `}</style>
+
       <div className="max-w-3xl mx-auto">
         <div className="mb-6 flex items-center gap-4 border-b border-slate-900 pb-5">
           <button type="button" onClick={() => router.push(`/dashboard/branches/${branchIdFromUrl}/add-expenses`)} className="group flex items-center justify-center p-2 rounded-lg bg-slate-900 border border-slate-800/80 hover:bg-slate-850 hover:text-white transition-all">
@@ -168,7 +234,7 @@ export default function AddOperationalExpensePage({ params }: PageProps) {
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest font-mono flex items-center gap-1.5"><Calendar size={11} className="text-slate-400" /> Expense Allocation Date</label>
-              <input required type="date" value={form.expenseDate} onChange={(e) => setForm({ ...form, expenseDate: e.target.value })} className="w-full px-3 py-2.5 bg-slate-950/80 border border-slate-900 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-purple-500/40 transition-all font-mono" />
+              <input required type="date" value={form.expenseDate} onChange={(e) => setForm({ ...form, expenseDate: e.target.value })} className="no-spinner w-full px-3 py-2.5 bg-slate-950/80 border border-slate-900 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-purple-500/40 transition-all font-mono" />
             </div>
           </div>
 
@@ -196,11 +262,23 @@ export default function AddOperationalExpensePage({ params }: PageProps) {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest font-mono">Crusher Load Quantity</label>
-                  <input type="number" step="0.01" min="0" placeholder="Ex: 10" value={form.crusherLoadQuantity} onChange={(e) => setForm({ ...form, crusherLoadQuantity: e.target.value })} className="w-full px-3 py-2.5 bg-slate-950/80 border border-slate-900 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500/40 transition-all font-mono" />
+                  {/* ✅ FIXED - Arrow na, nikamma type karanna puluwan */}
+                  <NoSpinnerInput
+                    placeholder="Ex: 10"
+                    value={form.crusherLoadQuantity}
+                    onChange={(v) => setForm({ ...form, crusherLoadQuantity: v })}
+                    className="w-full px-3 py-2.5 bg-slate-950/80 border border-slate-900 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500/40 transition-all font-mono"
+                  />
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest font-mono">Outside Load Quantity</label>
-                  <input type="number" step="0.01" min="0" placeholder="Ex: 5" value={form.outsideLoadQuantity} onChange={(e) => setForm({ ...form, outsideLoadQuantity: e.target.value })} className="w-full px-3 py-2.5 bg-slate-950/80 border border-slate-900 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500/40 transition-all font-mono" />
+                  {/* ✅ FIXED - Arrow na, nikamma type karanna puluwan */}
+                  <NoSpinnerInput
+                    placeholder="Ex: 5"
+                    value={form.outsideLoadQuantity}
+                    onChange={(v) => setForm({ ...form, outsideLoadQuantity: v })}
+                    className="w-full px-3 py-2.5 bg-slate-950/80 border border-slate-900 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500/40 transition-all font-mono"
+                  />
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -211,7 +289,13 @@ export default function AddOperationalExpensePage({ params }: PageProps) {
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest font-mono">Unit Cube Quantity</label>
-                  <input type="number" step="0.01" min="0" placeholder="Ex: 1500" value={form.unitCubeQuantity} onChange={(e) => setForm({ ...form, unitCubeQuantity: e.target.value })} className="w-full px-3 py-2.5 bg-slate-950/80 border border-slate-900 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500/40 transition-all font-mono" />
+                  {/* ✅ FIXED - Arrow na, nikamma type karanna puluwan */}
+                  <NoSpinnerInput
+                    placeholder="Ex: 1500"
+                    value={form.unitCubeQuantity}
+                    onChange={(v) => setForm({ ...form, unitCubeQuantity: v })}
+                    className="w-full px-3 py-2.5 bg-slate-950/80 border border-slate-900 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500/40 transition-all font-mono"
+                  />
                 </div>
               </div>
             </div>
@@ -220,12 +304,25 @@ export default function AddOperationalExpensePage({ params }: PageProps) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div className="flex flex-col gap-1.5">
               <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest font-mono flex items-center gap-1.5"><Wallet size={11} className="text-slate-500" /> Total Payable Amount (LKR) {isCubeExpense && "- Auto"}</label>
-              <input required type="number" step="0.01" placeholder="0.00" value={form.totalPayable} onChange={(e) => setForm({ ...form, totalPayable: e.target.value })} readOnly={isCubeExpense} className={`w-full px-3 py-2.5 border rounded-xl text-xs focus:outline-none transition-all font-mono ${isCubeExpense ? "bg-slate-900/80 border-emerald-900/40 text-emerald-400 font-black" : "bg-slate-950/80 border-slate-900 text-slate-200 focus:border-purple-500/40"}`} />
+              {/* ✅ FIXED - Arrow na, nikamma type karanna puluwan */}
+              <NoSpinnerInput
+                placeholder="0.00"
+                value={form.totalPayable}
+                onChange={(v) => setForm({ ...form, totalPayable: v })}
+                readOnly={isCubeExpense}
+                className={`w-full px-3 py-2.5 border rounded-xl text-xs focus:outline-none transition-all font-mono ${isCubeExpense ? "bg-slate-900/80 border-emerald-900/40 text-emerald-400 font-black" : "bg-slate-950/80 border-slate-900 text-slate-200 focus:border-purple-500/40"}`}
+              />
               {isCubeExpense && <p className="text-[10px] text-slate-500 font-mono">{totalCubeQuantity.toFixed(2)} × {form.unitCubeQuantity || 0} = LKR {form.totalPayable || 0}</p>}
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest font-mono flex items-center gap-1.5"><CreditCard size={11} className="text-slate-500" /> Total Paid Amount (LKR)</label>
-              <input required type="number" step="0.01" placeholder="0.00" value={form.totalPaid} onChange={(e) => setForm({ ...form, totalPaid: e.target.value })} className="w-full px-3 py-2.5 bg-slate-950/80 border border-slate-900 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-purple-500/40 transition-all font-mono" />
+              {/* ✅ FIXED - Arrow na, nikamma type karanna puluwan */}
+              <NoSpinnerInput
+                placeholder="0.00"
+                value={form.totalPaid}
+                onChange={(v) => setForm({ ...form, totalPaid: v })}
+                className="w-full px-3 py-2.5 bg-slate-950/80 border border-slate-900 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-purple-500/40 transition-all font-mono"
+              />
             </div>
           </div>
 
