@@ -124,7 +124,7 @@ export default function DieselExpensesPage() {
   const displayTotalDiesel = displayInitialDiesel + displayRemainingDiesel; // ✅ Total = Initial + Remaining
   const displayTotalAmount = activePayable + formPayable; // Total Amount = Payable ekathuwa
   const displayInitialAmountRemaining = Math.max(0, initialTotalAmount - displayTotalAmount); // Initial Amount Card = Initial Amount - Payable
-  const displayRemainingBalance = displayRemainingDiesel * DIESEL_PRICE; // ✅ Remaining 0 nam Balance 0.00
+  const displayRemainingBalance = displayInitialAmountRemaining; // ✅ FIX: Initial Amount eke ithuru tika = Remaining Balance, DEKAMA SAME
 
   const effectiveHistory: InitialAdd[] = useMemo(() => {
     if (initialHistory.length === 0 && initialDieselStock > 0) return [{ id: 0, date: initialDate || new Date().toISOString().slice(0,10), diesel: initialDieselStock, amount: initialTotalAmount }];
@@ -193,9 +193,9 @@ export default function DieselExpensesPage() {
           <SummaryCard title="Total Diesel" subtitle="Initial + Remaining" value={`${formatNumber(displayTotalDiesel)} L`} icon={<Fuel size={22}/>} color="red"/>
           <SummaryCard title="Diesel Used" subtitle={isFiltered ? `Filtered: ${formatNumber(fDiesel)} L` : "All expenses"} value={`${formatNumber(displayDieselUsed)} L`} icon={<Droplets size={22}/>} color="cyan"/>
           <SummaryCard title="Remaining Diesel" subtitle="Initial - Used" value={`${formatNumber(displayRemainingDiesel)} L`} icon={<Gauge size={22}/>} color="orange"/>
-          <SummaryCard title="Initial Amount" subtitle={`Remaining • Original Rs. ${formatNumber(initialTotalAmount)}`} value={`Rs. ${formatNumber(displayInitialAmountRemaining)}`} icon={<Banknote size={22}/>} color="violet"/>
+          <SummaryCard title="Initial Amount" subtitle={`Ithuru gana • Original Rs. ${formatNumber(initialTotalAmount)}`} value={`Rs. ${formatNumber(displayInitialAmountRemaining)}`} icon={<Banknote size={22}/>} color="violet"/>
           <SummaryCard title="Total Amount" subtitle={isFiltered ? `Filtered payable` : "Payable total"} value={`Rs. ${formatNumber(displayTotalAmount)}`} icon={<Wallet size={22}/>} color="blue"/>
-          <SummaryCard title="Remaining Balance" subtitle={`Remaining Diesel x Rs. ${DIESEL_PRICE}`} value={`Rs. ${formatNumber(displayRemainingBalance)}`} icon={<CreditCard size={22}/>} color="green"/>
+          <SummaryCard title="Remaining Balance" subtitle="Initial Amount eke ithuru gana • Same" value={`Rs. ${formatNumber(displayRemainingBalance)}`} icon={<CreditCard size={22}/>} color="green"/>
         </section>
 
         {/* FORM */}
@@ -244,7 +244,7 @@ export default function DieselExpensesPage() {
                 <div className="rounded-2xl border border-violet-500/20 bg-violet-500/5 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Initial Diesel</p><p className="mt-2 text-lg font-black text-violet-300">{formatNumber(displayInitialDiesel)} L</p><p className="text-[10px] text-slate-500 mt-1">Denata Stock</p></div>
                 <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Total Diesel</p><p className="mt-2 text-lg font-black text-red-300">{formatNumber(displayTotalDiesel)} L</p><p className="text-[10px] text-slate-500 mt-1">Initial + Remaining</p></div>
                 <div className="rounded-2xl border border-orange-500/20 bg-orange-500/5 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Diesel Used</p><p className="mt-2 text-lg font-black text-orange-300">{formatNumber(totalUsedDiesel)} L</p><p className="text-[10px] text-slate-500 mt-1">Table eke ekathuwa</p></div>
-                <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Remaining</p><p className="mt-2 text-lg font-black text-emerald-300">{formatNumber(displayRemainingDiesel)} L</p><p className="text-[10px] text-slate-500 mt-1">Rs. {formatNumber(displayRemainingBalance)}</p></div>
+                <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Remaining Balance</p><p className="mt-2 text-lg font-black text-emerald-300">Rs. {formatNumber(displayRemainingBalance)}</p><p className="text-[10px] text-slate-500 mt-1">Initial Amount ithuru = Same</p></div>
               </div>
               <div><div className="flex justify-between text-[11px] font-bold text-slate-400 mb-2"><span>Used {displayInitialDiesel > 0 ? Math.round((totalUsedDiesel / displayInitialDiesel) * 100) : 0}%</span><span>Remaining {displayInitialDiesel > 0 ? Math.round((displayRemainingDiesel / displayInitialDiesel) * 100) : 0}%</span></div><div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-all" style={{ width: `${displayInitialDiesel > 0 ? Math.min(100, (totalUsedDiesel / displayInitialDiesel) * 100) : 0}%` }} /></div></div>
               <div>
