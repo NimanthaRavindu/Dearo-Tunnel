@@ -16,6 +16,18 @@ interface OtherExpense {
   balance?: number | string;
   expense_date?: string;
   date?: string;
+  crusher_load_qty?: number | string;
+  crusher_load_quantity?: number | string;
+  crusher_qty?: number | string;
+  crusher_load?: number | string;
+  outside_load_qty?: number | string;
+  outside_load_quantity?: number | string;
+  outside_qty?: number | string;
+  outside_load?: number | string;
+  total_cube?: number | string;
+  total_cube_qty?: number | string;
+  total_cube_quantity?: number | string;
+  total_quantity?: number | string;
 }
 
 interface Branch {
@@ -28,9 +40,11 @@ interface OtherSummary {
   payable: number;
   paid: number;
   balance: number;
+  crusherQty: number;
+  outsideQty: number;
+  totalCube: number;
 }
 
-// ✅ Row Edit - HEMA DETAILS ekakma
 type RowEditData = {
   expense_type: string;
   reason: string;
@@ -38,12 +52,18 @@ type RowEditData = {
   total_paid: string;
   balance: string;
   expense_date: string;
+  crusher_load_qty: string;
+  outside_load_qty: string;
+  total_cube: string;
 };
 
 const EMPTY_SUMMARY: OtherSummary = {
   payable: 0,
   paid: 0,
   balance: 0,
+  crusherQty: 0,
+  outsideQty: 0,
+  totalCube: 0,
 };
 
 function numeric(value: unknown): number {
@@ -57,8 +77,31 @@ function money(value: unknown): string {
   });
 }
 
+function qty(value: unknown): string {
+  return numeric(value).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 function expenseDate(item: OtherExpense): string {
   return String(item.expense_date || item.date || "").slice(0, 10);
+}
+
+function getCrusherQty(item: OtherExpense): number {
+  return numeric(item.crusher_load_qty ?? item.crusher_load_quantity ?? item.crusher_qty ?? item.crusher_load ?? 0);
+}
+function getOutsideQty(item: OtherExpense): number {
+  return numeric(item.outside_load_qty ?? item.outside_load_quantity ?? item.outside_qty ?? item.outside_load ?? 0);
+}
+function getTotalCube(item: OtherExpense): number {
+  const direct = numeric(item.total_cube ?? item.total_cube_qty ?? item.total_cube_quantity ?? item.total_quantity ?? 0);
+  if (direct > 0) return direct;
+  return getCrusherQty(item) + getOutsideQty(item);
+}
+function isBrekerOrLoading(type: string): boolean {
+  const t = String(type || "").toLowerCase();
+  return t.includes("breker") || t.includes("breaker") || t.includes("loading");
 }
 
 export default function ViewOtherExpensesPage({
@@ -82,16 +125,21 @@ export default function ViewOtherExpensesPage({
   const [search, setSearch] = useState("");
   const [showSummary, setShowSummary] = useState(false);
 
-  // ✅ INLINE EDIT - Row eka thulama
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [rowEditData, setRowEditData] = useState<RowEditData>({
     expense_type: "", reason: "", total_payable: "", total_paid: "", balance: "", expense_date: "",
+    crusher_load_qty: "", outside_load_qty: "", total_cube: "",
   });
   const [isRowSaving, setIsRowSaving] = useState(false);
 
-  // ✅ DELETE
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // ✅ QUANTITY COLUMNS - Breker / Loading select kalama WITHARAK
+  // ALL select kalama PENWANNE NA - Food / Water wage select kalamath PENWANNE NA
+  const showQuantityColumns = useMemo(() => {
+    return isBrekerOrLoading(categoryFilter);
+  }, [categoryFilter]);
 
   const loadData = async () => {
     if (!branchId || branchId === "[id]") {
@@ -160,7 +208,6 @@ export default function ViewOtherExpensesPage({
     loadData();
   }, [branchId]);
 
-  // ✅ DELETE
   const handleDelete = async () => {
     if (!deleteId) return;
     try {
@@ -185,13 +232,16 @@ export default function ViewOtherExpensesPage({
     }
   };
 
-  // ✅ INLINE EDIT - Row eka thulama
   const emptyRowEdit = (): RowEditData => ({
     expense_type: "", reason: "", total_payable: "", total_paid: "", balance: "", expense_date: "",
+    crusher_load_qty: "", outside_load_qty: "", total_cube: "",
   });
 
   const handleEditRow = (item: OtherExpense) => {
     setEditingRowId(String(item.id));
+    const c = getCrusherQty(item);
+    const o = getOutsideQty(item);
+    const t = getTotalCube(item);
     setRowEditData({
       expense_type: item.expense_type || item.reason || "",
       reason: item.reason || item.expense_type || "",
@@ -199,6 +249,9 @@ export default function ViewOtherExpensesPage({
       total_paid: String(item.total_paid ?? ""),
       balance: String(item.balance ?? Math.max(0, numeric(item.total_payable) - numeric(item.total_paid))),
       expense_date: expenseDate(item) || new Date().toISOString().split("T")[0],
+      crusher_load_qty: c ? String(c) : "",
+      outside_load_qty: o ? String(o) : "",
+      total_cube: t ? String(t) : "",
     });
     setError(""); setSuccessMessage("");
   };
@@ -220,12 +273,16 @@ export default function ViewOtherExpensesPage({
       if (name === "expense_type") {
         next.reason = value;
       }
+      if (name === "crusher_load_qty" || name === "outside_load_qty") {
+        const c = Number(name === "crusher_load_qty" ? value : prev.crusher_load_qty) || 0;
+        const o = Number(name === "outside_load_qty" ? value : prev.outside_load_qty) || 0;
+        next.total_cube = String(c + o);
+      }
       return next;
     });
     setError("");
   };
 
-  // ✅ Row eke thulama Save - API eke PUT ekata yawanawa
   const handleSaveRow = async () => {
     if (!editingRowId) return;
     const expense_type = rowEditData.expense_type.trim();
@@ -234,6 +291,9 @@ export default function ViewOtherExpensesPage({
     const total_paid = Number(rowEditData.total_paid);
     const balance = Number(rowEditData.balance);
     const expense_date = rowEditData.expense_date;
+    const crusher_load_qty = Number(rowEditData.crusher_load_qty) || 0;
+    const outside_load_qty = Number(rowEditData.outside_load_qty) || 0;
+    const total_cube = Number(rowEditData.total_cube) || (crusher_load_qty + outside_load_qty);
 
     if (!expense_type) { setError("Classification / Expense Type eka danna ona."); return; }
     if (!expense_date) { setError("Date eka danna ona."); return; }
@@ -259,6 +319,15 @@ export default function ViewOtherExpensesPage({
           expense_date,
           date: expense_date,
           expenseDate: expense_date,
+          crusher_load_qty,
+          crusher_load_quantity: crusher_load_qty,
+          crusher_qty: crusher_load_qty,
+          outside_load_qty,
+          outside_load_quantity: outside_load_qty,
+          outside_qty: outside_load_qty,
+          total_cube,
+          total_cube_qty: total_cube,
+          total_cube_quantity: total_cube,
         }),
       });
       const result = await res.json().catch(() => ({}));
@@ -314,10 +383,12 @@ export default function ViewOtherExpensesPage({
   const summary = useMemo<OtherSummary>(() => {
     return filteredData.reduce<OtherSummary>(
       (total, item) => ({
-        payable:
-          total.payable + numeric(item.total_payable),
+        payable: total.payable + numeric(item.total_payable),
         paid: total.paid + numeric(item.total_paid),
         balance: total.balance + numeric(item.balance),
+        crusherQty: total.crusherQty + getCrusherQty(item),
+        outsideQty: total.outsideQty + getOutsideQty(item),
+        totalCube: total.totalCube + getTotalCube(item),
       }),
       EMPTY_SUMMARY,
     );
@@ -331,6 +402,7 @@ export default function ViewOtherExpensesPage({
 
   const deleteItem = data.find((x) => String(x.id) === String(deleteId));
   const inputCls = "w-full px-2 py-2 bg-slate-950 border border-amber-500/50 rounded-lg text-slate-100 text-xs focus:border-amber-400 focus:outline-none";
+  const totalCols = showQuantityColumns ? 9 : 6;
 
   return (
     <main className="min-h-screen bg-[#070a12] p-4 font-sans text-slate-300 antialiased md:p-6 lg:p-8">
@@ -483,12 +555,37 @@ export default function ViewOtherExpensesPage({
           />
         </section>
 
+        {/* ✅ QUANTITY SUMMARY CARDS - Breker / Loading WITHARAK - ALL ekedi PENWANNE NA */}
+        {showQuantityColumns && (
+          <section className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <SummaryCard
+              title="Crusher Load Quantity"
+              value={`${qty(summary.crusherQty)} Cube`}
+              color="purple"
+            />
+            <SummaryCard
+              title="Outside Load Quantity"
+              value={`${qty(summary.outsideQty)} Cube`}
+              color="emerald"
+            />
+            <SummaryCard
+              title="Total Cube Quantity"
+              value={`${qty(summary.totalCube)} Cube`}
+              color="amber"
+            />
+          </section>
+        )}
+
         <section className="overflow-hidden rounded-xl border border-slate-900 bg-slate-900/10 shadow-2xl backdrop-blur-md">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1050px] border-collapse text-left">
               <thead>
                 <tr className="border-b border-slate-900 bg-slate-950/80 font-mono text-[10px] uppercase tracking-widest text-slate-400">
                   <th className="p-4">Classification Matrix</th>
+                  {/* ✅ QUANTITY COLUMNS - Breker / Loading WITHARAK */}
+                  {showQuantityColumns && <th className="p-4 text-right">Crusher Load cube Quantity</th>}
+                  {showQuantityColumns && <th className="p-4 text-right">Outside Load cube Quantity</th>}
+                  {showQuantityColumns && <th className="p-4 text-right">Total Cube Quantity</th>}
                   <th className="p-4 text-right">Total Payable</th>
                   <th className="p-4 text-right">Total Paid</th>
                   <th className="p-4 text-right">
@@ -503,7 +600,7 @@ export default function ViewOtherExpensesPage({
                 {loading? (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={totalCols}
                       className="p-12 text-center text-slate-500"
                     >
                       Loading operational entries...
@@ -512,7 +609,7 @@ export default function ViewOtherExpensesPage({
                 ) : filteredData.length === 0? (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={totalCols}
                       className="p-12 text-center text-slate-600"
                     >
                       <AlertCircle size={18} className="mx-auto mb-2" />
@@ -524,8 +621,8 @@ export default function ViewOtherExpensesPage({
                     const balance = numeric(item.balance);
                     const settled = balance <= 0;
                     const isEditingRow = String(editingRowId) === String(item.id);
+                    const isQtyRow = isBrekerOrLoading(item.expense_type || item.reason || "");
 
-                    // ✅ EDIT MODE - HEMA DETAILS EKAKMA ROW EKE THULAMA
                     if (isEditingRow) {
                       return (
                         <tr key={item.id ?? index} className="bg-amber-500/10 border-2 border-amber-500/40 align-top">
@@ -551,6 +648,13 @@ export default function ViewOtherExpensesPage({
                               <input name="reason" value={rowEditData.reason} onChange={handleRowInputChange} className={inputCls} placeholder="Reason / Note" />
                             </div>
                           </td>
+                          {showQuantityColumns && (
+                            <>
+                              <td className="p-2"><input type="number" step="0.01" name="crusher_load_qty" value={rowEditData.crusher_load_qty} onChange={handleRowInputChange} className={inputCls} placeholder="Crusher Qty" /></td>
+                              <td className="p-2"><input type="number" step="0.01" name="outside_load_qty" value={rowEditData.outside_load_qty} onChange={handleRowInputChange} className={inputCls} placeholder="Outside Qty" /></td>
+                              <td className="p-2"><input type="number" step="0.01" name="total_cube" value={rowEditData.total_cube} onChange={handleRowInputChange} className={inputCls} placeholder="Total Cube" /></td>
+                            </>
+                          )}
                           <td className="p-2"><input type="number" step="0.01" name="total_payable" value={rowEditData.total_payable} onChange={handleRowInputChange} className={inputCls} /></td>
                           <td className="p-2"><input type="number" step="0.01" name="total_paid" value={rowEditData.total_paid} onChange={handleRowInputChange} className={inputCls} /></td>
                           <td className="p-2"><input type="number" step="0.01" name="balance" value={rowEditData.balance} onChange={handleRowInputChange} className={inputCls} /></td>
@@ -569,7 +673,6 @@ export default function ViewOtherExpensesPage({
                       );
                     }
 
-                    
                     return (
                       <tr
                         key={item.id?? index}
@@ -581,6 +684,21 @@ export default function ViewOtherExpensesPage({
                             {item.expense_type || item.reason || "General Overhead"}
                           </span>
                         </td>
+
+                        {/* ✅ QUANTITY CELLS - Breker / Loading WITHARAK */}
+                        {showQuantityColumns && (
+                          <>
+                            <td className="p-4 text-right font-medium text-cyan-300">
+                              {isQtyRow ? `${qty(getCrusherQty(item))} Cube` : "-"}
+                            </td>
+                            <td className="p-4 text-right font-medium text-cyan-300">
+                              {isQtyRow ? `${qty(getOutsideQty(item))} Cube` : "-"}
+                            </td>
+                            <td className="p-4 text-right font-bold text-white">
+                              {isQtyRow ? `${qty(getTotalCube(item))} Cube` : "-"}
+                            </td>
+                          </>
+                        )}
 
                         <td className="p-4 text-right font-medium text-slate-300">
                           {money(item.total_payable)}
@@ -629,7 +747,6 @@ export default function ViewOtherExpensesPage({
                               <FileText size={11} className="mr-1 inline" />
                               View Summary
                             </button>
-                            {/* ✅ Edit - Row eka thulama */}
                             <button
                               type="button"
                               onClick={() => handleEditRow(item)}
@@ -658,6 +775,14 @@ export default function ViewOtherExpensesPage({
                     <td className="p-4 text-slate-400">
                       Filtered Total {categoryFilter!== "ALL"? `(${categoryFilter})` : ""}
                     </td>
+
+                    {showQuantityColumns && (
+                      <>
+                        <td className="p-4 text-right text-cyan-300">{qty(summary.crusherQty)} Cube</td>
+                        <td className="p-4 text-right text-cyan-300">{qty(summary.outsideQty)} Cube</td>
+                        <td className="p-4 text-right text-white">{qty(summary.totalCube)} Cube</td>
+                      </>
+                    )}
 
                     <td className="p-4 text-right text-purple-400">
                       {money(summary.payable)}
@@ -688,12 +813,16 @@ export default function ViewOtherExpensesPage({
             ["Total Payable", money(summary.payable)],
             ["Total Paid", money(summary.paid)],
             ["Outstanding Balance", money(summary.balance)],
+            ...(showQuantityColumns ? [
+              ["Crusher Load Quantity", `${qty(summary.crusherQty)} Cube`],
+              ["Outside Load Quantity", `${qty(summary.outsideQty)} Cube`],
+              ["Total Cube Quantity", `${qty(summary.totalCube)} Cube`],
+            ] as string[][] : []),
           ]}
           onClose={() => setShowSummary(false)}
         />
       )}
 
-      {/* ✅ DELETE Confirm Modal */}
       {deleteId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm" onClick={() => !isDeleting && setDeleteId(null)}>
           <div className="w-full max-w-sm rounded-2xl border border-red-500/40 bg-[#0d1527] p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
@@ -706,6 +835,9 @@ export default function ViewOtherExpensesPage({
                 <p>Type: <b className="text-white">{deleteItem.expense_type || deleteItem.reason || "-"}</b></p>
                 <p>Date: <b className="text-white">{expenseDate(deleteItem) || "-"}</b> • Payable: <b className="text-amber-400">LKR {money(deleteItem.total_payable)}</b> • Paid: <b className="text-emerald-400">LKR {money(deleteItem.total_paid)}</b></p>
                 <p>Reason: <span className="text-slate-300">{deleteItem.reason || "-"}</span></p>
+                {isBrekerOrLoading(deleteItem.expense_type || deleteItem.reason || "") && (
+                  <p>Crusher: <b className="text-cyan-300">{qty(getCrusherQty(deleteItem))} Cube</b> • Outside: <b className="text-cyan-300">{qty(getOutsideQty(deleteItem))} Cube</b> • Total: <b className="text-white">{qty(getTotalCube(deleteItem))} Cube</b></p>
+                )}
               </div>
             )}
             <div className="flex gap-2">
