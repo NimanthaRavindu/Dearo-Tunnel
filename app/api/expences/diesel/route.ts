@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
     const type = url.searchParams.get("type");
     if (!branchId) return NextResponse.json({ error: "branch_id is required" }, { status: 400 });
 
-    // ✅ FIX 1 - LIMIT 1 ain karala SUM() karanawa - row godak unath total eka hari
+    // ✅ FIX - Stock eka SUM eken - danata branch eke witharai
     const getStock = async () => {
       try {
         const [stockRows] = await db.execute(
@@ -25,28 +25,22 @@ export async function GET(request: NextRequest) {
       } catch { return { totalDiesel: 0, totalAmount: 0, initialDate: null as string | null }; }
     };
 
+    // ✅ FIX - HISTORY EKA DANATA BRANCH EKE diesel_stock EKENMA - history table eken NEMEI
+    // diesel_stock_history eke 10L witharai thiyenne, diesel_stock eke 745L thiyenne. Eka nisa wenas wenne.
     const getHistory = async () => {
       try {
-        const [h] = await db.execute(
-          `SELECT id, branch_id, added_diesel, added_amount, DATE_FORMAT(stock_date, '%Y-%m-%d') AS stock_date
-           FROM diesel_stock_history WHERE branch_id = ? ORDER BY stock_date DESC, id DESC`,
+        const [h]: any = await db.execute(
+          `SELECT id, branch_id, total_diesel AS added_diesel, total_amount AS added_amount,
+                  DATE_FORMAT(initial_date, '%Y-%m-%d') AS stock_date
+           FROM diesel_stock WHERE branch_id = ? ORDER BY initial_date DESC, id DESC`,
           [branchId]
         );
         return h as any[];
       } catch { return [] as any[]; }
     };
 
-    // ✅ FIX 1b - History huss nam diesel_stock eke rows tika okkoma history widihata
     if (type === "history") {
-      const [historyRaw, stock] = await Promise.all([getHistory(), getStock()]);
-      let history = historyRaw;
-      if (history.length === 0 && stock.totalDiesel > 0) {
-        const [stockRows]: any = await db.execute(
-          `SELECT id, branch_id, total_diesel AS added_diesel, total_amount AS added_amount, DATE_FORMAT(initial_date, '%Y-%m-%d') AS stock_date FROM diesel_stock WHERE branch_id = ? ORDER BY initial_date ASC, id ASC`,
-          [branchId]
-        );
-        history = stockRows.map((r: any) => ({ ...r, is_from_stock: true }));
-      }
+      const history = await getHistory(); // ✅ Danata branch eke data witharai
       return NextResponse.json(history);
     }
 
@@ -66,14 +60,6 @@ export async function GET(request: NextRequest) {
     if (!stock.initialDate && history.length > 0) {
       const sorted = [...history].sort((a, b) => String(a.stock_date).localeCompare(String(b.stock_date)));
       stock.initialDate = String(sorted[0].stock_date || "").slice(0, 10) || null;
-    }
-
-    if (history.length === 0 && stock.totalDiesel > 0) {
-      const [stockRows]: any = await db.execute(
-        `SELECT id, branch_id, total_diesel AS added_diesel, total_amount AS added_amount, DATE_FORMAT(initial_date, '%Y-%m-%d') AS stock_date FROM diesel_stock WHERE branch_id = ? ORDER BY initial_date ASC, id ASC`,
-        [branchId]
-      );
-      history = stockRows.map((r: any) => ({ ...r, is_from_stock: true }));
     }
 
     const expense = (expenseRows as any[])[0] || {};
@@ -116,23 +102,20 @@ export async function POST(request: NextRequest) {
       const addedAmount = Number(body.addedAmount ?? body.added_amount ?? a);
       const stockDate = body.stockDate || body.stock_date || body.initialDate || body.initial_date || new Date().toISOString().slice(0, 10);
 
-      // ✅ FIX 2 - ON DUPLICATE KEY UPDATE ain karala hamawelawema ALUTH ROW ekak
       await db.execute(
         `INSERT INTO diesel_stock (branch_id, total_diesel, total_amount, initial_date)
          VALUES (?,?,?,?)`,
         [finalBranchId, addedDiesel, addedAmount, stockDate]
       );
 
-      if (addedDiesel > 0) {
-        try {
-          await db.execute(
-            `INSERT INTO diesel_stock_history (branch_id, added_diesel, added_amount, stock_date) VALUES (?,?,?,?)`,
-            [finalBranchId, addedDiesel, addedAmount, stockDate]
-          );
-        } catch (e) { console.error("HISTORY SAVE ERROR:", e); }
-      }
+      // history table eka backup ekak widihata witharai - danata branch eke
+      try {
+        await db.execute(
+          `INSERT INTO diesel_stock_history (branch_id, added_diesel, added_amount, stock_date) VALUES (?,?,?,?)`,
+          [finalBranchId, addedDiesel, addedAmount, stockDate]
+        );
+      } catch (e) { console.error("HISTORY SAVE ERROR:", e); }
 
-      // ✅ Total eka SUM karala yawannawa - d witharak newei
       const [sumRows]: any = await db.execute(
         `SELECT COALESCE(SUM(total_diesel),0) AS totalDiesel, COALESCE(SUM(total_amount),0) AS totalAmount FROM diesel_stock WHERE branch_id = ?`,
         [finalBranchId]
@@ -150,8 +133,6 @@ export async function POST(request: NextRequest) {
         `INSERT INTO diesel_stock_history (branch_id, added_diesel, added_amount, stock_date) VALUES (?,?,?,?)`,
         [finalBranchId, addedDiesel, addedAmount, stockDate]
       );
-
-      // ✅ FIX 3 - add_past eke witharak stock ekata row ekak danawa
       await db.execute(
         `INSERT INTO diesel_stock (branch_id, total_diesel, total_amount, initial_date) VALUES (?,?,?,?)`,
         [finalBranchId, addedDiesel, addedAmount, stockDate]
@@ -228,11 +209,24 @@ export async function DELETE(request: NextRequest) {
 
     if (type === "history") {
       if (id === "0") return NextResponse.json({ success: false, error: "Current stock eka delete karanna ba." }, { status: 400 });
-      let q = `DELETE FROM diesel_stock_history WHERE id = ?`;
-      const params: any[] = [id];
-      if (branchId) { q += ` AND branch_id = ?`; params.push(Number(branchId)); }
-      const [result]: any = await db.execute(q, params);
-      if (result.affectedRows === 0) return NextResponse.json({ success: false, error: "Record not found." }, { status: 404 });
+
+      // ✅ FIX - Kalin history eken witharai delete une, diesel_stock eke thibuna.
+      // Dan dekema delete wenawa - danata branch eke witharai
+      // 1. diesel_stock eke row eka hoyala delete karanawa (id eka same - set_initial / add_past dekemadi dekema insert wenne)
+      let q1 = `DELETE FROM diesel_stock WHERE id = ?`;
+      const p1: any[] = [id];
+      if (branchId) { q1 += ` AND branch_id = ?`; p1.push(Number(branchId)); }
+      await db.execute(q1, p1);
+
+      // 2. history table ekenuth delete - id eka wenas wenna puluwan nisa, diesel_stock eke id ekenma try karala, nathnam branch ekenma last eka delete karanna ba - meka backup ekak
+      // history table eke id eka diesel_stock eke id ekata sama wenna one kiyala hithala delete karanawa, nathnam branch filter ekenma delete karanawa
+      try {
+        let q2 = `DELETE FROM diesel_stock_history WHERE id = ?`;
+        const p2: any[] = [id];
+        if (branchId) { q2 += ` AND branch_id = ?`; p2.push(Number(branchId)); }
+        await db.execute(q2, p2);
+      } catch {}
+
       return NextResponse.json({ success: true, message: "Deleted" }, { status: 200 });
     }
 

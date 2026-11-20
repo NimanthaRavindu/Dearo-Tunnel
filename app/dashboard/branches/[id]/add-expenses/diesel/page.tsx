@@ -4,7 +4,7 @@ import { ArrowLeft, Droplets, Fuel, Plus, RefreshCw, Trash2, Wallet, PackagePlus
 import { useParams, useRouter } from "next/navigation";
 
 type DieselExpense = { id: number; branch_id: string; date: string; machine: string; diesel: number | string; amount: number | string; payable: number | string; paid: number | string; };
-type InitialAdd = { id?: number; date: string; diesel: number; amount: number };
+type InitialAdd = { id?: number; branch_id?: string; date: string; diesel: number; amount: number };
 type CardColor = "cyan" | "blue" | "orange" | "green" | "red" | "violet";
 const machines = ["Komatsu","CAT","JCB","Excavator","Loader","Backhoe Loader","Wheel Loader","Breker Machine","Compressor","Tractor"];
 const inputClass = "h-12 w-full rounded-xl border border-slate-600/80 bg-slate-800/80 px-4 text-sm text-white outline-none transition placeholder:text-slate-500 hover:border-slate-500 focus:border-cyan-400 focus:ring-4 focus:ring-cyan-500/10";
@@ -31,19 +31,30 @@ export default function DieselExpensesPage() {
   const [savingPast, setSavingPast] = useState(false);
   const [filterDate, setFilterDate] = useState(""); const [filterMachine, setFilterMachine] = useState("");
 
+  // ✅ History map - diesel_stock eken ena format eka (total_diesel / added_diesel dekama handle karanawa)
+  const mapHistory = (arr: any[]) => (arr || [])
+    .filter((h: any) => !h.branch_id || String(h.branch_id) === String(branchId)) // ✅ Danata branch eke witharai
+    .map((h: any) => ({
+      id: h.id,
+      branch_id: h.branch_id,
+      date: String(h.stock_date || h.initial_date || h.date || "").slice(0,10),
+      diesel: Number(h.added_diesel ?? h.total_diesel ?? h.diesel ?? 0),
+      amount: Number(h.added_amount ?? h.total_amount ?? h.amount ?? 0),
+    }));
+
   const loadExpenses = async () => {
     if (!branchId) return;
     try { setLoading(true);
       const res = await fetch(`/api/expences/diesel?branch_id=${encodeURIComponent(branchId)}`, { cache: "no-store" });
       const data = await res.json(); if (!res.ok) throw new Error(data.error);
-      setExpenses(data.expenses || []);
+      setExpenses((data.expenses || []).filter((e:any)=> String(e.branch_id)===String(branchId)));
       if (data.summary) {
         const d = Number(data.summary.totalDiesel || 0); const a = Number(data.summary.totalAmount || 0);
         setInitialDieselStock(d); setInitialTotalAmount(a); setIsInitialSet(d > 0 || a > 0);
         setInitialDate(data.summary.initialDate || null);
       }
       if (Array.isArray(data.history)) {
-        setInitialHistory(data.history.map((h: any) => ({ id: h.id, date: String(h.stock_date || "").slice(0,10), diesel: Number(h.added_diesel || 0), amount: Number(h.added_amount || 0) })));
+        setInitialHistory(mapHistory(data.history));
       }
     } catch (e) { console.error(e); } finally { setLoading(false); }
   };
@@ -52,10 +63,14 @@ export default function DieselExpensesPage() {
     try {
       const r = await fetch(`/api/expences/diesel?branch_id=${encodeURIComponent(branchId)}&type=history`, { cache: "no-store" });
       if (!r.ok) return; const j = await r.json();
-      setInitialHistory((Array.isArray(j) ? j : []).map((h: any) => ({ id: h.id, date: String(h.stock_date || "").slice(0,10), diesel: Number(h.added_diesel || 0), amount: Number(h.added_amount || 0) })));
+      const arr = Array.isArray(j) ? j : (Array.isArray(j.history) ? j.history : []);
+      setInitialHistory(mapHistory(arr));
     } catch {}
   };
-  useEffect(() => { if (branchId) { loadExpenses(); loadInitialHistory(); } }, [branchId]);
+  useEffect(() => {
+    setExpenses([]); setInitialHistory([]); setInitialDieselStock(0); setInitialTotalAmount(0); setIsInitialSet(false); setInitialDate(null);
+    if (branchId) { loadExpenses(); loadInitialHistory(); }
+  }, [branchId]);
   useEffect(() => {
     if (!showInitialSummary) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setShowInitialSummary(false); };
@@ -115,23 +130,24 @@ export default function DieselExpensesPage() {
   const activePayable = isFiltered? fPayable : totalPayable;
   const formDiesel = numberValue(diesel); const formPayable = numberValue(payable); const formPaid = numberValue(paid);
 
-  // ✅ FINAL LOGIC - OYA KIWWA WIDIHATA
-  const originalInitialDiesel = initialDieselStock; // Original Stock = 745L - meka wenas wenne na, Total ekata witharai
-  const originalInitialAmount = initialTotalAmount; // Original Amount
+  const originalInitialDiesel = initialDieselStock;
+  const originalInitialAmount = initialTotalAmount;
+  const displayDieselUsed = activeDieselUsed + formDiesel;
+  const displayRemainingDiesel = Math.max(0, originalInitialDiesel - displayDieselUsed);
+  const displayInitialDiesel = displayRemainingDiesel;
+  const displayTotalDiesel = originalInitialDiesel;
+  const displayTotalAmount = activePayable + formPayable;
+  const displayInitialAmountRemaining = Math.max(0, originalInitialAmount - displayTotalAmount);
+  const displayRemainingBalance = displayInitialAmountRemaining;
 
-  const displayDieselUsed = activeDieselUsed + formDiesel; // ✅ Form eke deela save kaloth mekata ADD wenawa
-  const displayRemainingDiesel = Math.max(0, originalInitialDiesel - displayDieselUsed); // ✅ Ithuru gana
-  const displayInitialDiesel = displayRemainingDiesel; // ✅ Initial Diesel = Remaining - Form eken add karama ADU wenawa
-  const displayTotalDiesel = originalInitialDiesel; // ✅ Total = Original 745L
+  // ✅ History eka danata branch eke witharai - API ekenuth, frontend ekenuth filter
+  const branchHistory = useMemo(() => initialHistory.filter(h => !h.branch_id || String(h.branch_id) === String(branchId)), [initialHistory, branchId]);
 
-  const displayTotalAmount = activePayable + formPayable; // ✅ Payable eka mekata ADD wenawa
-  const displayInitialAmountRemaining = Math.max(0, originalInitialAmount - displayTotalAmount); // ✅ Initial Amount ADU wenawa
-  const displayRemainingBalance = displayInitialAmountRemaining; // ✅ Remaining Balance = Initial Amount ithuru gana, DEKAMA SAME
-
+  // ✅ Fallback eka duplicate wenna epa - API eken history enawanan eka witharai ganna
   const effectiveHistory: InitialAdd[] = useMemo(() => {
-    if (initialHistory.length === 0 && initialDieselStock > 0) return [{ id: 0, date: initialDate || new Date().toISOString().slice(0,10), diesel: initialDieselStock, amount: initialTotalAmount }];
-    return initialHistory;
-  }, [initialHistory, initialDieselStock, initialTotalAmount, initialDate]);
+    if (branchHistory.length === 0 && initialDieselStock > 0) return [{ id: 0, branch_id: branchId, date: initialDate || new Date().toISOString().slice(0,10), diesel: initialDieselStock, amount: initialTotalAmount }];
+    return branchHistory;
+  }, [branchHistory, initialDieselStock, initialTotalAmount, initialDate, branchId]);
   const filteredHistory = useMemo(() => {
     const sorted = [...effectiveHistory].sort((a, b) => String(b.date).localeCompare(String(a.date)));
     return sorted.filter(h => !initialFilterDate || String(h.date).slice(0,10) === initialFilterDate);
@@ -170,7 +186,7 @@ export default function DieselExpensesPage() {
       <div className="mx-auto max-w-7xl space-y-5">
         <button onClick={() => router.back()} className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-bold hover:bg-slate-800"><ArrowLeft size={16}/> Back</button>
         <header className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-slate-700/80 bg-slate-900 p-5 shadow-xl">
-          <div className="flex items-center gap-4"><div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400"><Fuel size={29}/></div><div><h1 className="text-2xl font-black tracking-tight">Diesel Expenses</h1><p className="text-sm text-slate-400">Live Preview • Type karaddi ma card update wenawa • Diesel Price Rs. {DIESEL_PRICE}/L</p></div></div>
+          <div className="flex items-center gap-4"><div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400"><Fuel size={29}/></div><div><h1 className="text-2xl font-black tracking-tight">Diesel Expenses</h1><p className="text-sm text-slate-400">Live Preview • Type karaddi ma card update wenawa • Diesel Price Rs. {DIESEL_PRICE}/L • Branch: {branchId}</p></div></div>
           <button onClick={() => { loadExpenses(); loadInitialHistory(); }} className="h-11 inline-flex items-center gap-2 rounded-xl border border-slate-600 bg-slate-800 px-5 text-sm font-bold hover:bg-slate-700"><RefreshCw size={17} className={loading? "animate-spin" : ""}/>Refresh</button>
         </header>
 
@@ -232,11 +248,11 @@ export default function DieselExpensesPage() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm overflow-y-auto" onClick={() => setShowInitialSummary(false)}>
           <div className="w-full max-w-2xl my-6 rounded-3xl border border-slate-700 bg-[#0d1527] shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-slate-800 bg-slate-900/80 px-6 py-4">
-              <div className="flex items-center gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400"><BarChart3 size={20}/></div><div><h2 className="text-base font-black uppercase tracking-wider">Initial Stock Summary</h2><p className="text-[11px] text-slate-500 mt-0.5">Branch • {expenses.length} Records • {dateWiseSummary.length} Days {initialDate ? `• Initial: ${initialDate}` : ""}</p></div></div>
+              <div className="flex items-center gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400"><BarChart3 size={20}/></div><div><h2 className="text-base font-black uppercase tracking-wider">Initial Stock Summary</h2><p className="text-[11px] text-slate-500 mt-0.5">Branch • {branchId} • {expenses.length} Records • {dateWiseSummary.length} Days {initialDate ? `• Initial: ${initialDate}` : ""}</p></div></div>
               <button onClick={() => setShowInitialSummary(false)} className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-500 text-white font-black hover:bg-red-600"><X size={16}/></button>
             </div>
             <div className="max-h-[70vh] overflow-y-auto p-6 space-y-5">
-              {initialDate && <div className="flex items-center gap-2 rounded-xl border border-cyan-500/20 bg-cyan-500/5 px-4 py-2.5 text-xs"><span className="text-slate-400">Initial Date:</span><span className="font-black text-cyan-300">{initialDate}</span><span className="text-slate-500">|</span><span>{formatNumber(originalInitialDiesel)} L</span><span className="text-slate-500">|</span><span>Rs. {formatNumber(originalInitialAmount)}</span></div>}
+              {initialDate && <div className="flex items-center gap-2 rounded-xl border border-cyan-500/20 bg-cyan-500/5 px-4 py-2.5 text-xs"><span className="text-slate-400">Initial Date:</span><span className="font-black text-cyan-300">{initialDate}</span><span className="text-slate-500">|</span><span>{formatNumber(originalInitialDiesel)} L</span><span className="text-slate-500">|</span><span>Rs. {formatNumber(originalInitialAmount)}</span><span className="text-slate-500">|</span><span>Branch: {branchId}</span></div>}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <div className="rounded-2xl border border-violet-500/20 bg-violet-500/5 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Initial Diesel</p><p className="mt-2 text-lg font-black text-violet-300">{formatNumber(displayInitialDiesel)} L</p><p className="text-[10px] text-slate-500 mt-1">Ithuru gana</p></div>
                 <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Total Diesel</p><p className="mt-2 text-lg font-black text-red-300">{formatNumber(displayTotalDiesel)} L</p><p className="text-[10px] text-slate-500 mt-1">Original Stock</p></div>
@@ -245,11 +261,11 @@ export default function DieselExpensesPage() {
               </div>
               <div><div className="flex justify-between text-[11px] font-bold text-slate-400 mb-2"><span>Used {originalInitialDiesel > 0 ? Math.round((totalUsedDiesel / originalInitialDiesel) * 100) : 0}%</span><span>Remaining {originalInitialDiesel > 0 ? Math.round((displayRemainingDiesel / originalInitialDiesel) * 100) : 0}%</span></div><div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-all" style={{ width: `${originalInitialDiesel > 0 ? Math.min(100, (totalUsedDiesel / originalInitialDiesel) * 100) : 0}%` }} /></div></div>
               <div>
-                <div className="flex flex-wrap items-center justify-between gap-2 mb-3"><h3 className="text-xs font-black uppercase tracking-widest text-cyan-300">Initial Add History • Date Wise</h3><div className="flex items-center gap-2"><div className="flex items-center gap-1.5 h-9 rounded-lg border border-slate-600 bg-slate-900 px-3"><Calendar size={14} className="text-slate-400"/><input type="date" value={initialFilterDate} onChange={e=>setInitialFilterDate(e.target.value)} className="bg-transparent text-xs outline-none" /></div>{initialFilterDate && <button onClick={()=>setInitialFilterDate("")} className="h-9 px-3 rounded-lg bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold flex items-center gap-1"><X size={12}/>Clear</button>}<span className="rounded-lg bg-cyan-500/15 text-cyan-300 px-2.5 py-1 text-[11px] font-bold">{filteredHistory.length} Entries</span></div></div>
-                <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 mb-3"><h4 className="text-xs font-black uppercase tracking-widest text-amber-300">Kalin Add Karapu Ewa • Manual Add</h4><p className="text-[11px] text-slate-400 mt-1">Kalin add karapu ewa date ekka methana danna. Meka Total Diesel ekata add wenawa.</p><div className="grid grid-cols-3 gap-2 mt-3"><div><label className="text-[10px] font-bold text-slate-400 uppercase">Date</label><input type="date" value={pastDate} onChange={e => setPastDate(e.target.value)} className="h-10 w-full rounded-xl border border-slate-600 bg-slate-800 px-3 text-sm outline-none" /></div><div><label className="text-[10px] font-bold text-slate-400 uppercase">Diesel (L)</label><input type="number" value={pastDiesel} onChange={e => setPastDiesel(e.target.value)} placeholder="331" className="h-10 w-full rounded-xl border border-slate-600 bg-slate-800 px-3 text-sm outline-none" /></div><div><label className="text-[10px] font-bold text-slate-400 uppercase">Amount (Rs)</label><input type="number" value={pastAmount} onChange={e => setPastAmount(e.target.value)} placeholder="131407" className="h-10 w-full rounded-xl border border-slate-600 bg-slate-800 px-3 text-sm outline-none" /></div></div><button onClick={handleAddPastInitial} disabled={savingPast} className="mt-3 w-full h-10 rounded-xl bg-amber-500 font-black text-xs uppercase tracking-wider text-black hover:bg-amber-400 disabled:opacity-40">{savingPast ? "Saving..." : "+ Add Past Entry"}</button><p className="text-[11px] text-slate-500 mt-2">History Total: {formatNumber(totalInitialHistoryDiesel)} L / Rs. {formatNumber(totalInitialHistoryAmount)} • DB Total: {formatNumber(originalInitialDiesel)} L / Rs. {formatNumber(originalInitialAmount)}</p></div>
-                {filteredHistory.length === 0 ? <p className="rounded-2xl border border-slate-800 bg-slate-900/50 px-4 py-6 text-center text-sm text-slate-500">Thama Initial Add History na.</p> : <div className="overflow-hidden rounded-2xl border border-cyan-500/20"><table className="w-full text-sm"><thead className="bg-slate-900"><tr className="text-left text-[10px] uppercase tracking-wider text-slate-500"><th className="px-4 py-3">Date</th><th className="px-4 py-3 text-right">Initial Diesel</th><th className="px-4 py-3 text-right">Initial Amount</th><th className="px-4 py-3"></th></tr></thead><tbody className="divide-y divide-slate-800/70">{filteredHistory.map((h, i) => <tr key={`${h.id}-${i}`} className="hover:bg-slate-800/40"><td className="px-4 py-3 font-bold">{String(h.date).slice(0,10)} {h.id === 0 && <span className="ml-1 rounded bg-cyan-500/20 text-cyan-300 px-1.5 py-0.5 text-[9px]">CURRENT STOCK</span>}</td><td className="px-4 py-3 text-right font-bold text-cyan-300">{formatNumber(h.diesel)} L</td><td className="px-4 py-3 text-right font-bold">Rs. {formatNumber(h.amount)}</td><td className="px-4 py-3 text-right">{h.id !== 0 && h.id !== undefined && <button onClick={() => handleDeletePast(h.id)} className="h-7 w-7 inline-flex items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20"><Trash2 size={13}/></button>}</td></tr>)}</tbody><tfoot className="bg-slate-900"><tr className="font-black"><td className="px-4 py-3 text-slate-400">Total (History)</td><td className="px-4 py-3 text-right text-cyan-300">{formatNumber(totalInitialHistoryDiesel)} L</td><td className="px-4 py-3 text-right">Rs. {formatNumber(totalInitialHistoryAmount)}</td><td></td></tr></tfoot></table></div>}
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-3"><h3 className="text-xs font-black uppercase tracking-widest text-cyan-300">Initial Add History • Date Wise • Branch {branchId}</h3><div className="flex items-center gap-2"><div className="flex items-center gap-1.5 h-9 rounded-lg border border-slate-600 bg-slate-900 px-3"><Calendar size={14} className="text-slate-400"/><input type="date" value={initialFilterDate} onChange={e=>setInitialFilterDate(e.target.value)} className="bg-transparent text-xs outline-none" /></div>{initialFilterDate && <button onClick={()=>setInitialFilterDate("")} className="h-9 px-3 rounded-lg bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold flex items-center gap-1"><X size={12}/>Clear</button>}<span className="rounded-lg bg-cyan-500/15 text-cyan-300 px-2.5 py-1 text-[11px] font-bold">{filteredHistory.length} Entries • Branch {branchId}</span></div></div>
+                <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 mb-3"><h4 className="text-xs font-black uppercase tracking-widest text-amber-300">Kalin Add Karapu Ewa • Manual Add • Branch {branchId}</h4><p className="text-[11px] text-slate-400 mt-1">Kalin add karapu ewa date ekka methana danna. Meka danata branch eke Total Diesel ekata witharai add wenawa.</p><div className="grid grid-cols-3 gap-2 mt-3"><div><label className="text-[10px] font-bold text-slate-400 uppercase">Date</label><input type="date" value={pastDate} onChange={e => setPastDate(e.target.value)} className="h-10 w-full rounded-xl border border-slate-600 bg-slate-800 px-3 text-sm outline-none" /></div><div><label className="text-[10px] font-bold text-slate-400 uppercase">Diesel (L)</label><input type="number" value={pastDiesel} onChange={e => setPastDiesel(e.target.value)} placeholder="331" className="h-10 w-full rounded-xl border border-slate-600 bg-slate-800 px-3 text-sm outline-none" /></div><div><label className="text-[10px] font-bold text-slate-400 uppercase">Amount (Rs)</label><input type="number" value={pastAmount} onChange={e => setPastAmount(e.target.value)} placeholder="131407" className="h-10 w-full rounded-xl border border-slate-600 bg-slate-800 px-3 text-sm outline-none" /></div></div><button onClick={handleAddPastInitial} disabled={savingPast} className="mt-3 w-full h-10 rounded-xl bg-amber-500 font-black text-xs uppercase tracking-wider text-black hover:bg-amber-400 disabled:opacity-40">{savingPast ? "Saving..." : "+ Add Past Entry"}</button><p className="text-[11px] text-slate-500 mt-2">History Total (This Branch): {formatNumber(totalInitialHistoryDiesel)} L / Rs. {formatNumber(totalInitialHistoryAmount)} • DB Total: {formatNumber(originalInitialDiesel)} L / Rs. {formatNumber(originalInitialAmount)}</p></div>
+                {filteredHistory.length === 0 ? <p className="rounded-2xl border border-slate-800 bg-slate-900/50 px-4 py-6 text-center text-sm text-slate-500">Me branch eke Initial Add History na.</p> : <div className="overflow-hidden rounded-2xl border border-cyan-500/20"><table className="w-full text-sm"><thead className="bg-slate-900"><tr className="text-left text-[10px] uppercase tracking-wider text-slate-500"><th className="px-4 py-3">Date</th><th className="px-4 py-3 text-right">Initial Diesel</th><th className="px-4 py-3 text-right">Initial Amount</th><th className="px-4 py-3"></th></tr></thead><tbody className="divide-y divide-slate-800/70">{filteredHistory.map((h, i) => <tr key={`${h.id}-${i}`} className="hover:bg-slate-800/40"><td className="px-4 py-3 font-bold">{String(h.date).slice(0,10)} {h.id === 0 && <span className="ml-1 rounded bg-cyan-500/20 text-cyan-300 px-1.5 py-0.5 text-[9px]">CURRENT STOCK</span>}</td><td className="px-4 py-3 text-right font-bold text-cyan-300">{formatNumber(h.diesel)} L</td><td className="px-4 py-3 text-right font-bold">Rs. {formatNumber(h.amount)}</td><td className="px-4 py-3 text-right">{h.id !== 0 && h.id !== undefined && <button onClick={() => handleDeletePast(h.id)} className="h-7 w-7 inline-flex items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20"><Trash2 size={13}/></button>}</td></tr>)}</tbody><tfoot className="bg-slate-900"><tr className="font-black"><td className="px-4 py-3 text-slate-400">Total (History - This Branch)</td><td className="px-4 py-3 text-right text-cyan-300">{formatNumber(totalInitialHistoryDiesel)} L</td><td className="px-4 py-3 text-right">Rs. {formatNumber(totalInitialHistoryAmount)}</td><td></td></tr></tfoot></table></div>}
               </div>
-              <div><div className="flex items-center justify-between mb-3"><h3 className="text-xs font-black uppercase tracking-widest text-slate-400">Date Wise Summary • Diesel Used</h3><span className="rounded-lg bg-slate-800 px-2.5 py-1 text-[11px] font-bold">{dateWiseSummary.length} Days</span></div>{dateWiseSummary.length === 0 ? <p className="rounded-2xl border border-slate-800 bg-slate-900/50 px-4 py-6 text-center text-sm text-slate-500">Thama records na</p> : <div className="overflow-hidden rounded-2xl border border-slate-800"><table className="w-full text-sm"><thead className="bg-slate-900"><tr className="text-left text-[10px] uppercase tracking-wider text-slate-500"><th className="px-4 py-3">Date</th><th className="px-4 py-3 text-center">Records</th><th className="px-4 py-3 text-right">Diesel</th><th className="px-4 py-3 text-right">Amount</th></tr></thead><tbody className="divide-y divide-slate-800/70">{dateWiseSummary.map((row) => <tr key={row.date} className="hover:bg-slate-800/40"><td className="px-4 py-3"><p className="font-bold">{row.date}</p><p className="text-[11px] text-slate-500">{Array.from(row.machines).slice(0, 2).join(", ")}{row.machines.size > 2 ? ` +${row.machines.size - 2} more` : ""}</p></td><td className="px-4 py-3 text-center"><span className="rounded-lg bg-slate-800 px-2 py-1 text-[11px] font-bold">{row.count}</span></td><td className="px-4 py-3 text-right font-bold text-cyan-300">{formatNumber(row.diesel)} L</td><td className="px-4 py-3 text-right font-bold">Rs. {formatNumber(row.amount)}</td></tr>)}</tbody><tfoot className="bg-slate-900"><tr className="font-black"><td className="px-4 py-3 text-slate-400">Total</td><td className="px-4 py-3 text-center">{expenses.length}</td><td className="px-4 py-3 text-right text-cyan-300">{formatNumber(totalUsedDiesel)} L</td><td className="px-4 py-3 text-right">Rs. {formatNumber(totalPayable)}</td></tr></tfoot></table></div>}</div>
+              <div><div className="flex items-center justify-between mb-3"><h3 className="text-xs font-black uppercase tracking-widest text-slate-400">Date Wise Summary • Diesel Used • Branch {branchId}</h3><span className="rounded-lg bg-slate-800 px-2.5 py-1 text-[11px] font-bold">{dateWiseSummary.length} Days</span></div>{dateWiseSummary.length === 0 ? <p className="rounded-2xl border border-slate-800 bg-slate-900/50 px-4 py-6 text-center text-sm text-slate-500">Thama records na</p> : <div className="overflow-hidden rounded-2xl border border-slate-800"><table className="w-full text-sm"><thead className="bg-slate-900"><tr className="text-left text-[10px] uppercase tracking-wider text-slate-500"><th className="px-4 py-3">Date</th><th className="px-4 py-3 text-center">Records</th><th className="px-4 py-3 text-right">Diesel</th><th className="px-4 py-3 text-right">Amount</th></tr></thead><tbody className="divide-y divide-slate-800/70">{dateWiseSummary.map((row) => <tr key={row.date} className="hover:bg-slate-800/40"><td className="px-4 py-3"><p className="font-bold">{row.date}</p><p className="text-[11px] text-slate-500">{Array.from(row.machines).slice(0, 2).join(", ")}{row.machines.size > 2 ? ` +${row.machines.size - 2} more` : ""}</p></td><td className="px-4 py-3 text-center"><span className="rounded-lg bg-slate-800 px-2 py-1 text-[11px] font-bold">{row.count}</span></td><td className="px-4 py-3 text-right font-bold text-cyan-300">{formatNumber(row.diesel)} L</td><td className="px-4 py-3 text-right font-bold">Rs. {formatNumber(row.amount)}</td></tr>)}</tbody><tfoot className="bg-slate-900"><tr className="font-black"><td className="px-4 py-3 text-slate-400">Total</td><td className="px-4 py-3 text-center">{expenses.length}</td><td className="px-4 py-3 text-right text-cyan-300">{formatNumber(totalUsedDiesel)} L</td><td className="px-4 py-3 text-right">Rs. {formatNumber(totalPayable)}</td></tr></tfoot></table></div>}</div>
               <div><h3 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-3">Machine Wise</h3><div className="space-y-2">{machineWiseSummary.map((m) => <div key={m.machine} className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-3"><div><p className="font-bold text-sm">{m.machine}</p><p className="text-[11px] text-slate-500">{m.count} records</p></div><div className="text-right"><p className="font-black text-cyan-300 text-sm">{formatNumber(m.diesel)} L</p><p className="text-[11px] text-slate-400">Rs. {formatNumber(m.amount)}</p></div></div>)}</div></div>
             </div>
             <div className="flex gap-2 border-t border-slate-800 bg-slate-900/80 px-6 py-4"><button onClick={() => setShowInitialSummary(false)} className="flex-1 rounded-xl bg-cyan-500 py-3 text-xs font-black uppercase tracking-wider text-slate-950 hover:bg-cyan-400">Close</button><button onClick={() => window.print()} className="rounded-xl border border-slate-700 px-5 py-3 text-xs font-bold hover:bg-slate-800">Print</button></div>
