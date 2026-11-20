@@ -21,9 +21,10 @@ interface SalesIncomeItem {
   created_at?: string;
 }
 
+// ✅ Credit Field eka Form eke ADD kara
 interface SalesIncomeFormData {
   bill_number: string; name: string; date: string;
-  unit_price: string; quantity: string; paid: string;
+  unit_price: string; quantity: string; paid: string; credit: string;
 }
 
 interface RowEditData {
@@ -134,8 +135,9 @@ function SalesIncomesContent() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // ✅ Credit = "" - Form eke aluthin
   const [formData, setFormData] = useState<SalesIncomeFormData>({
-    bill_number: "", name: "", date: getToday(), unit_price: "", quantity: "", paid: "",
+    bill_number: "", name: "", date: getToday(), unit_price: "", quantity: "", paid: "", credit: "",
   });
 
   const calculatedAmount = useMemo(() => {
@@ -144,9 +146,11 @@ function SalesIncomesContent() {
     return up * qty;
   }, [formData.unit_price, formData.quantity]);
   const calculatedPaid = useMemo(() => Number(formData.paid || 0), [formData.paid]);
-  const calculatedDiscountForm = useMemo(() => Math.max(0, calculatedAmount - calculatedPaid), [calculatedAmount, calculatedPaid]);
-  const calculatedPayable = useMemo(() => calculatedPaid, [calculatedPaid]);
-  const calculatedCredit = useMemo(() => 0, []);
+  // ✅ Credit - Form eken type karana gane
+  const calculatedCredit = useMemo(() => Number(formData.credit || 0), [formData.credit]);
+  // ✅ Discount = Amount - Paid - Credit
+  const calculatedDiscountForm = useMemo(() => Math.max(0, calculatedAmount - calculatedPaid - calculatedCredit), [calculatedAmount, calculatedPaid, calculatedCredit]);
+  const calculatedPayable = useMemo(() => calculatedPaid + calculatedCredit, [calculatedPaid, calculatedCredit]);
 
   const filteredIncomes = incomes.filter((item) => {
     const matchDate = filterDate ? item.date.slice(0, 10) === filterDate : true;
@@ -201,7 +205,7 @@ function SalesIncomesContent() {
   const totalAmount = filteredIncomes.reduce((total, item) => total + Number(item.amount || 0), 0);
   const totalPaid = filteredIncomes.reduce((total, item) => total + Number(item.paid ?? 0), 0);
   const totalCreditTop = filteredIncomes.reduce((total, item) => total + getCreditAmountForItem(item), 0);
-  const totalDiscount = Math.max(0, totalAmount - totalPaid);
+  const totalDiscount = Math.max(0, totalAmount - totalPaid - totalCreditTop);
 
   const filteredCredits = useMemo(() => {
     let list = credits;
@@ -231,10 +235,15 @@ function SalesIncomesContent() {
     setErrorMessage("");
   };
 
-  // ✅ Number field walata - direct value eken update karanna
   const handleNumberChange = (name: keyof SalesIncomeFormData, v: string) => {
     setFormData((prev) => ({ ...prev, [name]: v }));
     setErrorMessage("");
+  };
+
+  // ✅ Credit eka Auto Fill karanna button eka - Amount - Paid
+  const handleAutoCredit = () => {
+    const auto = Math.max(0, calculatedAmount - calculatedPaid);
+    setFormData((prev) => ({ ...prev, credit: auto > 0 ? String(auto) : "" }));
   };
 
   const handleNameChange = (value: string) => {
@@ -253,7 +262,7 @@ function SalesIncomesContent() {
     const billNo = item.bill_number || item.billNumber || "";
     const creditRec = getCreditByBill(billNo);
     const creditAmt = creditRec ? Number(creditRec.credit_amount || 0) : Number(item.credit || 0);
-    const discountVal = Math.max(0, Number(item.amount || 0) - Number(item.paid || 0));
+    const discountVal = Math.max(0, Number(item.amount || 0) - Number(item.paid || 0) - creditAmt);
     setEditingRowId(String(item.id));
     setRowEditData({
       bill_number: billNo,
@@ -293,7 +302,6 @@ function SalesIncomesContent() {
     setErrorMessage("");
   };
 
-  // ✅ Row Edit Number field walata - direct value
   const handleRowNumberChange = (name: keyof RowEditData, v: string) => {
     setRowEditData((prev) => {
       const next = { ...prev, [name]: v } as RowEditData;
@@ -325,13 +333,13 @@ function SalesIncomesContent() {
     const amount = Number(rowEditData.amount);
     const paid = Number(rowEditData.paid);
     const credit = Number(rowEditData.credit);
-    const discount = Number(rowEditData.discount);
+    const discount = Math.max(0, amount - paid - credit);
 
     if (!name || !rowEditData.date || !rowEditData.unit_price || !rowEditData.quantity) {
       setErrorMessage("Please complete Name, Date, Unit Price and Quantity."); return;
     }
     if (paid < 0) { setErrorMessage("Paid cannot be less than 0."); return; }
-    if (paid > amount) { setErrorMessage("Paid cannot be greater than Amount."); return; }
+    if (paid + credit > amount) { setErrorMessage("Paid + Credit cannot be greater than Amount."); return; }
     if (credit > 0 && !rowEditData.customer_name.trim()) {
       setErrorMessage("Credit > 0 nam Customer Name eka danna ona."); return;
     }
@@ -439,13 +447,13 @@ function SalesIncomesContent() {
     const paid = calculatedPaid;
     const amount = calculatedAmount;
     const discount = calculatedDiscountForm;
-    const credit = 0;
+    const credit = calculatedCredit;
 
     if (!branchId || !name || !formData.date || !formData.unit_price || !formData.quantity) {
       setErrorMessage("Please complete Name, Date, Unit Price and Quantity."); return;
     }
     if (paid < 0) { setErrorMessage("Paid cannot be less than 0."); return; }
-    if (paid > amount) { setErrorMessage("Paid cannot be greater than Amount."); return; }
+    if (paid + credit > amount) { setErrorMessage("Paid + Credit cannot be greater than Amount."); return; }
 
     try {
       setIsSubmitting(true); setErrorMessage("");
@@ -456,8 +464,8 @@ function SalesIncomesContent() {
       });
       const result = await response.json();
       if (!response.ok || !result.success) throw new Error(result.error || "Failed to save sales income.");
-      setFormData({ bill_number: "", name: "", date: getToday(), unit_price: "", quantity: "", paid: "" });
-      setSuccessMessage(`Saved: Amount LKR ${amount.toFixed(2)} | Paid LKR ${paid.toFixed(2)} | Discount LKR ${discount.toFixed(2)}`);
+      setFormData({ bill_number: "", name: "", date: getToday(), unit_price: "", quantity: "", paid: "", credit: "" });
+      setSuccessMessage(`Saved: Amount LKR ${amount.toFixed(2)} | Paid LKR ${paid.toFixed(2)} | Credit LKR ${credit.toFixed(2)} | Discount LKR ${discount.toFixed(2)}`);
       window.setTimeout(() => setSuccessMessage(""), 4000);
       await fetchSalesIncomes(); await fetchCredits();
     } catch (error) { setErrorMessage(error instanceof Error ? error.message : "Failed to save sales income."); }
@@ -487,7 +495,6 @@ function SalesIncomesContent() {
 
   return (
     <div className="min-h-screen bg-[#070a12] text-slate-100 p-6 sm:p-10 flex flex-col items-center relative overflow-hidden font-mono text-xs">
-      {/* ✅ HEMA INPUT EKE ARROW AIN KARANNA */}
       <style jsx global>{`
         input.no-spinner::-webkit-outer-spin-button,
         input.no-spinner::-webkit-inner-spin-button {
@@ -552,21 +559,27 @@ function SalesIncomesContent() {
             </div>
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Calendar size={12} />Date</label><input type="date" name="date" value={formData.date} onChange={handleInputChange} required className="no-spinner w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Tag size={12} />Unit Price (LKR) - Auto</label>
-              {/* ✅ FIXED - Arrow na, nikamma type karanna puluwan */}
               <NoSpinnerInput name="unit_price" value={formData.unit_price} onChange={(v) => handleNumberChange("unit_price", v)} placeholder="Auto / Manual" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" />
             </div>
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Hash size={12} />Quantity</label>
-              {/* ✅ FIXED - Arrow na, nikamma type karanna puluwan */}
               <NoSpinnerInput name="quantity" value={formData.quantity} onChange={(v) => handleNumberChange("quantity", v)} placeholder="0" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" />
             </div>
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><DollarSign size={12} />Amount (LKR) - Auto</label><div className="w-full px-3.5 py-2.5 bg-slate-900/80 border border-slate-800 rounded-xl text-emerald-400 font-black text-sm">LKR {calculatedAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><DollarSign size={12} />Paid (LKR)</label>
-              {/* ✅ FIXED - Arrow na, nikamma type karanna puluwan */}
               <NoSpinnerInput name="paid" value={formData.paid} onChange={(v) => handleNumberChange("paid", v)} placeholder="0.00" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" />
             </div>
-            <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><BadgePercent size={12} />Discount (LKR) - Auto = Amount - Paid</label><div className="w-full px-3.5 py-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400 font-black text-sm">LKR {calculatedDiscountForm.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
+
+            {/* ✅ ALUTHIN ADD KARA - CREDIT FIELD EKA FORM EKE */}
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5"><CreditCard size={12} />Credit (LKR) - Nayata Ganna Mudala</label>
+              <NoSpinnerInput name="credit" value={formData.credit} onChange={(v) => handleNumberChange("credit", v)} placeholder="Ex: 25000.00" className="w-full px-3.5 py-2.5 bg-amber-500/10 border border-amber-500/40 rounded-xl text-amber-400 font-black focus:border-amber-500 focus:outline-none transition-colors" />
+              <button type="button" onClick={handleAutoCredit} className="text-[10px] font-bold text-amber-400 hover:text-amber-300 underline underline-offset-2">Auto Fill: Amount - Paid = LKR {(Math.max(0, calculatedAmount - calculatedPaid)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</button>
+              <p className="text-[10px] text-slate-500">Paid LKR {calculatedPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })} + Credit LKR {calculatedCredit.toLocaleString(undefined, { minimumFractionDigits: 2 })} = LKR {calculatedPayable.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+            </div>
+
+            <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><BadgePercent size={12} />Discount (LKR) - Auto = Amount - Paid - Credit</label><div className="w-full px-3.5 py-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400 font-black text-sm">LKR {calculatedDiscountForm.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
             <div className="sm:col-span-2 lg:col-span-4 flex justify-end gap-2 mt-2">
-              <button type="button" onClick={handleOpenCreditPage} className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-amber-500/20 active:scale-95"><CreditCard size={14} /><span>Add Credit</span></button>
+              <button type="button" onClick={handleOpenCreditPage} className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-amber-500/20 active:scale-95"><CreditCard size={14} /><span>Add Credit Details</span></button>
               <button type="submit" disabled={isSubmitting} className="px-5 py-2.5 text-white font-bold rounded-xl transition-all flex items-center gap-2 shadow-lg active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed bg-red-600 hover:bg-red-500 shadow-red-600/20">{isSubmitting ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}<span>{isSubmitting ? "Saving..." : "Save Income Entry"}</span></button>
             </div>
           </form>
@@ -574,7 +587,7 @@ function SalesIncomesContent() {
 
         <div className="p-6 rounded-2xl bg-[#0d1527]/40 border border-slate-800 shadow-2xl space-y-4">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <div><h2 className="text-xs font-bold uppercase tracking-widest text-slate-200">Registered Sales Incomes Ledger</h2><p className="text-[10px] text-slate-500 mt-1">{filteredIncomes.length} records found {editingRowId && <span className="text-amber-400 font-bold">• Editing Row #{editingRowId} - Hema details ekakma row eka thulama edit karanna</span>}</p></div>
+            <div><h2 className="text-xs font-bold uppercase tracking-widest text-slate-200">Registered Sales Incomes Ledger</h2><p className="text-[10px] text-slate-500 mt-1">{filteredIncomes.length} records found {editingRowId && <span className="text-amber-400 font-bold">• Editing Row #{editingRowId}</span>}</p></div>
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-2">
                 <Search size={14} className="text-slate-400" />
@@ -593,7 +606,7 @@ function SalesIncomesContent() {
               <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Amount</p><p className="mt-1 text-lg font-black text-red-400">LKR {totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
               <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Paid</p><p className="mt-1 text-lg font-black text-emerald-400">LKR {totalPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
               <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4"><p className="text-[10px] uppercase tracking-wider text-amber-400">Total Credit - Nayata Ganna Mudala</p><p className="mt-1 text-lg font-black text-amber-400">LKR {totalCreditTop.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
-              <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Discount = Amount - Paid</p><p className="mt-1 text-lg font-black text-amber-400">LKR {totalDiscount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
+              <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Discount = Amount - Paid - Credit</p><p className="mt-1 text-lg font-black text-amber-400">LKR {totalDiscount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
             </div>
           )}
 
@@ -606,7 +619,7 @@ function SalesIncomesContent() {
                     const billNo = item.bill_number || item.billNumber || "-";
                     const creditRec = getCreditByBill(billNo);
                     const creditAmt = getCreditAmountForItem(item);
-                    const rowDiscount = Math.max(0, Number(item.amount || 0) - Number(item.paid || 0));
+                    const rowDiscount = Math.max(0, Number(item.amount || 0) - Number(item.paid || 0) - creditAmt);
                     const isEditingRow = String(editingRowId) === String(item.id);
 
                     if (isEditingRow) {
@@ -615,7 +628,6 @@ function SalesIncomesContent() {
                           <td className="py-3 px-2"><input name="bill_number" value={rowEditData.bill_number} onChange={handleRowInputChange} className={inputCls} placeholder="B-001" /></td>
                           <td className="py-3 px-2"><input list="row-product-list" value={rowEditData.name} onChange={(e) => handleRowNameChange(e.target.value)} className={inputCls} placeholder="Name" /><datalist id="row-product-list">{products.map((p) => <option key={p.product_name} value={p.product_name} />)}</datalist></td>
                           <td className="py-3 px-2"><input type="date" name="date" value={rowEditData.date} onChange={handleRowInputChange} className={`no-spinner ${inputCls}`} /></td>
-                          {/* ✅ ROW EDIT - Arrow na, nikamma type karanna puluwan */}
                           <td className="py-3 px-2"><NoSpinnerInput name="unit_price" value={rowEditData.unit_price} onChange={(v) => handleRowNumberChange("unit_price", v)} className={inputCls} /></td>
                           <td className="py-3 px-2"><NoSpinnerInput name="quantity" value={rowEditData.quantity} onChange={(v) => handleRowNumberChange("quantity", v)} className={inputCls} /></td>
                           <td className="py-3 px-2"><NoSpinnerInput name="amount" value={rowEditData.amount} onChange={(v) => handleRowNumberChange("amount", v)} className={inputCls} /></td>
