@@ -1,11 +1,11 @@
 "use client";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { AlertCircle, ArrowLeft, Droplets, Fuel, Plus, RefreshCw, Trash2, Wallet, PackagePlus, Save, CreditCard, Filter, X, Calendar, Eye, BarChart3 } from "lucide-react";
+import { ArrowLeft, Droplets, Fuel, Plus, RefreshCw, Trash2, Wallet, PackagePlus, Save, CreditCard, Filter, X, Calendar, Eye, BarChart3, Banknote, Gauge } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 
 type DieselExpense = { id: number; branch_id: string; date: string; machine: string; diesel: number | string; amount: number | string; payable: number | string; paid: number | string; };
 type InitialAdd = { id?: number; date: string; diesel: number; amount: number };
-type CardColor = "cyan" | "blue" | "orange" | "green" | "red";
+type CardColor = "cyan" | "blue" | "orange" | "green" | "red" | "violet";
 const machines = ["Komatsu","CAT","JCB","Excavator","Loader","Backhoe Loader","Wheel Loader","Breker Machine","Compressor","Tractor"];
 const inputClass = "h-12 w-full rounded-xl border border-slate-600/80 bg-slate-800/80 px-4 text-sm text-white outline-none transition placeholder:text-slate-500 hover:border-slate-500 focus:border-cyan-400 focus:ring-4 focus:ring-cyan-500/10";
 const numberValue = (v: any) => Number(v || 0);
@@ -25,14 +25,11 @@ export default function DieselExpensesPage() {
   const [selectedMachine, setSelectedMachine] = useState(""); const [otherMachine, setOtherMachine] = useState("");
   const [date, setDate] = useState(""); const [diesel, setDiesel] = useState(""); const [payable, setPayable] = useState(""); const [paid, setPaid] = useState("");
   const [showInitialSummary, setShowInitialSummary] = useState(false);
-
   const [initialHistory, setInitialHistory] = useState<InitialAdd[]>([]);
   const [initialFilterDate, setInitialFilterDate] = useState("");
   const [pastDate, setPastDate] = useState(""); const [pastDiesel, setPastDiesel] = useState(""); const [pastAmount, setPastAmount] = useState("");
   const [savingPast, setSavingPast] = useState(false);
-
-  const [filterDate, setFilterDate] = useState("");
-  const [filterMachine, setFilterMachine] = useState("");
+  const [filterDate, setFilterDate] = useState(""); const [filterMachine, setFilterMachine] = useState("");
 
   const loadExpenses = async () => {
     if (!branchId) return;
@@ -46,35 +43,36 @@ export default function DieselExpensesPage() {
         setInitialDate(data.summary.initialDate || null);
       }
       if (Array.isArray(data.history)) {
-        setInitialHistory(data.history.map((h: any) => ({
-          id: h.id, date: String(h.stock_date || "").slice(0,10),
-          diesel: Number(h.added_diesel || 0), amount: Number(h.added_amount || 0),
-        })));
+        setInitialHistory(data.history.map((h: any) => ({ id: h.id, date: String(h.stock_date || "").slice(0,10), diesel: Number(h.added_diesel || 0), amount: Number(h.added_amount || 0) })));
       }
     } catch (e) { console.error(e); } finally { setLoading(false); }
   };
-
   const loadInitialHistory = async () => {
     if (!branchId) return;
     try {
       const r = await fetch(`/api/expences/diesel?branch_id=${encodeURIComponent(branchId)}&type=history`, { cache: "no-store" });
-      if (!r.ok) return;
-      const j = await r.json();
-      setInitialHistory((Array.isArray(j) ? j : []).map((h: any) => ({
-        id: h.id, date: String(h.stock_date || "").slice(0,10),
-        diesel: Number(h.added_diesel || 0), amount: Number(h.added_amount || 0),
-      })));
+      if (!r.ok) return; const j = await r.json();
+      setInitialHistory((Array.isArray(j) ? j : []).map((h: any) => ({ id: h.id, date: String(h.stock_date || "").slice(0,10), diesel: Number(h.added_diesel || 0), amount: Number(h.added_amount || 0) })));
     } catch {}
   };
-
   useEffect(() => { if (branchId) { loadExpenses(); loadInitialHistory(); } }, [branchId]);
-
   useEffect(() => {
     if (!showInitialSummary) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setShowInitialSummary(false); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey); return () => window.removeEventListener("keydown", onKey);
   }, [showInitialSummary]);
+
+  // ✅ Initial Amount auto = Initial Diesel x Lanka Price
+  useEffect(() => {
+    const d = Number(tempInitialDiesel || 0);
+    if (d > 0) setTempInitialAmount(String(d * DIESEL_PRICE));
+  }, [tempInitialDiesel]);
+
+  // ✅ Form eke Diesel gahaddi Payable auto = Diesel x Price (manual wenas karanna puluwan)
+  useEffect(() => {
+    const d = Number(diesel || 0);
+    if (d > 0) setPayable(String(d * DIESEL_PRICE));
+  }, [diesel]);
 
   const resetForm = () => { setSelectedMachine(""); setOtherMachine(""); setDate(""); setDiesel(""); setPayable(""); setPaid(""); };
 
@@ -85,124 +83,72 @@ export default function DieselExpensesPage() {
     if (!tempInitialDate) return alert("Initial Date eka denna");
     try { setSavingInitial(true);
       const res = await fetch("/api/expences/diesel", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          branch_id: branchId,
-          initialDiesel: d, initialAmount: a,
-          addedDiesel: d, addedAmount: a,
-          stockDate: tempInitialDate, initialDate: tempInitialDate,
-          action: "set_initial"
-        }) });
+        body: JSON.stringify({ branch_id: branchId, initialDiesel: d, initialAmount: a, addedDiesel: d, addedAmount: a, stockDate: tempInitialDate, initialDate: tempInitialDate, action: "set_initial" }) });
       const data = await res.json(); if (!res.ok) throw new Error(data.error);
-      setInitialDieselStock(Number(data.totalDiesel || 0));
-      setInitialTotalAmount(Number(data.totalAmount || 0));
-      setIsInitialSet(true);
+      setInitialDieselStock(Number(data.totalDiesel || 0)); setInitialTotalAmount(Number(data.totalAmount || 0)); setIsInitialSet(true);
       if (!initialDate) setInitialDate(tempInitialDate);
-      await loadInitialHistory();
-      setTempInitialDiesel(""); setTempInitialAmount(""); setTempInitialDate(new Date().toISOString().slice(0,10));
-      await loadExpenses();
+      await loadInitialHistory(); setTempInitialDiesel(""); setTempInitialAmount(""); setTempInitialDate(new Date().toISOString().slice(0,10)); await loadExpenses();
     } catch (e) { alert((e as Error).message); } finally { setSavingInitial(false); }
   };
 
   const handleAddPastInitial = async () => {
     const d = Number(pastDiesel); const a = Number(pastAmount);
-    if (!pastDate) return alert("Date eka denna");
-    if (!d || d <= 0) return alert("Diesel eka denna");
-    if (!Number.isFinite(a) || a < 0) return alert("Amount eka denna");
+    if (!pastDate) return alert("Date eka denna"); if (!d || d <= 0) return alert("Diesel eka denna"); if (!Number.isFinite(a) || a < 0) return alert("Amount eka denna");
     try { setSavingPast(true);
-      const res = await fetch(`/api/expences/diesel`, { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ branch_id: branchId, addedDiesel: d, addedAmount: a, stockDate: pastDate, action: "add_past" }) });
-      if (!res.ok) throw new Error("Save une na");
-      setPastDate(""); setPastDiesel(""); setPastAmount("");
-      await loadInitialHistory(); await loadExpenses();
+      const res = await fetch(`/api/expences/diesel`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ branch_id: branchId, addedDiesel: d, addedAmount: a, stockDate: pastDate, action: "add_past" }) });
+      if (!res.ok) throw new Error("Save une na"); setPastDate(""); setPastDiesel(""); setPastAmount(""); await loadInitialHistory(); await loadExpenses();
     } catch (e) { alert((e as Error).message); } finally { setSavingPast(false); }
   };
-
   const handleDeletePast = async (id?: number) => {
     if (!id || id === 0 || !confirm("Me past entry eka ain karannada?")) return;
-    await fetch(`/api/expences/diesel?id=${id}&branch_id=${branchId}&type=history`, { method: "DELETE" });
-    await loadInitialHistory();
-    await loadExpenses();
+    await fetch(`/api/expences/diesel?id=${id}&branch_id=${branchId}&type=history`, { method: "DELETE" }); await loadInitialHistory(); await loadExpenses();
   };
 
-  const filteredExpenses = useMemo(() => {
-    return expenses.filter(item => {
-      const d = item.date?.slice(0, 10);
-      const matchMachine = !filterMachine || item.machine === filterMachine;
-      const matchDate = !filterDate || d === filterDate;
-      return matchMachine && matchDate;
-    });
-  }, [expenses, filterDate, filterMachine]);
+  const filteredExpenses = useMemo(() => expenses.filter(item => {
+    const d = item.date?.slice(0, 10); return (!filterMachine || item.machine === filterMachine) && (!filterDate || d === filterDate);
+  }), [expenses, filterDate, filterMachine]);
 
   const totalUsedDiesel = useMemo(() => expenses.reduce((s, i) => s + numberValue(i.diesel), 0), [expenses]);
   const totalPayable = useMemo(() => expenses.reduce((s, i) => s + numberValue(i.payable), 0), [expenses]);
   const fDiesel = useMemo(() => filteredExpenses.reduce((s, i) => s + numberValue(i.diesel), 0), [filteredExpenses]);
   const fPayable = useMemo(() => filteredExpenses.reduce((s, i) => s + numberValue(i.payable), 0), [filteredExpenses]);
-
   const isFiltered = Boolean(filterDate || filterMachine);
   const activeDieselUsed = isFiltered? fDiesel : totalUsedDiesel;
   const activePayable = isFiltered? fPayable : totalPayable;
+  const formDiesel = numberValue(diesel); const formPayable = numberValue(payable); const formPaid = numberValue(paid);
 
-  const formDiesel = numberValue(diesel);
-  const formPayable = numberValue(payable);
-  const formPaid = numberValue(paid);
-
-  const displayTotalDiesel = initialDieselStock;
-  const displayDieselUsed = activeDieselUsed + formDiesel;
-  const displayTotalAmount = activePayable + formPayable;
-  const displayRemainingDiesel = Math.max(0, displayTotalDiesel - displayDieselUsed);
-  const displayRemainingBalance = displayRemainingDiesel * DIESEL_PRICE;
+  // ✅ OYA KIWWA LOGIC - FINAL
+  const displayTotalDiesel = initialDieselStock; // Total Diesel = Initial Diesel
+  const displayDieselUsed = activeDieselUsed + formDiesel; // Form eke type karaddi live add
+  const displayTotalAmount = activePayable + formPayable; // Total Amount = Payable ekathuwa
+  const displayRemainingDiesel = Math.max(0, displayTotalDiesel - displayDieselUsed); // Remaining Diesel = Initial - Used
+  const displayInitialAmountRemaining = Math.max(0, initialTotalAmount - displayTotalAmount); // Initial Amount Card = Uda Initial Amount - Payable
+  const displayRemainingBalance = displayInitialAmountRemaining; // Remaining Balance = Initial Amount Card eke ithuru tika
 
   const effectiveHistory: InitialAdd[] = useMemo(() => {
-    if (initialHistory.length === 0 && initialDieselStock > 0) {
-      return [{
-        id: 0,
-        date: initialDate || new Date().toISOString().slice(0,10),
-        diesel: initialDieselStock,
-        amount: initialTotalAmount,
-      }];
-    }
+    if (initialHistory.length === 0 && initialDieselStock > 0) return [{ id: 0, date: initialDate || new Date().toISOString().slice(0,10), diesel: initialDieselStock, amount: initialTotalAmount }];
     return initialHistory;
   }, [initialHistory, initialDieselStock, initialTotalAmount, initialDate]);
-
-  // ✅ FIX - Date eken group karanne na, entry ekak gane wen wenama pennanawa
   const filteredHistory = useMemo(() => {
     const sorted = [...effectiveHistory].sort((a, b) => String(b.date).localeCompare(String(a.date)));
     return sorted.filter(h => !initialFilterDate || String(h.date).slice(0,10) === initialFilterDate);
   }, [effectiveHistory, initialFilterDate]);
-
   const totalInitialHistoryDiesel = useMemo(() => effectiveHistory.reduce((s, h) => s + numberValue(h.diesel), 0), [effectiveHistory]);
   const totalInitialHistoryAmount = useMemo(() => effectiveHistory.reduce((s, h) => s + numberValue(h.amount), 0), [effectiveHistory]);
-
   const dateWiseSummary = useMemo(() => {
     const map = new Map<string, { date: string; diesel: number; amount: number; paid: number; count: number; machines: Set<string> }>();
     expenses.forEach((item) => {
       const d = String(item.date || "").slice(0, 10) || "-";
       const cur = map.get(d) || { date: d, diesel: 0, amount: 0, paid: 0, count: 0, machines: new Set<string>() };
-      cur.diesel += numberValue(item.diesel);
-      cur.amount += numberValue(item.payable ?? item.amount);
-      cur.paid += numberValue(item.paid);
-      cur.count += 1;
-      if (item.machine) cur.machines.add(item.machine);
-      map.set(d, cur);
-    });
-    return Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date));
+      cur.diesel += numberValue(item.diesel); cur.amount += numberValue(item.payable ?? item.amount); cur.paid += numberValue(item.paid); cur.count += 1; if (item.machine) cur.machines.add(item.machine); map.set(d, cur);
+    }); return Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date));
   }, [expenses]);
-
   const machineWiseSummary = useMemo(() => {
     const map = new Map<string, { machine: string; diesel: number; amount: number; count: number }>();
-    expenses.forEach((item) => {
-      const key = item.machine || "-";
-      const cur = map.get(key) || { machine: key, diesel: 0, amount: 0, count: 0 };
-      cur.diesel += numberValue(item.diesel);
-      cur.amount += numberValue(item.payable ?? item.amount);
-      cur.count += 1;
-      map.set(key, cur);
-    });
+    expenses.forEach((item) => { const key = item.machine || "-"; const cur = map.get(key) || { machine: key, diesel: 0, amount: 0, count: 0 }; cur.diesel += numberValue(item.diesel); cur.amount += numberValue(item.payable ?? item.amount); cur.count += 1; map.set(key, cur); });
     return Array.from(map.values()).sort((a, b) => b.diesel - a.diesel);
   }, [expenses]);
-
   const clearFilters = () => { setFilterDate(""); setFilterMachine(""); };
-
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!isInitialSet) return alert("Set Initial Stock first");
@@ -211,47 +157,48 @@ export default function DieselExpensesPage() {
     const m = selectedMachine === "Other Machine"? otherMachine.trim() : selectedMachine; if (!m) return alert("Enter other machine");
     try { setSaving(true);
       const res = await fetch("/api/expences/diesel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ branch_id: branchId, date, machine: m, diesel: formDiesel, payable: formPayable, paid: formPaid }) });
-      const data = await res.json(); if (!res.ok) throw new Error(data.error);
-      resetForm(); await loadExpenses();
+      const data = await res.json(); if (!res.ok) throw new Error(data.error); resetForm(); await loadExpenses();
     } catch (err) { alert((err as Error).message); } finally { setSaving(false); }
   };
   const handleDelete = async (id: number) => { if (!confirm("Delete?")) return; const res = await fetch(`/api/expences/diesel?id=${id}`, { method: "DELETE" }); if (res.ok) await loadExpenses(); };
 
   return (
     <main className="min-h-screen bg-slate-950 p-4 text-white md:p-6">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <button onClick={() => router.back()} className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-bold"><ArrowLeft size={16}/> Back</button>
-        <header className="flex justify-between rounded-3xl border border-slate-700/80 bg-slate-900 p-5">
-          <div className="flex items-center gap-4"><div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400"><Fuel size={29}/></div><div><h1 className="text-2xl font-bold">Diesel Expenses</h1><p className="text-sm text-slate-400">Type karaddi ma card adu wenawa - Minus na</p></div></div>
-          <button onClick={() => { loadExpenses(); loadInitialHistory(); }} className="h-11 inline-flex items-center gap-2 rounded-xl border border-slate-600 bg-slate-800 px-5 text-sm font-bold"><RefreshCw size={17} className={loading? "animate-spin" : ""}/>Refresh</button>
+      <div className="mx-auto max-w-7xl space-y-5">
+        <button onClick={() => router.back()} className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-bold hover:bg-slate-800"><ArrowLeft size={16}/> Back</button>
+        <header className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-slate-700/80 bg-slate-900 p-5 shadow-xl">
+          <div className="flex items-center gap-4"><div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400"><Fuel size={29}/></div><div><h1 className="text-2xl font-black tracking-tight">Diesel Expenses</h1><p className="text-sm text-slate-400">Live Preview • Type karaddi ma card update wenawa • Diesel Price Rs. {DIESEL_PRICE}/L</p></div></div>
+          <button onClick={() => { loadExpenses(); loadInitialHistory(); }} className="h-11 inline-flex items-center gap-2 rounded-xl border border-slate-600 bg-slate-800 px-5 text-sm font-bold hover:bg-slate-700"><RefreshCw size={17} className={loading? "animate-spin" : ""}/>Refresh</button>
         </header>
 
-        <section className="rounded-3xl border border-cyan-500/30 bg-slate-900 p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-bold uppercase flex items-center gap-2"><PackagePlus size={18} className="text-cyan-400"/>Initial Stock - Add kalama wadi wenawa</h2>
-            <button onClick={async () => { await loadInitialHistory(); setShowInitialSummary(true); }} className="h-10 inline-flex items-center gap-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 px-4 text-sm font-bold">
-              <Eye size={16}/> View
-            </button>
+        {/* INITIAL STOCK */}
+        <section className="rounded-3xl border border-cyan-500/30 bg-slate-900 p-5 shadow-xl">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <h2 className="text-sm font-black uppercase tracking-wider flex items-center gap-2"><PackagePlus size={18} className="text-cyan-400"/>Initial Stock</h2>
+            <button onClick={async () => { await loadInitialHistory(); setShowInitialSummary(true); }} className="h-10 inline-flex items-center gap-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 px-4 text-sm font-bold"><Eye size={16}/> View Summary</button>
           </div>
           <div className="grid gap-4 md:grid-cols-[1fr_1fr_1fr_auto]">
             <Field label="Initial Date"><input type="date" value={tempInitialDate} onChange={e => setTempInitialDate(e.target.value)} className={inputClass}/></Field>
-            <Field label="Initial Diesel (L)"><input type="number" value={tempInitialDiesel} onChange={e => setTempInitialDiesel(e.target.value)} placeholder="331" className={inputClass}/></Field>
-            <Field label="Initial Amount (Rs.)"><input type="number" value={tempInitialAmount} onChange={e => setTempInitialAmount(e.target.value)} placeholder="317000" className={inputClass}/></Field>
-            <button onClick={handleAddInitial} disabled={savingInitial} className="h-12 self-end inline-flex items-center gap-2 rounded-xl bg-cyan-600 px-6 font-bold">{savingInitial? <RefreshCw size={17} className="animate-spin"/> : <Save size={17}/>}Add</button>
+            <Field label="Initial Diesel (L)"><input type="number" value={tempInitialDiesel} onChange={e => setTempInitialDiesel(e.target.value)} placeholder="e.g. 745" className={inputClass}/></Field>
+            <Field label={`Initial Amount (Rs.) • Auto: Diesel x ${DIESEL_PRICE}`}><input type="number" value={tempInitialAmount} onChange={e => setTempInitialAmount(e.target.value)} placeholder="Auto" className={`${inputClass} bg-cyan-950/30 border-cyan-500/30`}/></Field>
+            <button onClick={handleAddInitial} disabled={savingInitial} className="h-12 self-end inline-flex items-center gap-2 rounded-xl bg-cyan-600 px-6 font-bold hover:bg-cyan-500 disabled:opacity-40">{savingInitial? <RefreshCw size={17} className="animate-spin"/> : <Save size={17}/>}Add Stock</button>
           </div>
-          {isInitialSet && <p className="mt-3 text-xs text-green-400">✓ Initial Date: {initialDate || "-"} • Initial: {initialDieselStock} L / Rs. {initialTotalAmount.toLocaleString()} | Used: {totalUsedDiesel} L | Remaining: {Math.max(0, initialDieselStock - totalUsedDiesel)} L</p>}
+          {isInitialSet && <div className="mt-4 flex flex-wrap gap-2 text-xs"><span className="rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 px-3 py-1.5 font-bold">✓ Initial Date: {initialDate || "-"}</span><span className="rounded-full bg-slate-800 border border-slate-700 px-3 py-1.5">Initial: {formatNumber(initialDieselStock)} L / Rs. {formatNumber(initialTotalAmount)}</span><span className="rounded-full bg-slate-800 border border-slate-700 px-3 py-1.5">Used: {formatNumber(totalUsedDiesel)} L</span><span className="rounded-full bg-orange-500/10 border border-orange-500/20 text-orange-300 px-3 py-1.5 font-bold">Remaining: {formatNumber(Math.max(0, initialDieselStock - totalUsedDiesel))} L</span></div>}
         </section>
 
-        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <SummaryCard title="Diesel Used" subtitle={isFiltered ? `Filtered: ${fDiesel}L` : "Table eke diesel wala ekathuwa"} value={`${formatNumber(displayDieselUsed)} L`} icon={<Droplets size={22}/>} color="cyan"/>
-          <SummaryCard title="Total Amount" subtitle={isFiltered ? `Filtered payable` : "Table eke viyadam wela thiyena amount"} value={`Rs. ${formatNumber(displayTotalAmount)}`} icon={<Wallet size={22}/>} color="blue"/>
-          <SummaryCard title="Remaining Diesel" subtitle="Total Diesel - Diesel Used" value={`${formatNumber(displayRemainingDiesel)} L`} icon={<Droplets size={22}/>} color="orange"/>
-          <SummaryCard title="Remaining Balance" subtitle={`Remaining Diesel x Rs. ${DIESEL_PRICE}`} value={`Rs. ${formatNumber(displayRemainingBalance)}`} icon={<CreditCard size={22}/>} color="green"/>
-          <SummaryCard title="Total Diesel" subtitle={initialDate ? `Initial • ${initialDate}` : "Initial stock"} value={`${formatNumber(displayTotalDiesel)} L`} icon={<AlertCircle size={22}/>} color="red"/>
+        {/* ✅ 6 CARDS - PROFESSIONAL */}
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          <SummaryCard title="Total Diesel" subtitle={initialDate ? `Initial • ${initialDate}` : "Initial stock"} value={`${formatNumber(displayTotalDiesel)} L`} icon={<Fuel size={22}/>} color="red"/>
+          <SummaryCard title="Diesel Used" subtitle={isFiltered ? `Filtered: ${formatNumber(fDiesel)} L` : "All expenses"} value={`${formatNumber(displayDieselUsed)} L`} icon={<Droplets size={22}/>} color="cyan"/>
+          <SummaryCard title="Remaining Diesel" subtitle="Initial - Used" value={`${formatNumber(displayRemainingDiesel)} L`} icon={<Gauge size={22}/>} color="orange"/>
+          <SummaryCard title="Initial Amount" subtitle={`Remaining • Initial Rs. ${formatNumber(initialTotalAmount)}`} value={`Rs. ${formatNumber(displayInitialAmountRemaining)}`} icon={<Banknote size={22}/>} color="violet"/>
+          <SummaryCard title="Total Amount" subtitle={isFiltered ? `Filtered payable` : "Payable total"} value={`Rs. ${formatNumber(displayTotalAmount)}`} icon={<Wallet size={22}/>} color="blue"/>
+          <SummaryCard title="Remaining Balance" subtitle={`Initial - Total Amount`} value={`Rs. ${formatNumber(displayRemainingBalance)}`} icon={<CreditCard size={22}/>} color="green"/>
         </section>
 
-        <section className="rounded-3xl border border-slate-700/80 bg-slate-900 overflow-hidden">
-          <div className="border-b border-slate-700/80 bg-slate-800/30 px-6 py-5"><h2 className="text-xl font-bold">Add Diesel Expense</h2><p className="text-xs text-slate-400 mt-1">Qty / Payable type karaddi ma uda card adu wenawa - Balance auto pennanawa</p></div>
+        {/* FORM */}
+        <section className="rounded-3xl border border-slate-700/80 bg-slate-900 overflow-hidden shadow-xl">
+          <div className="border-b border-slate-700/80 bg-slate-800/30 px-6 py-5 flex flex-wrap justify-between gap-3"><div><h2 className="text-xl font-black">Add Diesel Expense</h2><p className="text-xs text-slate-400 mt-1">Diesel gahaddi Payable auto = Diesel x Rs. {DIESEL_PRICE} • Save kalama Remaining Diesel / Initial Amount adu wenawa</p></div>{formDiesel > 0 && <div className="rounded-xl bg-cyan-500/10 border border-cyan-500/20 px-4 py-2 text-xs font-bold text-cyan-300">Live: Remaining {formatNumber(displayRemainingDiesel)} L • Balance Rs. {formatNumber(displayRemainingBalance)}</div>}</div>
           <form onSubmit={handleSubmit} className="space-y-6 p-6">
             <div className="grid gap-6 md:grid-cols-2">
               <Field label="Machine"><select value={selectedMachine} onChange={e => { setSelectedMachine(e.target.value); if (e.target.value!== "Other Machine") setOtherMachine(""); }} className={inputClass}><option value="">Select Machine</option>{machines.map(m => <option key={m} value={m}>{m}</option>)}<option value="Other Machine">Other Machine</option></select>{selectedMachine === "Other Machine" && <input value={otherMachine} onChange={e => setOtherMachine(e.target.value)} placeholder="Other machine name" className={`${inputClass} mt-3`}/>}</Field>
@@ -262,232 +209,51 @@ export default function DieselExpensesPage() {
               <Field label="Payable Amount (Rs.)"><input type="number" value={payable} onChange={e => setPayable(e.target.value)} placeholder="0.00" className={inputClass}/></Field>
               <Field label="Paid Amount (Rs.)"><input type="number" value={paid} onChange={e => setPaid(e.target.value)} placeholder="0.00" className={inputClass}/></Field>
             </div>
-            <div className="flex justify-end border-t border-slate-700/80 pt-6">
-              <button type="submit" disabled={saving ||!isInitialSet} className="h-12 inline-flex items-center gap-2 rounded-xl bg-cyan-600 px-7 font-bold disabled:opacity-40">{saving? <RefreshCw size={18} className="animate-spin"/> : <Plus size={18}/>}Save Expense</button>
-            </div>
+            <div className="flex justify-end border-t border-slate-700/80 pt-6"><button type="submit" disabled={saving ||!isInitialSet} className="h-12 inline-flex items-center gap-2 rounded-xl bg-cyan-600 px-7 font-bold hover:bg-cyan-500 disabled:opacity-40">{saving? <RefreshCw size={18} className="animate-spin"/> : <Plus size={18}/>}Save Expense</button></div>
           </form>
         </section>
 
-        <section className="rounded-3xl border border-slate-700/80 bg-slate-900 overflow-hidden">
+        {/* RECORDS - oya code eka ehemama */}
+        <section className="rounded-3xl border border-slate-700/80 bg-slate-900 overflow-hidden shadow-xl">
           <div className="p-5 border-b border-slate-700/80 space-y-4">
-            <div className="flex justify-between items-center">
-              <h2 className="font-bold">Records</h2>
-              <span className="text-sm bg-slate-800 px-3 py-1 rounded-xl">{filteredExpenses.length} / {expenses.length} Records</span>
-            </div>
+            <div className="flex justify-between items-center"><h2 className="font-black text-lg">Records</h2><span className="text-sm bg-slate-800 px-3 py-1 rounded-xl">{filteredExpenses.length} / {expenses.length} Records</span></div>
             <div className="flex flex-wrap gap-3 p-3 rounded-2xl bg-slate-800/50 border border-slate-700/50">
-              <div className="flex items-center gap-2">
-                <Filter size={14} className="text-slate-400"/>
-                <span className="text-xs font-bold text-slate-400 uppercase">Filter:</span>
-              </div>
-              <select value={filterMachine} onChange={e=>setFilterMachine(e.target.value)} className="h-9 rounded-lg border border-slate-600 bg-slate-900 px-3 text-xs outline-none">
-                <option value="">All Machines</option>
-                {machines.map(m=> <option key={m} value={m}>{m}</option>)}
-              </select>
-              <div className="flex items-center gap-1.5 h-9 rounded-lg border border-slate-600 bg-slate-50 px-3">
-                <Calendar size={14} className="text-slate-900"/>
-                <input type="date" value={filterDate} onChange={e=>setFilterDate(e.target.value)} className="bg-transparent text-xs outline-none" />
-              </div>
-              {isFiltered && (
-                <button onClick={clearFilters} className="h-9 inline-flex items-center gap-1 rounded-lg bg-red-500/20 text-red-400 border border-red-500/30 px-3 text-xs font-bold">
-                  <X size={12}/>Clear
-                </button>
-              )}
+              <div className="flex items-center gap-2"><Filter size={14} className="text-slate-400"/><span className="text-xs font-bold text-slate-400 uppercase">Filter:</span></div>
+              <select value={filterMachine} onChange={e=>setFilterMachine(e.target.value)} className="h-9 rounded-lg border border-slate-600 bg-slate-900 px-3 text-xs outline-none"><option value="">All Machines</option>{machines.map(m=> <option key={m} value={m}>{m}</option>)}</select>
+              <div className="flex items-center gap-1.5 h-9 rounded-lg border border-slate-600 bg-slate-50 px-3"><Calendar size={14} className="text-slate-900"/><input type="date" value={filterDate} onChange={e=>setFilterDate(e.target.value)} className="bg-transparent text-xs outline-none text-slate-900" /></div>
+              {isFiltered && <button onClick={clearFilters} className="h-9 inline-flex items-center gap-1 rounded-lg bg-red-500/20 text-red-400 border border-red-500/30 px-3 text-xs font-bold"><X size={12}/>Clear</button>}
             </div>
           </div>
-          <div className="overflow-x-auto"><table className="w-full min-w-[900px]"><thead className="bg-slate-800/80"><tr className="text-xs text-slate-400 uppercase"><th className="px-5 py-4 text-left">Date</th><th className="px-5 py-4 text-left">Machine</th><th className="px-5 py-4 text-right">Diesel</th><th className="px-5 py-4 text-right">Payable</th><th className="px-5 py-4 text-right">Paid</th><th className="px-5 py-4 text-right">Balance</th><th className="px-5 py-4 text-center">Action</th></tr></thead><tbody>{filteredExpenses.length===0 ? <tr><td colSpan={7} className="px-5 py-10 text-center text-sm text-slate-500">No records for {filterDate} {filterMachine} - filter clear karala balanna</td></tr> : filteredExpenses.map(item => { const p = numberValue(item.payable); const pd = numberValue(item.paid); return <tr key={item.id} className="border-b border-slate-800 hover:bg-slate-800/40"><td className="px-5 py-4 text-sm">{item.date?.slice(0, 10)}</td><td className="px-5 py-4 font-semibold">{item.machine}</td><td className="px-5 py-4 text-right">{formatNumber(item.diesel)}</td><td className="px-5 py-4 text-right font-bold text-blue-400">Rs. {formatNumber(p)}</td><td className="px-5 py-4 text-right font-bold text-green-400">Rs. {formatNumber(pd)}</td><td className="px-5 py-4 text-right font-bold text-red-400">Rs. {formatNumber(Math.max(0, p - pd))}</td><td className="px-5 py-4 text-center"><button onClick={() => handleDelete(item.id)} className="h-9 w-9 inline-flex items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20"><Trash2 size={16}/></button></td></tr> })}</tbody></table></div>
+          <div className="overflow-x-auto"><table className="w-full min-w-[900px]"><thead className="bg-slate-800/80"><tr className="text-xs text-slate-400 uppercase"><th className="px-5 py-4 text-left">Date</th><th className="px-5 py-4 text-left">Machine</th><th className="px-5 py-4 text-right">Diesel</th><th className="px-5 py-4 text-right">Payable</th><th className="px-5 py-4 text-right">Paid</th><th className="px-5 py-4 text-right">Balance</th><th className="px-5 py-4 text-center">Action</th></tr></thead><tbody>{filteredExpenses.length===0 ? <tr><td colSpan={7} className="px-5 py-10 text-center text-sm text-slate-500">No records</td></tr> : filteredExpenses.map(item => { const p = numberValue(item.payable); const pd = numberValue(item.paid); return <tr key={item.id} className="border-b border-slate-800 hover:bg-slate-800/40"><td className="px-5 py-4 text-sm">{item.date?.slice(0, 10)}</td><td className="px-5 py-4 font-semibold">{item.machine}</td><td className="px-5 py-4 text-right">{formatNumber(item.diesel)}</td><td className="px-5 py-4 text-right font-bold text-blue-400">Rs. {formatNumber(p)}</td><td className="px-5 py-4 text-right font-bold text-green-400">Rs. {formatNumber(pd)}</td><td className="px-5 py-4 text-right font-bold text-red-400">Rs. {formatNumber(Math.max(0, p - pd))}</td><td className="px-5 py-4 text-center"><button onClick={() => handleDelete(item.id)} className="h-9 w-9 inline-flex items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20"><Trash2 size={16}/></button></td></tr> })}</tbody></table></div>
         </section>
       </div>
 
+      {/* MODAL - oya code eka ehemama, Remaining Balance eka update karala */}
       {showInitialSummary && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm overflow-y-auto" onClick={() => setShowInitialSummary(false)}>
           <div className="w-full max-w-2xl my-6 rounded-3xl border border-slate-700 bg-[#0d1527] shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-slate-800 bg-slate-900/80 px-6 py-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400"><BarChart3 size={20}/></div>
-                <div>
-                  <h2 className="text-base font-black uppercase tracking-wider">Initial Stock Summary</h2>
-                  <p className="text-[11px] text-slate-500 mt-0.5">Branch • {expenses.length} Records • {dateWiseSummary.length} Days {initialDate ? `• Initial: ${initialDate}` : ""}</p>
-                </div>
-              </div>
+              <div className="flex items-center gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400"><BarChart3 size={20}/></div><div><h2 className="text-base font-black uppercase tracking-wider">Initial Stock Summary</h2><p className="text-[11px] text-slate-500 mt-0.5">Branch • {expenses.length} Records • {dateWiseSummary.length} Days {initialDate ? `• Initial: ${initialDate}` : ""}</p></div></div>
               <button onClick={() => setShowInitialSummary(false)} className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-500 text-white font-black hover:bg-red-600"><X size={16}/></button>
             </div>
-
             <div className="max-h-[70vh] overflow-y-auto p-6 space-y-5">
-              {initialDate && (
-                <div className="flex items-center gap-2 rounded-xl border border-cyan-500/20 bg-cyan-500/5 px-4 py-2.5 text-xs">
-                  <span className="text-slate-400">Initial Date:</span>
-                  <span className="font-black text-cyan-300">{initialDate}</span>
-                  <span className="text-slate-500">|</span>
-                  <span>{formatNumber(initialDieselStock)} L</span>
-                  <span className="text-slate-500">|</span>
-                  <span>Rs. {formatNumber(initialTotalAmount)}</span>
-                </div>
-              )}
+              {initialDate && <div className="flex items-center gap-2 rounded-xl border border-cyan-500/20 bg-cyan-500/5 px-4 py-2.5 text-xs"><span className="text-slate-400">Initial Date:</span><span className="font-black text-cyan-300">{initialDate}</span><span className="text-slate-500">|</span><span>{formatNumber(initialDieselStock)} L</span><span className="text-slate-500">|</span><span>Rs. {formatNumber(initialTotalAmount)}</span></div>}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-4">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Initial Diesel</p>
-                  <p className="mt-2 text-lg font-black text-cyan-300">{formatNumber(initialDieselStock)} L</p>
-                  <p className="text-[10px] text-slate-500 mt-1">Total Add karapu gaana</p>
-                </div>
-                <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Initial Amount</p>
-                  <p className="mt-2 text-lg font-black text-blue-300">Rs. {formatNumber(initialTotalAmount)}</p>
-                  <p className="text-[10px] text-slate-500 mt-1">Total Amount</p>
-                </div>
-                <div className="rounded-2xl border border-orange-500/20 bg-orange-500/5 p-4">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Diesel Used</p>
-                  <p className="mt-2 text-lg font-black text-orange-300">{formatNumber(totalUsedDiesel)} L</p>
-                  <p className="text-[10px] text-slate-500 mt-1">Table eke ekathuwa</p>
-                </div>
-                <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Remaining</p>
-                  <p className="mt-2 text-lg font-black text-emerald-300">{formatNumber(Math.max(0, initialDieselStock - totalUsedDiesel))} L</p>
-                  <p className="text-[10px] text-slate-500 mt-1">Rs. {formatNumber(Math.max(0, initialDieselStock - totalUsedDiesel) * DIESEL_PRICE)}</p>
-                </div>
+                <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Initial Diesel</p><p className="mt-2 text-lg font-black text-cyan-300">{formatNumber(initialDieselStock)} L</p><p className="text-[10px] text-slate-500 mt-1">Total Add karapu gaana</p></div>
+                <div className="rounded-2xl border border-violet-500/20 bg-violet-500/5 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Initial Amount (Remaining)</p><p className="mt-2 text-lg font-black text-violet-300">Rs. {formatNumber(displayInitialAmountRemaining)}</p><p className="text-[10px] text-slate-500 mt-1">Original: Rs. {formatNumber(initialTotalAmount)}</p></div>
+                <div className="rounded-2xl border border-orange-500/20 bg-orange-500/5 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Diesel Used</p><p className="mt-2 text-lg font-black text-orange-300">{formatNumber(totalUsedDiesel)} L</p><p className="text-[10px] text-slate-500 mt-1">Table eke ekathuwa</p></div>
+                <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Remaining</p><p className="mt-2 text-lg font-black text-emerald-300">{formatNumber(Math.max(0, initialDieselStock - totalUsedDiesel))} L</p><p className="text-[10px] text-slate-500 mt-1">Rs. {formatNumber(displayRemainingBalance)}</p></div>
               </div>
-
+              <div><div className="flex justify-between text-[11px] font-bold text-slate-400 mb-2"><span>Used {initialDieselStock > 0 ? Math.round((totalUsedDiesel / initialDieselStock) * 100) : 0}%</span><span>Remaining {initialDieselStock > 0 ? Math.round((Math.max(0, initialDieselStock - totalUsedDiesel) / initialDieselStock) * 100) : 0}%</span></div><div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-all" style={{ width: `${initialDieselStock > 0 ? Math.min(100, (totalUsedDiesel / initialDieselStock) * 100) : 0}%` }} /></div></div>
               <div>
-                <div className="flex justify-between text-[11px] font-bold text-slate-400 mb-2">
-                  <span>Used {initialDieselStock > 0 ? Math.round((totalUsedDiesel / initialDieselStock) * 100) : 0}%</span>
-                  <span>Remaining {initialDieselStock > 0 ? Math.round((Math.max(0, initialDieselStock - totalUsedDiesel) / initialDieselStock) * 100) : 0}%</span>
-                </div>
-                <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-800">
-                  <div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-all" style={{ width: `${initialDieselStock > 0 ? Math.min(100, (totalUsedDiesel / initialDieselStock) * 100) : 0}%` }} />
-                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-3"><h3 className="text-xs font-black uppercase tracking-widest text-cyan-300">Initial Add History • Date Wise</h3><div className="flex items-center gap-2"><div className="flex items-center gap-1.5 h-9 rounded-lg border border-slate-600 bg-slate-900 px-3"><Calendar size={14} className="text-slate-400"/><input type="date" value={initialFilterDate} onChange={e=>setInitialFilterDate(e.target.value)} className="bg-transparent text-xs outline-none" /></div>{initialFilterDate && <button onClick={()=>setInitialFilterDate("")} className="h-9 px-3 rounded-lg bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold flex items-center gap-1"><X size={12}/>Clear</button>}<span className="rounded-lg bg-cyan-500/15 text-cyan-300 px-2.5 py-1 text-[11px] font-bold">{filteredHistory.length} Entries</span></div></div>
+                <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 mb-3"><h4 className="text-xs font-black uppercase tracking-widest text-amber-300">Kalin Add Karapu Ewa • Manual Add</h4><p className="text-[11px] text-slate-400 mt-1">Kalin add karapu ewa date ekka methana danna. Meka Total Diesel ekata add wenawa.</p><div className="grid grid-cols-3 gap-2 mt-3"><div><label className="text-[10px] font-bold text-slate-400 uppercase">Date</label><input type="date" value={pastDate} onChange={e => setPastDate(e.target.value)} className="h-10 w-full rounded-xl border border-slate-600 bg-slate-800 px-3 text-sm outline-none" /></div><div><label className="text-[10px] font-bold text-slate-400 uppercase">Diesel (L)</label><input type="number" value={pastDiesel} onChange={e => setPastDiesel(e.target.value)} placeholder="331" className="h-10 w-full rounded-xl border border-slate-600 bg-slate-800 px-3 text-sm outline-none" /></div><div><label className="text-[10px] font-bold text-slate-400 uppercase">Amount (Rs)</label><input type="number" value={pastAmount} onChange={e => setPastAmount(e.target.value)} placeholder="131407" className="h-10 w-full rounded-xl border border-slate-600 bg-slate-800 px-3 text-sm outline-none" /></div></div><button onClick={handleAddPastInitial} disabled={savingPast} className="mt-3 w-full h-10 rounded-xl bg-amber-500 font-black text-xs uppercase tracking-wider text-black hover:bg-amber-400 disabled:opacity-40">{savingPast ? "Saving..." : "+ Add Past Entry"}</button><p className="text-[11px] text-slate-500 mt-2">History Total: {formatNumber(totalInitialHistoryDiesel)} L / Rs. {formatNumber(totalInitialHistoryAmount)} • DB Total: {formatNumber(initialDieselStock)} L / Rs. {formatNumber(initialTotalAmount)}</p></div>
+                {filteredHistory.length === 0 ? <p className="rounded-2xl border border-slate-800 bg-slate-900/50 px-4 py-6 text-center text-sm text-slate-500">Thama Initial Add History na.</p> : <div className="overflow-hidden rounded-2xl border border-cyan-500/20"><table className="w-full text-sm"><thead className="bg-slate-900"><tr className="text-left text-[10px] uppercase tracking-wider text-slate-500"><th className="px-4 py-3">Date</th><th className="px-4 py-3 text-right">Initial Diesel</th><th className="px-4 py-3 text-right">Initial Amount</th><th className="px-4 py-3"></th></tr></thead><tbody className="divide-y divide-slate-800/70">{filteredHistory.map((h, i) => <tr key={`${h.id}-${i}`} className="hover:bg-slate-800/40"><td className="px-4 py-3 font-bold">{String(h.date).slice(0,10)} {h.id === 0 && <span className="ml-1 rounded bg-cyan-500/20 text-cyan-300 px-1.5 py-0.5 text-[9px]">CURRENT STOCK</span>}</td><td className="px-4 py-3 text-right font-bold text-cyan-300">{formatNumber(h.diesel)} L</td><td className="px-4 py-3 text-right font-bold">Rs. {formatNumber(h.amount)}</td><td className="px-4 py-3 text-right">{h.id !== 0 && h.id !== undefined && <button onClick={() => handleDeletePast(h.id)} className="h-7 w-7 inline-flex items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20"><Trash2 size={13}/></button>}</td></tr>)}</tbody><tfoot className="bg-slate-900"><tr className="font-black"><td className="px-4 py-3 text-slate-400">Total (History)</td><td className="px-4 py-3 text-right text-cyan-300">{formatNumber(totalInitialHistoryDiesel)} L</td><td className="px-4 py-3 text-right">Rs. {formatNumber(totalInitialHistoryAmount)}</td><td></td></tr></tfoot></table></div>}
               </div>
-
-              <div>
-                <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                  <h3 className="text-xs font-black uppercase tracking-widest text-cyan-300">Initial Add History • Date Wise</h3>
-                  <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-1.5 h-9 rounded-lg border border-slate-600 bg-slate-900 px-3">
-                      <Calendar size={14} className="text-slate-400"/>
-                      <input type="date" value={initialFilterDate} onChange={e=>setInitialFilterDate(e.target.value)} className="bg-transparent text-xs outline-none" />
-                    </div>
-                    {initialFilterDate && <button onClick={()=>setInitialFilterDate("")} className="h-9 px-3 rounded-lg bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold flex items-center gap-1"><X size={12}/>Clear</button>}
-                    <span className="rounded-lg bg-cyan-500/15 text-cyan-300 px-2.5 py-1 text-[11px] font-bold">{filteredHistory.length} Entries • {effectiveHistory.length} Adds</span>
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 mb-3">
-                  <h4 className="text-xs font-black uppercase tracking-widest text-amber-300">Kalin Add Karapu Ewa • Manual Add</h4>
-                  <p className="text-[11px] text-slate-400 mt-1">Kalin add karapu ewa date ekka methana danna. Meka Total Diesel ekata add wenawa.</p>
-                  <div className="grid grid-cols-3 gap-2 mt-3">
-                    <div><label className="text-[10px] font-bold text-slate-400 uppercase">Date</label><input type="date" value={pastDate} onChange={e => setPastDate(e.target.value)} className="h-10 w-full rounded-xl border border-slate-600 bg-slate-800 px-3 text-sm outline-none" /></div>
-                    <div><label className="text-[10px] font-bold text-slate-400 uppercase">Diesel (L)</label><input type="number" value={pastDiesel} onChange={e => setPastDiesel(e.target.value)} placeholder="331" className="h-10 w-full rounded-xl border border-slate-600 bg-slate-800 px-3 text-sm outline-none" /></div>
-                    <div><label className="text-[10px] font-bold text-slate-400 uppercase">Amount (Rs)</label><input type="number" value={pastAmount} onChange={e => setPastAmount(e.target.value)} placeholder="131407" className="h-10 w-full rounded-xl border border-slate-600 bg-slate-800 px-3 text-sm outline-none" /></div>
-                  </div>
-                  <button onClick={handleAddPastInitial} disabled={savingPast} className="mt-3 w-full h-10 rounded-xl bg-amber-500 font-black text-xs uppercase tracking-wider text-black hover:bg-amber-400 disabled:opacity-40">
-                    {savingPast ? "Saving..." : "+ Add Past Entry"}
-                  </button>
-                  <p className="text-[11px] text-slate-500 mt-2">History Total: {formatNumber(totalInitialHistoryDiesel)} L / Rs. {formatNumber(totalInitialHistoryAmount)} • DB Total: {formatNumber(initialDieselStock)} L / Rs. {formatNumber(initialTotalAmount)} • Dekama samana wenna ona.</p>
-                </div>
-
-                {filteredHistory.length === 0 ? (
-                  <p className="rounded-2xl border border-slate-800 bg-slate-900/50 px-4 py-6 text-center text-sm text-slate-500">Thama Initial Add History na. Uda form eken kalin ewa date ekka add karanna.<br/><span className="text-[11px]">DB Total: {formatNumber(initialDieselStock)} L / Rs. {formatNumber(initialTotalAmount)}</span></p>
-                ) : (
-                  <div className="overflow-hidden rounded-2xl border border-cyan-500/20">
-                    <table className="w-full text-sm">
-                      <thead className="bg-slate-900">
-                        <tr className="text-left text-[10px] uppercase tracking-wider text-slate-500">
-                          <th className="px-4 py-3">Date</th>
-                          <th className="px-4 py-3 text-right">Initial Diesel</th>
-                          <th className="px-4 py-3 text-right">Initial Amount</th>
-                          <th className="px-4 py-3"></th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800/70">
-                        {filteredHistory.map((h, i) => (
-                          <tr key={`${h.id}-${i}`} className="hover:bg-slate-800/40">
-                            <td className="px-4 py-3 font-bold">{String(h.date).slice(0,10)} {h.id === 0 && <span className="ml-1 rounded bg-cyan-500/20 text-cyan-300 px-1.5 py-0.5 text-[9px]">CURRENT STOCK</span>}</td>
-                            <td className="px-4 py-3 text-right font-bold text-cyan-300">{formatNumber(h.diesel)} L</td>
-                            <td className="px-4 py-3 text-right font-bold">Rs. {formatNumber(h.amount)}</td>
-                            <td className="px-4 py-3 text-right">
-                              {h.id !== 0 && h.id !== undefined && <button onClick={() => handleDeletePast(h.id)} className="h-7 w-7 inline-flex items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20"><Trash2 size={13}/></button>}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      <tfoot className="bg-slate-900">
-                        <tr className="font-black">
-                          <td className="px-4 py-3 text-slate-400">Total (History)</td>
-                          <td className="px-4 py-3 text-right text-cyan-300">{formatNumber(totalInitialHistoryDiesel)} L</td>
-                          <td className="px-4 py-3 text-right">Rs. {formatNumber(totalInitialHistoryAmount)}</td>
-                          <td></td>
-                        </tr>
-                        <tr className="font-black text-[11px] text-slate-500">
-                          <td className="px-4 py-2">DB Total</td>
-                          <td className="px-4 py-2 text-right">{formatNumber(initialDieselStock)} L</td>
-                          <td className="px-4 py-2 text-right">Rs. {formatNumber(initialTotalAmount)}</td>
-                          <td></td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-xs font-black uppercase tracking-widest text-slate-400">Date Wise Summary • Diesel Used</h3>
-                  <span className="rounded-lg bg-slate-800 px-2.5 py-1 text-[11px] font-bold">{dateWiseSummary.length} Days</span>
-                </div>
-                {dateWiseSummary.length === 0 ? (
-                  <p className="rounded-2xl border border-slate-800 bg-slate-900/50 px-4 py-6 text-center text-sm text-slate-500">Thama records na</p>
-                ) : (
-                  <div className="overflow-hidden rounded-2xl border border-slate-800">
-                    <table className="w-full text-sm">
-                      <thead className="bg-slate-900">
-                        <tr className="text-left text-[10px] uppercase tracking-wider text-slate-500">
-                          <th className="px-4 py-3">Date</th>
-                          <th className="px-4 py-3 text-center">Records</th>
-                          <th className="px-4 py-3 text-right">Diesel</th>
-                          <th className="px-4 py-3 text-right">Amount</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800/70">
-                        {dateWiseSummary.map((row) => (
-                          <tr key={row.date} className="hover:bg-slate-800/40">
-                            <td className="px-4 py-3">
-                              <p className="font-bold">{row.date}</p>
-                              <p className="text-[11px] text-slate-500">{Array.from(row.machines).slice(0, 2).join(", ")}{row.machines.size > 2 ? ` +${row.machines.size - 2} more` : ""}</p>
-                            </td>
-                            <td className="px-4 py-3 text-center"><span className="rounded-lg bg-slate-800 px-2 py-1 text-[11px] font-bold">{row.count}</span></td>
-                            <td className="px-4 py-3 text-right font-bold text-cyan-300">{formatNumber(row.diesel)} L</td>
-                            <td className="px-4 py-3 text-right font-bold">Rs. {formatNumber(row.amount)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      <tfoot className="bg-slate-900">
-                        <tr className="font-black">
-                          <td className="px-4 py-3 text-slate-400">Total</td>
-                          <td className="px-4 py-3 text-center">{expenses.length}</td>
-                          <td className="px-4 py-3 text-right text-cyan-300">{formatNumber(totalUsedDiesel)} L</td>
-                          <td className="px-4 py-3 text-right">Rs. {formatNumber(totalPayable)}</td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-3">Machine Wise</h3>
-                <div className="space-y-2">
-                  {machineWiseSummary.map((m) => (
-                    <div key={m.machine} className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-3">
-                      <div><p className="font-bold text-sm">{m.machine}</p><p className="text-[11px] text-slate-500">{m.count} records</p></div>
-                      <div className="text-right"><p className="font-black text-cyan-300 text-sm">{formatNumber(m.diesel)} L</p><p className="text-[11px] text-slate-400">Rs. {formatNumber(m.amount)}</p></div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <div><div className="flex items-center justify-between mb-3"><h3 className="text-xs font-black uppercase tracking-widest text-slate-400">Date Wise Summary • Diesel Used</h3><span className="rounded-lg bg-slate-800 px-2.5 py-1 text-[11px] font-bold">{dateWiseSummary.length} Days</span></div>{dateWiseSummary.length === 0 ? <p className="rounded-2xl border border-slate-800 bg-slate-900/50 px-4 py-6 text-center text-sm text-slate-500">Thama records na</p> : <div className="overflow-hidden rounded-2xl border border-slate-800"><table className="w-full text-sm"><thead className="bg-slate-900"><tr className="text-left text-[10px] uppercase tracking-wider text-slate-500"><th className="px-4 py-3">Date</th><th className="px-4 py-3 text-center">Records</th><th className="px-4 py-3 text-right">Diesel</th><th className="px-4 py-3 text-right">Amount</th></tr></thead><tbody className="divide-y divide-slate-800/70">{dateWiseSummary.map((row) => <tr key={row.date} className="hover:bg-slate-800/40"><td className="px-4 py-3"><p className="font-bold">{row.date}</p><p className="text-[11px] text-slate-500">{Array.from(row.machines).slice(0, 2).join(", ")}{row.machines.size > 2 ? ` +${row.machines.size - 2} more` : ""}</p></td><td className="px-4 py-3 text-center"><span className="rounded-lg bg-slate-800 px-2 py-1 text-[11px] font-bold">{row.count}</span></td><td className="px-4 py-3 text-right font-bold text-cyan-300">{formatNumber(row.diesel)} L</td><td className="px-4 py-3 text-right font-bold">Rs. {formatNumber(row.amount)}</td></tr>)}</tbody><tfoot className="bg-slate-900"><tr className="font-black"><td className="px-4 py-3 text-slate-400">Total</td><td className="px-4 py-3 text-center">{expenses.length}</td><td className="px-4 py-3 text-right text-cyan-300">{formatNumber(totalUsedDiesel)} L</td><td className="px-4 py-3 text-right">Rs. {formatNumber(totalPayable)}</td></tr></tfoot></table></div>}</div>
+              <div><h3 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-3">Machine Wise</h3><div className="space-y-2">{machineWiseSummary.map((m) => <div key={m.machine} className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-3"><div><p className="font-bold text-sm">{m.machine}</p><p className="text-[11px] text-slate-500">{m.count} records</p></div><div className="text-right"><p className="font-black text-cyan-300 text-sm">{formatNumber(m.diesel)} L</p><p className="text-[11px] text-slate-400">Rs. {formatNumber(m.amount)}</p></div></div>)}</div></div>
             </div>
-
-            <div className="flex gap-2 border-t border-slate-800 bg-slate-900/80 px-6 py-4">
-              <button onClick={() => setShowInitialSummary(false)} className="flex-1 rounded-xl bg-cyan-500 py-3 text-xs font-black uppercase tracking-wider text-slate-950 hover:bg-cyan-400">Close</button>
-              <button onClick={() => window.print()} className="rounded-xl border border-slate-700 px-5 py-3 text-xs font-bold hover:bg-slate-800">Print</button>
-            </div>
+            <div className="flex gap-2 border-t border-slate-800 bg-slate-900/80 px-6 py-4"><button onClick={() => setShowInitialSummary(false)} className="flex-1 rounded-xl bg-cyan-500 py-3 text-xs font-black uppercase tracking-wider text-slate-950 hover:bg-cyan-400">Close</button><button onClick={() => window.print()} className="rounded-xl border border-slate-700 px-5 py-3 text-xs font-bold hover:bg-slate-800">Print</button></div>
           </div>
         </div>
       )}
@@ -495,7 +261,7 @@ export default function DieselExpensesPage() {
   );
 }
 function SummaryCard({ title, subtitle, value, icon, color }: { title: string; subtitle: string; value: string; icon: React.ReactNode; color: CardColor; }) {
-  const s: any = { cyan: { b: "border-cyan-500/25", i: "bg-cyan-500/10 text-cyan-400", v: "text-cyan-300" }, blue: { b: "border-blue-500/25", i: "bg-blue-500/10 text-blue-400", v: "text-blue-300" }, orange: { b: "border-orange-500/25", i: "bg-orange-500/10 text-orange-400", v: "text-orange-300" }, green: { b: "border-green-500/25", i: "bg-green-500/10 text-green-400", v: "text-green-300" }, red: { b: "border-red-500/25", i: "bg-red-500/10 text-red-400", v: "text-red-300" } };
-  const c = s[color]; return (<div className={`rounded-2xl border bg-slate-900 p-5 ${c.b}`}><div className="flex justify-between"><div><p className="text-sm font-bold">{title}</p><p className="text-xs text-slate-500 mt-1">{subtitle}</p><h2 className={`mt-4 text-xl font-bold ${c.v}`}>{value}</h2></div><span className={`h-10 w-10 flex items-center justify-center rounded-xl ${c.i}`}>{icon}</span></div></div>);
+  const s: any = { cyan: { b: "border-cyan-500/25", i: "bg-cyan-500/10 text-cyan-400", v: "text-cyan-300" }, blue: { b: "border-blue-500/25", i: "bg-blue-500/10 text-blue-400", v: "text-blue-300" }, orange: { b: "border-orange-500/25", i: "bg-orange-500/10 text-orange-400", v: "text-orange-300" }, green: { b: "border-green-500/25", i: "bg-green-500/10 text-green-400", v: "text-green-300" }, red: { b: "border-red-500/25", i: "bg-red-500/10 text-red-400", v: "text-red-300" }, violet: { b: "border-violet-500/25", i: "bg-violet-500/10 text-violet-400", v: "text-violet-300" } };
+  const c = s[color]; return (<div className={`rounded-2xl border bg-slate-900 p-5 shadow-lg hover:-translate-y-0.5 transition ${c.b}`}><div className="flex justify-between gap-3"><div className="min-w-0"><p className="text-[13px] font-bold leading-tight">{title}</p><p className="text-[11px] text-slate-500 mt-1 leading-tight">{subtitle}</p><h2 className={`mt-3 text-[19px] font-black leading-tight break-words ${c.v}`}>{value}</h2></div><span className={`h-10 w-10 shrink-0 flex items-center justify-center rounded-xl ${c.i}`}>{icon}</span></div></div>);
 }
-function Field({ label, children }: { label: string; children: React.ReactNode; }) { return (<label className="block"><span className="mb-2 block text-xs font-bold uppercase text-slate-400">{label}</span>{children}</label>); }
+function Field({ label, children }: { label: string; children: React.ReactNode; }) { return (<label className="block"><span className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-400">{label}</span>{children}</label>); }
