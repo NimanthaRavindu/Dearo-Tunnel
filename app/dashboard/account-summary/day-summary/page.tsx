@@ -61,74 +61,34 @@ export default function DaySummaryPage() {
   const fetchAll = useCallback(async () => {
     setIsLoading(true);
     try {
-      // ---------- 0. Branch Map - OKKOMA THANIN BRANCHES EKATHU KARANNA ----------
-      const branchMap = new Map<string, string>();
-      const addBranch = (id: any, name: any) => {
-        const bid = String(id ?? "").trim();
-        if (!bid || bid === "undefined" || bid === "null") return;
-        if (!branchMap.has(bid)) branchMap.set(bid, String(name || `Branch ${bid}`));
-      };
-      const buildBranchList = () => Array.from(branchMap.entries()).map(([id, branch_name]) => ({ id, branch_name }));
-
-      // ---------- 1. Branches - /api/branch MULINMA ----------
+      // ---------- 1. Branches MULINMA - okkoma branches ganna ----------
       const bData = await fetchOne(`/api/branch`);
-      bData.forEach((b: any) => addBranch(
-        b.id ?? b.branch_id ?? b.branchId,
-        b.branchName || b.bName || b.branch_name || b.name
-      ));
-      // /api/branches name ekenuth try karanawa - 1i thibboth
-      if (branchMap.size <= 1) {
-        const bData2 = await fetchOne(`/api/branches`);
-        bData2.forEach((b: any) => addBranch(b.id ?? b.branch_id ?? b.branchId, b.branchName || b.bName || b.branch_name || b.name));
-      }
+      let branchList: any[] = bData.length > 0
+        ? bData.map((b: any) => ({ id: String(b.id ?? b.branch_id ?? b.branchId), branch_name: b.branchName || b.bName || b.branch_name || b.name || `Branch ${b.id ?? b.branch_id}` }))
+        : [];
+      branchList = Array.from(new Map(branchList.map((b: any) => [String(b.id), b])).values());
+      // /api/branch eken enne nathnam summary eken branch ganna - fallback witharak
+      const idsFromBranch = branchList.map((b: any) => String(b.id)).filter(Boolean);
+      const getName = (id: any, fallbackName?: string) => branchList.find((x: any) => String(x.id) === String(id))?.branch_name || fallbackName || `Branch ${id}`;
 
-      // Temporary ids - summary fetch karanna - branch table eke 1i thibunath summary eken ganna puluwan wenna
-      let idsForFetch = Array.from(branchMap.keys()).filter(Boolean);
-      // branch table eke kisi ekak na nam, summary eken ids ganna - palaweni fetch eka no-branch
-      const getNameEarly = (id: any, fallbackName?: string) => branchMap.get(String(id)) || fallbackName || `Branch ${id}`;
-
-      // ---------- 2. Summary - OKKOMA BRANCHES PARALLEL ----------
-      let summaryData: any[] = [];
-      if (idsForFetch.length > 0) {
-        const summaryPromises = idsForFetch.map(async (bid) => {
-          const url = date === "all"
-            ? `/api/expences/sales-incomes?summary=true&branch_id=${encodeURIComponent(bid)}`
-            : `/api/expences/sales-incomes?summary=true&date=${encodeURIComponent(date)}&branch_id=${encodeURIComponent(bid)}`;
-          const rows = await fetchOne(url);
-          // API eka branch_id ignore karala okkoma denawanam, methana filter karanawa
-          // + API eken ena branch okkoma branchMap ekata add karanawa
-          return rows.filter((r: any) => {
-            const rb = getRecordBranchId(r);
-            if (rb) addBranch(rb, r.branchName || r.branch_name);
-            return !rb || rb === String(bid);
-          }).map((r: any) => ({ ...r, _forcedBranchId: bid }));
-        });
-        const chunks = await Promise.all(summaryPromises);
-        summaryData = chunks.flat();
-        // branch table eken ena ids walata summary eke wena branch thibboth, e branch walatath summary fetch karanna
-        const extraIds = Array.from(branchMap.keys()).filter((id) => !idsForFetch.includes(id));
-        if (extraIds.length > 0) {
-          const extraPromises = extraIds.map(async (bid) => {
+      // ---------- 2. Summary - OKKOMA BRANCHES PARALLEL - ekakin ekata NAHA ----------
+      // ✅ FIX - summary=true witharak gahuwama API eka 1 branch ekak witharai denawa nam, meka branch ekata fetch karanawa
+      const summaryPromises = idsFromBranch.length > 0
+        ? idsFromBranch.map(async (bid) => {
             const url = date === "all"
               ? `/api/expences/sales-incomes?summary=true&branch_id=${encodeURIComponent(bid)}`
               : `/api/expences/sales-incomes?summary=true&date=${encodeURIComponent(date)}&branch_id=${encodeURIComponent(bid)}`;
             const rows = await fetchOne(url);
+            // API eka branch_id ignore karala okkoma denawanam, methana filter karanawa
             return rows.filter((r: any) => {
               const rb = getRecordBranchId(r);
-              return !rb || rb === String(bid);
+              return !rb || rb === String(bid); // branch_id thiyenawanam danata branch eka witharai
             }).map((r: any) => ({ ...r, _forcedBranchId: bid }));
-          });
-          const extraChunks = await Promise.all(extraPromises);
-          summaryData = [...summaryData, ...extraChunks.flat()];
-        }
-      } else {
-        // branch table eke kisi ekak na nam, no-branch fetch eka
-        const url = date === "all" ? `/api/expences/sales-incomes?summary=true` : `/api/expences/sales-incomes?summary=true&date=${encodeURIComponent(date)}`;
-        const rows = await fetchOne(url);
-        rows.forEach((r: any) => addBranch(getRecordBranchId(r), r.branchName || r.branch_name));
-        summaryData = rows.map((r: any) => ({ ...r, _forcedBranchId: getRecordBranchId(r) }));
-      }
+          })
+        : [fetchOne(date === "all" ? `/api/expences/sales-incomes?summary=true` : `/api/expences/sales-incomes?summary=true&date=${encodeURIComponent(date)}`)];
 
+      const summaryChunks = await Promise.all(summaryPromises);
+      const summaryData = summaryChunks.flat();
       const datesFromAll = summaryData.map((r: any) => String(r.date || "").slice(0, 10)).filter(Boolean);
       const uniqDates = Array.from(new Set(datesFromAll)).sort().reverse().slice(0, 15) as string[];
       setAllDates(uniqDates);
@@ -139,10 +99,9 @@ export default function DaySummaryPage() {
         const hasPaidCredit = (r.totalPaid ?? r.total_paid ?? r.paid ?? r.paid_amount ?? r.totalCredit ?? r.total_credit ?? r.credit ?? r.credit_amount) !== undefined;
         const income = hasPaidCredit ? (paid + credit) : numeric(r.amount ?? r.totalAmount ?? r.total_amount);
         const bid = String(r._forcedBranchId || getRecordBranchId(r) || r.branchId || r.branch_id || "");
-        if (bid) addBranch(bid, r.branchName || r.branch_name);
         return {
           branchId: bid,
-          branchName: branchMap.get(bid) || r.branchName || r.branch_name || `Branch ${bid}`,
+          branchName: getName(bid, r.branchName || r.branch_name),
           date: String(r.date || "").slice(0, 10),
           paid: hasPaidCredit ? paid : income,
           credit: hasPaidCredit ? credit : 0,
@@ -153,19 +112,24 @@ export default function DaySummaryPage() {
       }).filter((r: any) => r.branchId && r.date);
       setSummaryRows(normalizedSummary);
 
-      // ---------- 3. IDs - okkoma branches - summary + branch table ----------
-      const ids = Array.from(new Set([...Array.from(branchMap.keys()), ...normalizedSummary.map((r: any) => String(r.branchId))])).filter(Boolean);
-      const getName2 = (id: any) => branchMap.get(String(id)) || normalizedSummary.find((x: any) => String(x.branchId) === String(id))?.branchName || `Branch ${id}`;
+      // Branches list eka summary ekenuth update karanawa - anith branches miss wenna epa
+      normalizedSummary.forEach((r: any) => {
+        if (!branchList.find((b: any) => String(b.id) === String(r.branchId))) branchList.push({ id: r.branchId, branch_name: r.branchName });
+      });
+      setBranches(branchList);
 
-      // ---------- 4. Credits - PARALLEL ----------
+      const ids = Array.from(new Set([...branchList.map((b: any) => String(b.id)), ...normalizedSummary.map((r: any) => String(r.branchId))])).filter(Boolean);
+      const getName2 = (id: any) => branchList.find((x: any) => String(x.id) === String(id))?.branch_name || normalizedSummary.find((x: any) => String(x.branchId) === String(id))?.branchName || `Branch ${id}`;
+
+      // ---------- 3. Credits - PARALLEL, branch_id nathuwa data Mahiyanganaya ekata danne NAHA ----------
       const creditChunks = await Promise.all(ids.map(async (id) => {
         const rows = await fetchOne(`/api/expences/sales-credits?branch_id=${encodeURIComponent(id)}`);
         return rows.map((r: any) => {
-          const rb = getRecordBranchId(r) || String(id);
-          addBranch(rb, r.branchName || r.branch_name);
-          return { ...r, _branchId: rb, _branchName: branchMap.get(rb) || getName2(rb) };
+          const rb = getRecordBranchId(r) || String(id); // API eken branch_id enawanam eka, nathnam request karapu branch eka
+          return { ...r, _branchId: rb, _branchName: getName2(rb) };
         });
       }));
+      // branch_id param eka API eka ignore karanawanam duplicate enna puluwan - dedupe karanawa
       const creditSeen = new Set<string>();
       const allCredits: any[] = [];
       creditChunks.flat().forEach((r: any) => {
@@ -174,7 +138,7 @@ export default function DaySummaryPage() {
       });
       setCredits(allCredits);
 
-      // ---------- 5. Expenses - PARALLEL - SPEED FIX ----------
+      // ---------- 4. Expenses - PARALLEL - sequential loop eka ain kala - SPEED FIX ----------
       const expensePromises: Promise<any[]>[] = [];
       for (const api of EXPENSE_DEFS) {
         for (const id of ids) {
@@ -186,9 +150,9 @@ export default function DaySummaryPage() {
               rows = await fetchOne(`/api/expences/${api.path}?branch_id=${encodeURIComponent(id)}`);
               if (rows.length === 0) rows = await fetchOne(`/api/expences/${api.path}?branchId=${encodeURIComponent(id)}`);
             }
+            // ✅ API eka branch filter ignore karala okkoma denawanam, methana filter karanawa
             return rows.filter((r: any) => {
               const rb = getRecordBranchId(r);
-              if (rb) addBranch(rb, r.branchName || r.branch_name);
               return !rb || rb === String(id);
             }).map((r: any) => ({
               ...r,
@@ -201,6 +165,7 @@ export default function DaySummaryPage() {
       }
       const expenseChunks = await Promise.all(expensePromises);
       let allExpenses = expenseChunks.flat();
+
       const seen = new Set<string>();
       allExpenses = allExpenses.filter((r: any) => {
         const k = `${r._type}|${r.id ?? ""}|${r._branchId}|${getPayable(r)}|${getExpDate(r)}`;
@@ -210,14 +175,7 @@ export default function DaySummaryPage() {
       });
       setAllExpensesRaw(allExpenses);
 
-      // ---------- 6. FINAL Branch List - OKKOMA THANIN ENA BRANCHES ----------
-      allCredits.forEach((r: any) => addBranch(r._branchId, r._branchName));
-      allExpenses.forEach((r: any) => addBranch(r._branchId, r._branchName));
-      // branchName update karanna - branch table eke nama thiyenawanam eka
-      const finalBranchList = buildBranchList().sort((a, b) => a.branch_name.localeCompare(b.branch_name));
-      setBranches(finalBranchList);
-
-      // ---------- 7. Expense rows ----------
+      // ---------- 5. Expense rows ----------
       const expMap = new Map<string, any>();
       const latestDateForBranch = new Map<string, string>();
       normalizedSummary.forEach((r: any) => {
