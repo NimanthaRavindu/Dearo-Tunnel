@@ -62,12 +62,12 @@ export default function DaySummaryPage() {
     setIsLoading(true);
     try {
       // ---------- 1. Branches MULINMA - okkoma branches ganna ----------
-      const bData = await fetchOne(`/api/branch`);
+      const bData = await fetchOne(`/api/branches`);
       let branchList: any[] = bData.length > 0
         ? bData.map((b: any) => ({ id: String(b.id ?? b.branch_id ?? b.branchId), branch_name: b.branchName || b.bName || b.branch_name || b.name || `Branch ${b.id ?? b.branch_id}` }))
         : [];
       branchList = Array.from(new Map(branchList.map((b: any) => [String(b.id), b])).values());
-      // /api/branch eken enne nathnam summary eken branch ganna - fallback witharak
+      
       const idsFromBranch = branchList.map((b: any) => String(b.id)).filter(Boolean);
       const getName = (id: any, fallbackName?: string) => branchList.find((x: any) => String(x.id) === String(id))?.branch_name || fallbackName || `Branch ${id}`;
 
