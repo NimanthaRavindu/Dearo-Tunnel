@@ -26,7 +26,6 @@ interface SalesIncomeFormData {
   unit_price: string; quantity: string; paid: string;
 }
 
-// ✅ Row Edit - HEMA DETAILS ekakma
 interface RowEditData {
   bill_number: string;
   name: string;
@@ -73,6 +72,38 @@ const FALLBACK_PRICES: ProductPrice[] = [
 
 function getToday(): string { return new Date().toISOString().split("T")[0]; }
 
+// ✅ HEMA NUMBER FIELD EKAKATA - Arrow na, nikamma type karanna puluwan
+function NoSpinnerInput({
+  value, onChange, placeholder, name, className = "",
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  name?: string;
+  className?: string;
+}) {
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      autoComplete="off"
+      name={name}
+      value={value}
+      placeholder={placeholder}
+      onChange={(e) => {
+        const v = e.target.value.replace(/[^0-9.]/g, "");
+        if (v.split(".").length > 2) return;
+        onChange(v);
+      }}
+      onWheel={(e) => (e.target as HTMLInputElement).blur()}
+      onKeyDown={(e) => {
+        if (e.key === "ArrowUp" || e.key === "ArrowDown") e.preventDefault();
+      }}
+      className={`no-spinner ${className}`}
+    />
+  );
+}
+
 function SalesIncomesContent() {
   const router = useRouter();
   const params = useParams();
@@ -113,7 +144,6 @@ function SalesIncomesContent() {
     return up * qty;
   }, [formData.unit_price, formData.quantity]);
   const calculatedPaid = useMemo(() => Number(formData.paid || 0), [formData.paid]);
-  // ✅ Discount = Amount - Paid witharak
   const calculatedDiscountForm = useMemo(() => Math.max(0, calculatedAmount - calculatedPaid), [calculatedAmount, calculatedPaid]);
   const calculatedPayable = useMemo(() => calculatedPaid, [calculatedPaid]);
   const calculatedCredit = useMemo(() => 0, []);
@@ -201,6 +231,12 @@ function SalesIncomesContent() {
     setErrorMessage("");
   };
 
+  // ✅ Number field walata - direct value eken update karanna
+  const handleNumberChange = (name: keyof SalesIncomeFormData, v: string) => {
+    setFormData((prev) => ({ ...prev, [name]: v }));
+    setErrorMessage("");
+  };
+
   const handleNameChange = (value: string) => {
     const found = products.find((p) => p.product_name.toLowerCase() === value.toLowerCase());
     setFormData((prev) => ({ ...prev, name: value, unit_price: found && found.unit_price != null ? String(found.unit_price) : "" }));
@@ -250,6 +286,20 @@ function SalesIncomesContent() {
       if (name === "unit_price" || name === "quantity") {
         const up = Number(name === "unit_price" ? value : prev.unit_price) || 0;
         const qty = Number(name === "quantity" ? value : prev.quantity) || 0;
+        if (up > 0 && qty > 0) next.amount = String(up * qty);
+      }
+      return next;
+    });
+    setErrorMessage("");
+  };
+
+  // ✅ Row Edit Number field walata - direct value
+  const handleRowNumberChange = (name: keyof RowEditData, v: string) => {
+    setRowEditData((prev) => {
+      const next = { ...prev, [name]: v } as RowEditData;
+      if (name === "unit_price" || name === "quantity") {
+        const up = Number(name === "unit_price" ? v : prev.unit_price) || 0;
+        const qty = Number(name === "quantity" ? v : prev.quantity) || 0;
         if (up > 0 && qty > 0) next.amount = String(up * qty);
       }
       return next;
@@ -437,6 +487,34 @@ function SalesIncomesContent() {
 
   return (
     <div className="min-h-screen bg-[#070a12] text-slate-100 p-6 sm:p-10 flex flex-col items-center relative overflow-hidden font-mono text-xs">
+      {/* ✅ HEMA INPUT EKE ARROW AIN KARANNA */}
+      <style jsx global>{`
+        input.no-spinner::-webkit-outer-spin-button,
+        input.no-spinner::-webkit-inner-spin-button {
+          -webkit-appearance: none !important;
+          margin: 0 !important;
+          display: none !important;
+        }
+        input.no-spinner {
+          -moz-appearance: textfield !important;
+          appearance: textfield !important;
+        }
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button {
+          -webkit-appearance: none !important;
+          margin: 0 !important;
+          display: none !important;
+        }
+        input[type="number"] {
+          -moz-appearance: textfield !important;
+          appearance: textfield !important;
+        }
+        input[type="date"]::-webkit-inner-spin-button {
+          -webkit-appearance: none !important;
+          display: none !important;
+        }
+      `}</style>
+
       <div className="absolute top-0 left-1/4 w-[500px] h-[300px] bg-red-600/10 blur-[140px] pointer-events-none rounded-full" />
       <div className="w-full max-w-6xl space-y-6 relative z-10">
         <div className="flex items-center justify-between border-b border-slate-800/80 pb-6">
@@ -472,11 +550,20 @@ function SalesIncomesContent() {
                 </optgroup>
               </datalist>
             </div>
-            <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Calendar size={12} />Date</label><input type="date" name="date" value={formData.date} onChange={handleInputChange} required className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
-            <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Tag size={12} />Unit Price (LKR) - Auto</label><input type="number" step="0.01" min="0" name="unit_price" value={formData.unit_price} onChange={handleInputChange} required placeholder="Auto / Manual" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
-            <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Hash size={12} />Quantity</label><input type="number" step="0.01" min="0.01" name="quantity" value={formData.quantity} onChange={handleInputChange} required placeholder="0" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
+            <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Calendar size={12} />Date</label><input type="date" name="date" value={formData.date} onChange={handleInputChange} required className="no-spinner w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
+            <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Tag size={12} />Unit Price (LKR) - Auto</label>
+              {/* ✅ FIXED - Arrow na, nikamma type karanna puluwan */}
+              <NoSpinnerInput name="unit_price" value={formData.unit_price} onChange={(v) => handleNumberChange("unit_price", v)} placeholder="Auto / Manual" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" />
+            </div>
+            <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Hash size={12} />Quantity</label>
+              {/* ✅ FIXED - Arrow na, nikamma type karanna puluwan */}
+              <NoSpinnerInput name="quantity" value={formData.quantity} onChange={(v) => handleNumberChange("quantity", v)} placeholder="0" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" />
+            </div>
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><DollarSign size={12} />Amount (LKR) - Auto</label><div className="w-full px-3.5 py-2.5 bg-slate-900/80 border border-slate-800 rounded-xl text-emerald-400 font-black text-sm">LKR {calculatedAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
-            <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><DollarSign size={12} />Paid (LKR)</label><input type="number" step="0.01" min="0" name="paid" value={formData.paid} onChange={handleInputChange} placeholder="0.00" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
+            <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><DollarSign size={12} />Paid (LKR)</label>
+              {/* ✅ FIXED - Arrow na, nikamma type karanna puluwan */}
+              <NoSpinnerInput name="paid" value={formData.paid} onChange={(v) => handleNumberChange("paid", v)} placeholder="0.00" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" />
+            </div>
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><BadgePercent size={12} />Discount (LKR) - Auto = Amount - Paid</label><div className="w-full px-3.5 py-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400 font-black text-sm">LKR {calculatedDiscountForm.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
             <div className="sm:col-span-2 lg:col-span-4 flex justify-end gap-2 mt-2">
               <button type="button" onClick={handleOpenCreditPage} className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-amber-500/20 active:scale-95"><CreditCard size={14} /><span>Add Credit</span></button>
@@ -496,7 +583,7 @@ function SalesIncomesContent() {
                   {products.map((p) => <option key={p.product_name} value={p.product_name} />)}
                 </datalist>
               </div>
-              <input id="filter-date" type="date" value={filterDate} onChange={(event) => setFilterDate(event.target.value)} className="px-3 py-2 bg-slate-50/80 border border-slate-800 rounded-xl text-slate-900 focus:border-red-500/60 focus:outline-none transition-colors" />
+              <input id="filter-date" type="date" value={filterDate} onChange={(event) => setFilterDate(event.target.value)} className="no-spinner px-3 py-2 bg-slate-50/80 border border-slate-800 rounded-xl text-slate-900 focus:border-red-500/60 focus:outline-none transition-colors" />
               {(filterDate || filterName) && (<button type="button" onClick={clearFilters} className="px-3 py-2 text-slate-400 hover:text-red-400 border border-slate-800 hover:border-red-500/50 rounded-xl transition-colors text-[10px] font-bold">Clear Filter <X size={12} className="inline" /></button>)}
             </div>
           </div>
@@ -527,19 +614,20 @@ function SalesIncomesContent() {
                         <tr key={item.id} className="bg-amber-500/10 border-2 border-amber-500/40 align-top">
                           <td className="py-3 px-2"><input name="bill_number" value={rowEditData.bill_number} onChange={handleRowInputChange} className={inputCls} placeholder="B-001" /></td>
                           <td className="py-3 px-2"><input list="row-product-list" value={rowEditData.name} onChange={(e) => handleRowNameChange(e.target.value)} className={inputCls} placeholder="Name" /><datalist id="row-product-list">{products.map((p) => <option key={p.product_name} value={p.product_name} />)}</datalist></td>
-                          <td className="py-3 px-2"><input type="date" name="date" value={rowEditData.date} onChange={handleRowInputChange} className={inputCls} /></td>
-                          <td className="py-3 px-2"><input type="number" step="0.01" name="unit_price" value={rowEditData.unit_price} onChange={handleRowInputChange} className={inputCls} /></td>
-                          <td className="py-3 px-2"><input type="number" step="0.01" name="quantity" value={rowEditData.quantity} onChange={handleRowInputChange} className={inputCls} /></td>
-                          <td className="py-3 px-2"><input type="number" step="0.01" name="amount" value={rowEditData.amount} onChange={handleRowInputChange} className={inputCls} /></td>
-                          <td className="py-3 px-2"><input type="number" step="0.01" name="paid" value={rowEditData.paid} onChange={handleRowInputChange} className={inputCls} /></td>
-                          <td className="py-3 px-2"><input type="number" step="0.01" name="credit" value={rowEditData.credit} onChange={handleRowInputChange} className={inputCls} /></td>
-                          <td className="py-3 px-2"><input type="number" step="0.01" name="discount" value={rowEditData.discount} onChange={handleRowInputChange} className={inputCls} /></td>
+                          <td className="py-3 px-2"><input type="date" name="date" value={rowEditData.date} onChange={handleRowInputChange} className={`no-spinner ${inputCls}`} /></td>
+                          {/* ✅ ROW EDIT - Arrow na, nikamma type karanna puluwan */}
+                          <td className="py-3 px-2"><NoSpinnerInput name="unit_price" value={rowEditData.unit_price} onChange={(v) => handleRowNumberChange("unit_price", v)} className={inputCls} /></td>
+                          <td className="py-3 px-2"><NoSpinnerInput name="quantity" value={rowEditData.quantity} onChange={(v) => handleRowNumberChange("quantity", v)} className={inputCls} /></td>
+                          <td className="py-3 px-2"><NoSpinnerInput name="amount" value={rowEditData.amount} onChange={(v) => handleRowNumberChange("amount", v)} className={inputCls} /></td>
+                          <td className="py-3 px-2"><NoSpinnerInput name="paid" value={rowEditData.paid} onChange={(v) => handleRowNumberChange("paid", v)} className={inputCls} /></td>
+                          <td className="py-3 px-2"><NoSpinnerInput name="credit" value={rowEditData.credit} onChange={(v) => handleRowNumberChange("credit", v)} className={inputCls} /></td>
+                          <td className="py-3 px-2"><NoSpinnerInput name="discount" value={rowEditData.discount} onChange={(v) => handleRowNumberChange("discount", v)} className={inputCls} /></td>
                           <td className="py-3 px-2">
                             <div className="space-y-1.5 min-w-[160px]">
                               <input name="customer_name" value={rowEditData.customer_name} onChange={handleRowInputChange} className={inputCls} placeholder="Customer Name" />
                               <input name="contact_number" value={rowEditData.contact_number} onChange={handleRowInputChange} className={inputCls} placeholder="Contact - 077..." />
                               <input name="vehicle_number" value={rowEditData.vehicle_number} onChange={handleRowInputChange} className={inputCls} placeholder="Vehicle - EP..." />
-                              <input type="date" name="promise_date" value={rowEditData.promise_date} onChange={handleRowInputChange} className={inputCls} title="Promise Date" />
+                              <input type="date" name="promise_date" value={rowEditData.promise_date} onChange={handleRowInputChange} className={`no-spinner ${inputCls}`} title="Promise Date" />
                               <p className="text-[9px] text-slate-500">Promise Date</p>
                             </div>
                           </td>
