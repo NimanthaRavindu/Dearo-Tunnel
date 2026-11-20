@@ -62,13 +62,11 @@ export default function DieselExpensesPage() {
     window.addEventListener("keydown", onKey); return () => window.removeEventListener("keydown", onKey);
   }, [showInitialSummary]);
 
-  // ✅ Initial Amount auto = Initial Diesel x Lanka Price
   useEffect(() => {
     const d = Number(tempInitialDiesel || 0);
     if (d > 0) setTempInitialAmount(String(d * DIESEL_PRICE));
   }, [tempInitialDiesel]);
 
-  // ✅ Form eke Diesel gahaddi Payable auto = Diesel x Price
   useEffect(() => {
     const d = Number(diesel || 0);
     if (d > 0) setPayable(String(d * DIESEL_PRICE));
@@ -117,14 +115,14 @@ export default function DieselExpensesPage() {
   const activePayable = isFiltered? fPayable : totalPayable;
   const formDiesel = numberValue(diesel); const formPayable = numberValue(payable); const formPaid = numberValue(paid);
 
-  // ✅ OYA KIWWA FINAL LOGIC
-  const displayInitialDiesel = initialDieselStock; // Denata Stock Dawase Stock karapu gaana
+  // ✅ FINAL LOGIC - OYA KIWWA WIDIHATA
+  const displayInitialDiesel = initialDieselStock; // Denata Stock Dawase Stock karapu gaana = 745L
   const displayDieselUsed = activeDieselUsed + formDiesel; // Form eke type karaddi live add
-  const displayRemainingDiesel = Math.max(0, displayInitialDiesel - displayDieselUsed); // ✅ Remaining = Initial - Used
-  const displayTotalDiesel = displayInitialDiesel + displayRemainingDiesel; // ✅ Total = Initial + Remaining
-  const displayTotalAmount = activePayable + formPayable; // Total Amount = Payable ekathuwa
-  const displayInitialAmountRemaining = Math.max(0, initialTotalAmount - displayTotalAmount); // Initial Amount Card = Initial Amount - Payable
-  const displayRemainingBalance = displayInitialAmountRemaining; // ✅ FIX: Initial Amount eke ithuru tika = Remaining Balance, DEKAMA SAME
+  const displayRemainingDiesel = Math.max(0, displayInitialDiesel - displayDieselUsed); // Remaining = Initial - Used
+  const displayTotalDiesel = displayDieselUsed + displayRemainingDiesel; // ✅ Total = Used + Remaining = Initial
+  const displayTotalAmount = activePayable + formPayable;
+  const displayInitialAmountRemaining = Math.max(0, initialTotalAmount - displayTotalAmount); // Initial Amount ithuru
+  const displayRemainingBalance = displayInitialAmountRemaining; // ✅ Initial Amount ithuru = Remaining Balance, DEKAMA SAME
 
   const effectiveHistory: InitialAdd[] = useMemo(() => {
     if (initialHistory.length === 0 && initialDieselStock > 0) return [{ id: 0, date: initialDate || new Date().toISOString().slice(0,10), diesel: initialDieselStock, amount: initialTotalAmount }];
@@ -172,7 +170,6 @@ export default function DieselExpensesPage() {
           <button onClick={() => { loadExpenses(); loadInitialHistory(); }} className="h-11 inline-flex items-center gap-2 rounded-xl border border-slate-600 bg-slate-800 px-5 text-sm font-bold hover:bg-slate-700"><RefreshCw size={17} className={loading? "animate-spin" : ""}/>Refresh</button>
         </header>
 
-        {/* INITIAL STOCK */}
         <section className="rounded-3xl border border-cyan-500/30 bg-slate-900 p-5 shadow-xl">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <h2 className="text-sm font-black uppercase tracking-wider flex items-center gap-2"><PackagePlus size={18} className="text-cyan-400"/>Initial Stock</h2>
@@ -187,10 +184,9 @@ export default function DieselExpensesPage() {
           {isInitialSet && <div className="mt-4 flex flex-wrap gap-2 text-xs"><span className="rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 px-3 py-1.5 font-bold">✓ Initial Date: {initialDate || "-"}</span><span className="rounded-full bg-slate-800 border border-slate-700 px-3 py-1.5">Initial: {formatNumber(initialDieselStock)} L / Rs. {formatNumber(initialTotalAmount)}</span><span className="rounded-full bg-slate-800 border border-slate-700 px-3 py-1.5">Used: {formatNumber(totalUsedDiesel)} L</span><span className="rounded-full bg-orange-500/10 border border-orange-500/20 text-orange-300 px-3 py-1.5 font-bold">Remaining: {formatNumber(displayRemainingDiesel)} L • Total: {formatNumber(displayTotalDiesel)} L</span></div>}
         </section>
 
-        {/* ✅ 7 CARDS - FINAL */}
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           <SummaryCard title="Initial Diesel" subtitle={initialDate ? `Stock Date • ${initialDate}` : "Denata Stock Dawase"} value={`${formatNumber(displayInitialDiesel)} L`} icon={<Fuel size={22}/>} color="violet"/>
-          <SummaryCard title="Total Diesel" subtitle="Initial + Remaining" value={`${formatNumber(displayTotalDiesel)} L`} icon={<Fuel size={22}/>} color="red"/>
+          <SummaryCard title="Total Diesel" subtitle="Used + Remaining" value={`${formatNumber(displayTotalDiesel)} L`} icon={<Fuel size={22}/>} color="red"/>
           <SummaryCard title="Diesel Used" subtitle={isFiltered ? `Filtered: ${formatNumber(fDiesel)} L` : "All expenses"} value={`${formatNumber(displayDieselUsed)} L`} icon={<Droplets size={22}/>} color="cyan"/>
           <SummaryCard title="Remaining Diesel" subtitle="Initial - Used" value={`${formatNumber(displayRemainingDiesel)} L`} icon={<Gauge size={22}/>} color="orange"/>
           <SummaryCard title="Initial Amount" subtitle={`Ithuru gana • Original Rs. ${formatNumber(initialTotalAmount)}`} value={`Rs. ${formatNumber(displayInitialAmountRemaining)}`} icon={<Banknote size={22}/>} color="violet"/>
@@ -198,7 +194,6 @@ export default function DieselExpensesPage() {
           <SummaryCard title="Remaining Balance" subtitle="Initial Amount eke ithuru gana • Same" value={`Rs. ${formatNumber(displayRemainingBalance)}`} icon={<CreditCard size={22}/>} color="green"/>
         </section>
 
-        {/* FORM */}
         <section className="rounded-3xl border border-slate-700/80 bg-slate-900 overflow-hidden shadow-xl">
           <div className="border-b border-slate-700/80 bg-slate-800/30 px-6 py-5 flex flex-wrap justify-between gap-3"><div><h2 className="text-xl font-black">Add Diesel Expense</h2><p className="text-xs text-slate-400 mt-1">Diesel gahaddi Payable auto = Diesel x Rs. {DIESEL_PRICE} • Save kalama Remaining Diesel / Initial Amount adu wenawa</p></div>{formDiesel > 0 && <div className="rounded-xl bg-cyan-500/10 border border-cyan-500/20 px-4 py-2 text-xs font-bold text-cyan-300">Live: Remaining {formatNumber(displayRemainingDiesel)} L • Balance Rs. {formatNumber(displayRemainingBalance)} • Total Diesel {formatNumber(displayTotalDiesel)} L</div>}</div>
           <form onSubmit={handleSubmit} className="space-y-6 p-6">
@@ -215,7 +210,6 @@ export default function DieselExpensesPage() {
           </form>
         </section>
 
-        {/* RECORDS */}
         <section className="rounded-3xl border border-slate-700/80 bg-slate-900 overflow-hidden shadow-xl">
           <div className="p-5 border-b border-slate-700/80 space-y-4">
             <div className="flex justify-between items-center"><h2 className="font-black text-lg">Records</h2><span className="text-sm bg-slate-800 px-3 py-1 rounded-xl">{filteredExpenses.length} / {expenses.length} Records</span></div>
@@ -230,7 +224,6 @@ export default function DieselExpensesPage() {
         </section>
       </div>
 
-      {/* MODAL */}
       {showInitialSummary && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm overflow-y-auto" onClick={() => setShowInitialSummary(false)}>
           <div className="w-full max-w-2xl my-6 rounded-3xl border border-slate-700 bg-[#0d1527] shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
@@ -242,7 +235,7 @@ export default function DieselExpensesPage() {
               {initialDate && <div className="flex items-center gap-2 rounded-xl border border-cyan-500/20 bg-cyan-500/5 px-4 py-2.5 text-xs"><span className="text-slate-400">Initial Date:</span><span className="font-black text-cyan-300">{initialDate}</span><span className="text-slate-500">|</span><span>{formatNumber(initialDieselStock)} L</span><span className="text-slate-500">|</span><span>Rs. {formatNumber(initialTotalAmount)}</span></div>}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <div className="rounded-2xl border border-violet-500/20 bg-violet-500/5 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Initial Diesel</p><p className="mt-2 text-lg font-black text-violet-300">{formatNumber(displayInitialDiesel)} L</p><p className="text-[10px] text-slate-500 mt-1">Denata Stock</p></div>
-                <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Total Diesel</p><p className="mt-2 text-lg font-black text-red-300">{formatNumber(displayTotalDiesel)} L</p><p className="text-[10px] text-slate-500 mt-1">Initial + Remaining</p></div>
+                <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Total Diesel</p><p className="mt-2 text-lg font-black text-red-300">{formatNumber(displayTotalDiesel)} L</p><p className="text-[10px] text-slate-500 mt-1">Used + Remaining</p></div>
                 <div className="rounded-2xl border border-orange-500/20 bg-orange-500/5 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Diesel Used</p><p className="mt-2 text-lg font-black text-orange-300">{formatNumber(totalUsedDiesel)} L</p><p className="text-[10px] text-slate-500 mt-1">Table eke ekathuwa</p></div>
                 <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Remaining Balance</p><p className="mt-2 text-lg font-black text-emerald-300">Rs. {formatNumber(displayRemainingBalance)}</p><p className="text-[10px] text-slate-500 mt-1">Initial Amount ithuru = Same</p></div>
               </div>
