@@ -1,11 +1,11 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { AlertCircle, ArrowLeft, Droplets, Fuel, RefreshCw, Wallet, CreditCard, Filter, X, Calendar, Eye, BarChart3 } from "lucide-react";
+import { AlertCircle, ArrowLeft, Droplets, Fuel, RefreshCw, Wallet, CreditCard, Filter, X, Calendar, Eye, BarChart3, Banknote } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 
 type DieselExpense = { id: number; branch_id: string; date: string; machine: string; diesel: number | string; amount: number | string; payable: number | string; paid: number | string; };
-type InitialAdd = { id?: number; date: string; diesel: number; amount: number };
-type CardColor = "cyan" | "blue" | "orange" | "green" | "red";
+type InitialAdd = { id?: number; branch_id?: string; date: string; diesel: number; amount: number };
+type CardColor = "cyan" | "blue" | "orange" | "green" | "red" | "violet";
 const machines = ["Komatsu","CAT","JCB","Excavator","Loader","Backhoe Loader","Wheel Loader","Breker Machine","Compressor","Tractor"];
 const numberValue = (v: any) => Number(v || 0);
 const formatNumber = (v: any) => Number(v || 0).toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -29,21 +29,26 @@ export default function ViewDieselExpensesPage() {
   const [filterDate, setFilterDate] = useState("");
   const [filterMachine, setFilterMachine] = useState("");
 
+  // ✅ FIX - diesel_stock eken ena format eka (total_diesel) + history table eken ena format eka (added_diesel) dekama + branch filter
+  const mapHistory = (arr: any[]) => (arr || [])
+    .filter((h: any) => !h.branch_id || String(h.branch_id) === String(branchId))
+    .map((h: any) => ({
+      id: h.id, branch_id: h.branch_id, date: String(h.stock_date || h.initial_date || h.date || "").slice(0,10),
+      diesel: Number(h.added_diesel ?? h.total_diesel ?? h.diesel ?? 0), amount: Number(h.added_amount ?? h.total_amount ?? h.amount ?? 0),
+    }));
+
   const loadExpenses = async () => {
     if (!branchId) return;
     try { setLoading(true);
       const res = await fetch(`/api/expences/diesel?branch_id=${encodeURIComponent(branchId)}`, { cache: "no-store" });
       const data = await res.json(); if (!res.ok) throw new Error(data.error);
-      setExpenses(data.expenses || []);
+      setExpenses((data.expenses || []).filter((e:any)=> String(e.branch_id)===String(branchId)));
       if (data.summary) {
         const d = Number(data.summary.totalDiesel || 0); const a = Number(data.summary.totalAmount || 0);
         setInitialDieselStock(d); setInitialTotalAmount(a); setIsInitialSet(d > 0 || a > 0);
       }
       if (Array.isArray(data.history)) {
-        setInitialHistory(data.history.map((h: any) => ({
-          id: h.id, date: String(h.stock_date || "").slice(0,10),
-          diesel: Number(h.added_diesel || 0), amount: Number(h.added_amount || 0),
-        })));
+        setInitialHistory(mapHistory(data.history));
       }
     } catch (e) { console.error(e); } finally { setLoading(false); }
   };
@@ -54,14 +59,15 @@ export default function ViewDieselExpensesPage() {
       const r = await fetch(`/api/expences/diesel?branch_id=${encodeURIComponent(branchId)}&type=history`, { cache: "no-store" });
       if (!r.ok) return;
       const j = await r.json();
-      setInitialHistory((Array.isArray(j) ? j : []).map((h: any) => ({
-        id: h.id, date: String(h.stock_date || "").slice(0,10),
-        diesel: Number(h.added_diesel || 0), amount: Number(h.added_amount || 0),
-      })));
+      const arr = Array.isArray(j) ? j : (Array.isArray(j.history) ? j.history : []);
+      setInitialHistory(mapHistory(arr));
     } catch {}
   };
 
-  useEffect(() => { if (branchId) { loadExpenses(); loadInitialHistory(); } }, [branchId]);
+  useEffect(() => {
+    setExpenses([]); setInitialHistory([]); setInitialDieselStock(0); setInitialTotalAmount(0); setIsInitialSet(false);
+    if (branchId) { loadExpenses(); loadInitialHistory(); }
+  }, [branchId]);
 
   useEffect(() => {
     if (!showInitialSummary) return;
@@ -96,11 +102,16 @@ export default function ViewDieselExpensesPage() {
   const displayRemainingDiesel = Math.max(0, displayTotalDiesel - totalUsedDiesel);
   const displayRemainingBalance = displayRemainingDiesel * DIESEL_PRICE;
 
+  // ✅ ALUTH CARD 2 - Initial Diesel / Initial Amount - Modal eke wage Original Stock eka
+  const displayInitialDiesel = initialDieselStock; // 745L
+  const displayInitialAmount = initialTotalAmount; // Rs. 295,765
+
   // ✅ INITIAL HISTORY - Date wise group
   const initialByDate = useMemo(() => {
     const map = new Map<string, { date: string; diesel: number; amount: number; count: number }>();
     initialHistory.forEach((h) => {
       const d = String(h.date || "").slice(0,10);
+      if (!d) return;
       const cur = map.get(d) || { date: d, diesel: 0, amount: 0, count: 0 };
       cur.diesel += numberValue(h.diesel); cur.amount += numberValue(h.amount); cur.count += 1;
       map.set(d, cur);
@@ -148,15 +159,17 @@ export default function ViewDieselExpensesPage() {
       <div className="mx-auto max-w-7xl space-y-6">
         <button onClick={() => router.back()} className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-bold"><ArrowLeft size={16}/> Back</button>
         <header className="flex justify-between rounded-3xl border border-slate-700/80 bg-slate-900 p-5">
-          <div className="flex items-center gap-4"><div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400"><Fuel size={29}/></div><div><h1 className="text-2xl font-bold">Diesel Expenses</h1><p className="text-sm text-slate-400">View Only - Card + Filter + Table</p></div></div>
+          <div className="flex items-center gap-4"><div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400"><Fuel size={29}/></div><div><h1 className="text-2xl font-bold">Diesel Expenses</h1><p className="text-sm text-slate-400">View Only - Card + Filter + Table • Branch: {branchId}</p></div></div>
           <div className="flex gap-2">
             <button onClick={async () => { await loadInitialHistory(); setShowInitialSummary(true); }} className="h-11 inline-flex items-center gap-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 px-4 text-sm font-bold"><Eye size={16}/> View</button>
             <button onClick={() => { loadExpenses(); loadInitialHistory(); }} className="h-11 inline-flex items-center gap-2 rounded-xl border border-slate-600 bg-slate-800 px-5 text-sm font-bold"><RefreshCw size={17} className={loading? "animate-spin" : ""}/>Refresh</button>
           </div>
         </header>
 
-        {/* ✅ CARD TIKA WITHARAK - Form na */}
-        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        {/* ✅ CARD TIKA - Initial 2ka aluthen add kala - Form na */}
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <SummaryCard title="Initial Diesel" subtitle="Original Stock • Modal eke wage" value={`${formatNumber(displayInitialDiesel)} L`} icon={<Fuel size={22}/>} color="violet"/>
+          <SummaryCard title="Initial Amount" subtitle={`Original Amount • Total Stock Value`} value={`Rs. ${formatNumber(displayInitialAmount)}`} icon={<Banknote size={22}/>} color="violet"/>
           <SummaryCard title="Diesel Used" subtitle={isFiltered ? `Filtered: ${fDiesel}L` : "Table eke diesel wala ekathuwa"} value={`${formatNumber(displayDieselUsed)} L`} icon={<Droplets size={22}/>} color="cyan"/>
           <SummaryCard title="Total Amount" subtitle={isFiltered ? `Filtered payable` : "Table eke viyadam wela thiyena amount"} value={`Rs. ${formatNumber(displayTotalAmount)}`} icon={<Wallet size={22}/>} color="blue"/>
           <SummaryCard title="Remaining Diesel" subtitle="Total Diesel - Diesel Used" value={`${formatNumber(displayRemainingDiesel)} L`} icon={<Droplets size={22}/>} color="orange"/>
@@ -205,7 +218,7 @@ export default function ViewDieselExpensesPage() {
                 <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400"><BarChart3 size={20}/></div>
                 <div>
                   <h2 className="text-base font-black uppercase tracking-wider">Initial Stock Summary</h2>
-                  <p className="text-[11px] text-slate-500 mt-0.5">Branch • {expenses.length} Records • {dateWiseSummary.length} Days</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">Branch • {branchId} • {expenses.length} Records • {dateWiseSummary.length} Days</p>
                 </div>
               </div>
               <button onClick={() => setShowInitialSummary(false)} className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-500 text-white font-black hover:bg-red-600"><X size={16}/></button>
@@ -248,7 +261,7 @@ export default function ViewDieselExpensesPage() {
               {/* Initial Add History - Date Wise - Read Only */}
               <div>
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                  <h3 className="text-xs font-black uppercase tracking-widest text-cyan-300">Initial Add History • Date Wise</h3>
+                  <h3 className="text-xs font-black uppercase tracking-widest text-cyan-300">Initial Add History • Date Wise • Branch {branchId}</h3>
                   <div className="flex items-center gap-2">
                     <div className="flex items-center gap-1.5 h-9 rounded-lg border border-slate-600 bg-slate-900 px-3">
                       <Calendar size={14} className="text-slate-400"/>
@@ -367,6 +380,6 @@ export default function ViewDieselExpensesPage() {
   );
 }
 function SummaryCard({ title, subtitle, value, icon, color }: { title: string; subtitle: string; value: string; icon: React.ReactNode; color: CardColor; }) {
-  const s: any = { cyan: { b: "border-cyan-500/25", i: "bg-cyan-500/10 text-cyan-400", v: "text-cyan-300" }, blue: { b: "border-blue-500/25", i: "bg-blue-500/10 text-blue-400", v: "text-blue-300" }, orange: { b: "border-orange-500/25", i: "bg-orange-500/10 text-orange-400", v: "text-orange-300" }, green: { b: "border-green-500/25", i: "bg-green-500/10 text-green-400", v: "text-green-300" }, red: { b: "border-red-500/25", i: "bg-red-500/10 text-red-400", v: "text-red-300" } };
+  const s: any = { cyan: { b: "border-cyan-500/25", i: "bg-cyan-500/10 text-cyan-400", v: "text-cyan-300" }, blue: { b: "border-blue-500/25", i: "bg-blue-500/10 text-blue-400", v: "text-blue-300" }, orange: { b: "border-orange-500/25", i: "bg-orange-500/10 text-orange-400", v: "text-orange-300" }, green: { b: "border-green-500/25", i: "bg-green-500/10 text-green-400", v: "text-green-300" }, red: { b: "border-red-500/25", i: "bg-red-500/10 text-red-400", v: "text-red-300" }, violet: { b: "border-violet-500/25", i: "bg-violet-500/10 text-violet-400", v: "text-violet-300" } };
   const c = s[color]; return (<div className={`rounded-2xl border bg-slate-900 p-5 ${c.b}`}><div className="flex justify-between"><div><p className="text-sm font-bold">{title}</p><p className="text-xs text-slate-500 mt-1">{subtitle}</p><h2 className={`mt-4 text-xl font-bold ${c.v}`}>{value}</h2></div><span className={`h-10 w-10 flex items-center justify-center rounded-xl ${c.i}`}>{icon}</span></div></div>);
 }
