@@ -21,6 +21,7 @@ interface SalesIncomeItem {
   created_at?: string;
 }
 
+// ✅ Credit Field eka Form eke ADD kara
 interface SalesIncomeFormData {
   bill_number: string; name: string; date: string;
   unit_price: string; quantity: string; paid: string; credit: string;
@@ -35,6 +36,7 @@ interface RowEditData {
   amount: string;
   paid: string;
   credit: string;
+  discount: string;
   customer_name: string;
   contact_number: string;
   vehicle_number: string;
@@ -42,14 +44,36 @@ interface RowEditData {
   credit_id: string;
 }
 
+interface ProductPrice { product_name: string; unit_price: number | null; category: string; }
 interface CreditRecord {
   id: string; bill_number: string; product_name: string; customer_name: string;
   contact_number: string; promise_date: string; vehicle_number: string;
   credit_amount: number; total_amount: number; paid_amount: number; created_date: string;
 }
 
+const FALLBACK_PRICES: ProductPrice[] = [
+  { product_name: "6*9", unit_price: 9000, category: "aggregate" },
+  { product_name: "3/4", unit_price: 13000, category: "aggregate" },
+  { product_name: "1 inches", unit_price: 12000, category: "aggregate" },
+  { product_name: "1 1/2 inches", unit_price: 11000, category: "aggregate" },
+  { product_name: "ABC", unit_price: 8000, category: "aggregate" },
+  { product_name: "Chip", unit_price: 8000, category: "aggregate" },
+  { product_name: "Dust", unit_price: 7000, category: "aggregate" },
+  { product_name: "Mix", unit_price: 7500, category: "aggregate" },
+  { product_name: "Quer Dust", unit_price: 5000, category: "aggregate" },
+  { product_name: "Cucumber", unit_price: null, category: "vegetable" },
+  { product_name: "Bell Pepper", unit_price: null, category: "vegetable" },
+  { product_name: "Tomato", unit_price: null, category: "vegetable" },
+  { product_name: "Gurkin", unit_price: null, category: "vegetable" },
+  { product_name: "Carrot", unit_price: null, category: "vegetable" },
+  { product_name: "Cabbage", unit_price: null, category: "vegetable" },
+  { product_name: "Beans", unit_price: null, category: "vegetable" },
+  { product_name: "Leeks", unit_price: null, category: "vegetable" },
+];
+
 function getToday(): string { return new Date().toISOString().split("T")[0]; }
 
+// ✅ HEMA NUMBER FIELD EKAKATA - Arrow na, nikamma type karanna puluwan
 function NoSpinnerInput({
   value, onChange, placeholder, name, className = "",
 }: {
@@ -90,6 +114,7 @@ function SalesIncomesContent() {
   const selectedCapitalId = searchParams.get("selected_capital_id");
 
   const [incomes, setIncomes] = useState<SalesIncomeItem[]>([]);
+  const [products, setProducts] = useState<ProductPrice[]>(FALLBACK_PRICES);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
@@ -103,13 +128,14 @@ function SalesIncomesContent() {
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [rowEditData, setRowEditData] = useState<RowEditData>({
     bill_number: "", name: "", date: "", unit_price: "", quantity: "",
-    amount: "", paid: "", credit: "",
+    amount: "", paid: "", credit: "", discount: "",
     customer_name: "", contact_number: "", vehicle_number: "", promise_date: "", credit_id: "",
   });
   const [isRowSaving, setIsRowSaving] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // ✅ Credit = "" - Form eke aluthin
   const [formData, setFormData] = useState<SalesIncomeFormData>({
     bill_number: "", name: "", date: getToday(), unit_price: "", quantity: "", paid: "", credit: "",
   });
@@ -120,16 +146,11 @@ function SalesIncomesContent() {
     return up * qty;
   }, [formData.unit_price, formData.quantity]);
   const calculatedPaid = useMemo(() => Number(formData.paid || 0), [formData.paid]);
+  // ✅ Credit - Form eken type karana gane
   const calculatedCredit = useMemo(() => Number(formData.credit || 0), [formData.credit]);
   // ✅ Discount = Amount - Paid - Credit
   const calculatedDiscountForm = useMemo(() => Math.max(0, calculatedAmount - calculatedPaid - calculatedCredit), [calculatedAmount, calculatedPaid, calculatedCredit]);
   const calculatedPayable = useMemo(() => calculatedPaid + calculatedCredit, [calculatedPaid, calculatedCredit]);
-
-  // ✅ Edit Row eke Discount - Auto
-  const rowCalculatedAmount = useMemo(() => Number(rowEditData.amount || 0), [rowEditData.amount]);
-  const rowCalculatedPaid = useMemo(() => Number(rowEditData.paid || 0), [rowEditData.paid]);
-  const rowCalculatedCredit = useMemo(() => Number(rowEditData.credit || 0), [rowEditData.credit]);
-  const rowCalculatedDiscount = useMemo(() => Math.max(0, rowCalculatedAmount - rowCalculatedPaid - rowCalculatedCredit), [rowCalculatedAmount, rowCalculatedPaid, rowCalculatedCredit]);
 
   const filteredIncomes = incomes.filter((item) => {
     const matchDate = filterDate ? item.date.slice(0, 10) === filterDate : true;
@@ -158,7 +179,16 @@ function SalesIncomesContent() {
     } catch { }
   };
 
-  useEffect(() => { if (branchId) { fetchSalesIncomes(); fetchCredits(); } }, [branchId]);
+  const fetchProducts = async () => {
+    if (!branchId) return;
+    try {
+      const res = await fetch(`/api/expences/product-prices?branch_id=${encodeURIComponent(branchId)}`, { cache: "no-store" });
+      const result = await res.json();
+      if (result.success && result.data && result.data.length > 0) setProducts(result.data);
+    } catch { }
+  };
+
+  useEffect(() => { if (branchId) { fetchSalesIncomes(); fetchProducts(); fetchCredits(); } }, [branchId]);
 
   const getCreditByBill = (billNo?: string) => {
     if (!billNo || billNo === "-") return undefined;
@@ -175,8 +205,7 @@ function SalesIncomesContent() {
   const totalAmount = filteredIncomes.reduce((total, item) => total + Number(item.amount || 0), 0);
   const totalPaid = filteredIncomes.reduce((total, item) => total + Number(item.paid ?? 0), 0);
   const totalCreditTop = filteredIncomes.reduce((total, item) => total + getCreditAmountForItem(item), 0);
-  // ✅ FIXED - Discount eka DB eke thiyena discount ekenma gannawa
-  const totalDiscount = filteredIncomes.reduce((total, item) => total + Number(item.discount || 0), 0);
+  const totalDiscount = Math.max(0, totalAmount - totalPaid - totalCreditTop);
 
   const filteredCredits = useMemo(() => {
     let list = credits;
@@ -211,20 +240,21 @@ function SalesIncomesContent() {
     setErrorMessage("");
   };
 
+  // ✅ Credit eka Auto Fill karanna button eka - Amount - Paid
   const handleAutoCredit = () => {
     const auto = Math.max(0, calculatedAmount - calculatedPaid);
     setFormData((prev) => ({ ...prev, credit: auto > 0 ? String(auto) : "" }));
   };
 
-  
   const handleNameChange = (value: string) => {
-    setFormData((prev) => ({ ...prev, name: value }));
+    const found = products.find((p) => p.product_name.toLowerCase() === value.toLowerCase());
+    setFormData((prev) => ({ ...prev, name: value, unit_price: found && found.unit_price != null ? String(found.unit_price) : "" }));
     setErrorMessage("");
   };
 
   const emptyRowEdit = (): RowEditData => ({
     bill_number: "", name: "", date: "", unit_price: "", quantity: "",
-    amount: "", paid: "", credit: "",
+    amount: "", paid: "", credit: "", discount: "",
     customer_name: "", contact_number: "", vehicle_number: "", promise_date: "", credit_id: "",
   });
 
@@ -232,6 +262,7 @@ function SalesIncomesContent() {
     const billNo = item.bill_number || item.billNumber || "";
     const creditRec = getCreditByBill(billNo);
     const creditAmt = creditRec ? Number(creditRec.credit_amount || 0) : Number(item.credit || 0);
+    const discountVal = Math.max(0, Number(item.amount || 0) - Number(item.paid || 0) - creditAmt);
     setEditingRowId(String(item.id));
     setRowEditData({
       bill_number: billNo,
@@ -242,6 +273,7 @@ function SalesIncomesContent() {
       amount: String(item.amount ?? ""),
       paid: String(item.paid ?? ""),
       credit: String(creditAmt),
+      discount: String(discountVal),
       customer_name: creditRec?.customer_name || "",
       contact_number: creditRec?.contact_number || "",
       vehicle_number: creditRec?.vehicle_number || "",
@@ -284,7 +316,12 @@ function SalesIncomesContent() {
   };
 
   const handleRowNameChange = (value: string) => {
-    setRowEditData((prev) => ({ ...prev, name: value }));
+    const found = products.find((p) => p.product_name.toLowerCase() === value.toLowerCase());
+    setRowEditData((prev) => ({
+      ...prev,
+      name: value,
+      unit_price: found && found.unit_price != null ? String(found.unit_price) : prev.unit_price,
+    }));
   };
 
   const handleSaveRow = async () => {
@@ -296,7 +333,6 @@ function SalesIncomesContent() {
     const amount = Number(rowEditData.amount);
     const paid = Number(rowEditData.paid);
     const credit = Number(rowEditData.credit);
-    // ✅ Discount = Amount - Paid - Credit - Auto
     const discount = Math.max(0, amount - paid - credit);
 
     if (!name || !rowEditData.date || !rowEditData.unit_price || !rowEditData.quantity) {
@@ -507,11 +543,23 @@ function SalesIncomesContent() {
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Receipt size={12} />Bill Number</label><input type="text" name="bill_number" value={formData.bill_number} onChange={handleInputChange} placeholder="Ex: B-001" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><FileText size={12} />Name *</label>
-              <input type="text" value={formData.name} onChange={(e) => handleNameChange(e.target.value)} required placeholder="Type Name... Ex: 3/4, Tomato" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" />
+              <input type="text" list="product-list" value={formData.name} onChange={(e) => handleNameChange(e.target.value)} required placeholder="Select / Type Name..." className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" />
+              <datalist id="product-list">
+                <optgroup label="Aggregate">
+                  {products.filter((p) => p.category === "aggregate").map((p) => (
+                    <option key={p.product_name} value={p.product_name}>{p.unit_price != null ? `LKR ${Number(p.unit_price).toLocaleString()}` : ""}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Vegetables - Manual Price">
+                  {products.filter((p) => p.category === "vegetable").map((p) => (
+                    <option key={p.product_name} value={p.product_name}>Manual Price</option>
+                  ))}
+                </optgroup>
+              </datalist>
             </div>
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Calendar size={12} />Date</label><input type="date" name="date" value={formData.date} onChange={handleInputChange} required className="no-spinner w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" /></div>
-            <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Tag size={12} />Unit Price (LKR) - Manual</label>
-              <NoSpinnerInput name="unit_price" value={formData.unit_price} onChange={(v) => handleNumberChange("unit_price", v)} placeholder="Type Price" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" />
+            <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Tag size={12} />Unit Price (LKR) - Auto</label>
+              <NoSpinnerInput name="unit_price" value={formData.unit_price} onChange={(v) => handleNumberChange("unit_price", v)} placeholder="Auto / Manual" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" />
             </div>
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Hash size={12} />Quantity</label>
               <NoSpinnerInput name="quantity" value={formData.quantity} onChange={(v) => handleNumberChange("quantity", v)} placeholder="0" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" />
@@ -521,6 +569,7 @@ function SalesIncomesContent() {
               <NoSpinnerInput name="paid" value={formData.paid} onChange={(v) => handleNumberChange("paid", v)} placeholder="0.00" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" />
             </div>
 
+            {/* ✅ ALUTHIN ADD KARA - CREDIT FIELD EKA FORM EKE */}
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5"><CreditCard size={12} />Credit (LKR) - Nayata Ganna Mudala</label>
               <NoSpinnerInput name="credit" value={formData.credit} onChange={(v) => handleNumberChange("credit", v)} placeholder="Ex: 25000.00" className="w-full px-3.5 py-2.5 bg-amber-500/10 border border-amber-500/40 rounded-xl text-amber-400 font-black focus:border-amber-500 focus:outline-none transition-colors" />
@@ -542,7 +591,10 @@ function SalesIncomesContent() {
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-2">
                 <Search size={14} className="text-slate-400" />
-                <input value={filterName} onChange={(e) => setFilterName(e.target.value)} placeholder="Filter by Name... (3/4, Tomato)" className="px-3 py-2 bg-slate-50/80 border border-slate-800 rounded-xl text-slate-900 focus:border-red-500/60 focus:outline-none transition-colors w-56" />
+                <input list="filter-product-list" value={filterName} onChange={(e) => setFilterName(e.target.value)} placeholder="Filter by Name... (3/4, Tomato)" className="px-3 py-2 bg-slate-50/80 border border-slate-800 rounded-xl text-slate-900 focus:border-red-500/60 focus:outline-none transition-colors w-56" />
+                <datalist id="filter-product-list">
+                  {products.map((p) => <option key={p.product_name} value={p.product_name} />)}
+                </datalist>
               </div>
               <input id="filter-date" type="date" value={filterDate} onChange={(event) => setFilterDate(event.target.value)} className="no-spinner px-3 py-2 bg-slate-50/80 border border-slate-800 rounded-xl text-slate-900 focus:border-red-500/60 focus:outline-none transition-colors" />
               {(filterDate || filterName) && (<button type="button" onClick={clearFilters} className="px-3 py-2 text-slate-400 hover:text-red-400 border border-slate-800 hover:border-red-500/50 rounded-xl transition-colors text-[10px] font-bold">Clear Filter <X size={12} className="inline" /></button>)}
@@ -567,22 +619,21 @@ function SalesIncomesContent() {
                     const billNo = item.bill_number || item.billNumber || "-";
                     const creditRec = getCreditByBill(billNo);
                     const creditAmt = getCreditAmountForItem(item);
-                    
-                    const rowDiscount = Number(item.discount || 0);
+                    const rowDiscount = Math.max(0, Number(item.amount || 0) - Number(item.paid || 0) - creditAmt);
                     const isEditingRow = String(editingRowId) === String(item.id);
 
                     if (isEditingRow) {
                       return (
                         <tr key={item.id} className="bg-amber-500/10 border-2 border-amber-500/40 align-top">
                           <td className="py-3 px-2"><input name="bill_number" value={rowEditData.bill_number} onChange={handleRowInputChange} className={inputCls} placeholder="B-001" /></td>
-                          <td className="py-3 px-2"><input value={rowEditData.name} onChange={(e) => handleRowNameChange(e.target.value)} className={inputCls} placeholder="Name" /></td>
+                          <td className="py-3 px-2"><input list="row-product-list" value={rowEditData.name} onChange={(e) => handleRowNameChange(e.target.value)} className={inputCls} placeholder="Name" /><datalist id="row-product-list">{products.map((p) => <option key={p.product_name} value={p.product_name} />)}</datalist></td>
                           <td className="py-3 px-2"><input type="date" name="date" value={rowEditData.date} onChange={handleRowInputChange} className={`no-spinner ${inputCls}`} /></td>
                           <td className="py-3 px-2"><NoSpinnerInput name="unit_price" value={rowEditData.unit_price} onChange={(v) => handleRowNumberChange("unit_price", v)} className={inputCls} /></td>
                           <td className="py-3 px-2"><NoSpinnerInput name="quantity" value={rowEditData.quantity} onChange={(v) => handleRowNumberChange("quantity", v)} className={inputCls} /></td>
                           <td className="py-3 px-2"><NoSpinnerInput name="amount" value={rowEditData.amount} onChange={(v) => handleRowNumberChange("amount", v)} className={inputCls} /></td>
                           <td className="py-3 px-2"><NoSpinnerInput name="paid" value={rowEditData.paid} onChange={(v) => handleRowNumberChange("paid", v)} className={inputCls} /></td>
                           <td className="py-3 px-2"><NoSpinnerInput name="credit" value={rowEditData.credit} onChange={(v) => handleRowNumberChange("credit", v)} className={inputCls} /></td>
-                          <td className="py-3 px-2"><div className="px-2 py-2 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-400 font-black text-center">LKR {rowCalculatedDiscount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div><p className="text-[9px] text-slate-500 text-center mt-1">Auto = Amount - Paid - Credit</p></td>
+                          <td className="py-3 px-2"><NoSpinnerInput name="discount" value={rowEditData.discount} onChange={(v) => handleRowNumberChange("discount", v)} className={inputCls} /></td>
                           <td className="py-3 px-2">
                             <div className="space-y-1.5 min-w-[160px]">
                               <input name="customer_name" value={rowEditData.customer_name} onChange={handleRowInputChange} className={inputCls} placeholder="Customer Name" />
