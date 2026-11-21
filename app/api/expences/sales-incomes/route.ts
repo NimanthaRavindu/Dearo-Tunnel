@@ -36,18 +36,6 @@ function formatDate(value: unknown): string {
   return String(value ?? "").slice(0, 10);
 }
 
-async function getPriceFromDB(name: string, branchId: string | null): Promise<number | null> {
-  try {
-    const [rows]: any = await db.query(
-      `SELECT unit_price, category FROM product_prices WHERE product_name = ? AND (branch_id IS NULL OR branch_id = ?) LIMIT 1`,
-      [name, branchId]
-    );
-    if (!rows || rows.length === 0) return null;
-    if (rows[0].unit_price == null) return null;
-    return Number(rows[0].unit_price);
-  } catch { return null; }
-}
-
 let hasPaidColumn: boolean | null = null;
 async function checkPaidColumn(): Promise<boolean> {
   if (hasPaidColumn !== null) return hasPaidColumn;
@@ -232,13 +220,8 @@ export async function POST(request: Request) {
     const date = typeof body.date === "string" ? body.date : "";
     const branchId = body.branch_id !== undefined && body.branch_id !== null ? String(body.branch_id) : extractBranchId(request);
 
-    let unit_price = Number(body.unit_price ?? 0);
+    const unit_price = Number(body.unit_price ?? 0);
     const quantity = Number(body.quantity ?? 0);
-
-    if ((!Number.isFinite(unit_price) || unit_price <= 0) && name) {
-      const dbPrice = await getPriceFromDB(name, branchId);
-      if (dbPrice != null) unit_price = dbPrice;
-    }
 
     let amount = Number(body.amount);
     if (!Number.isFinite(amount) || amount === 0) {
@@ -277,8 +260,9 @@ export async function POST(request: Request) {
       insertQuery = `INSERT INTO sales_incomes (branch_id, bill_number, name, unit_price, quantity, amount, credit, paid, discount, date) VALUES (?,?,?,?,?,?,?,?,?,?)`;
       insertParams = [branchId, bill_number || null, name, unit_price, quantity, amount, credit, paid, discount, date];
     } else {
+      // ✅ FIXED - Parana DB - paid column eka na
       insertQuery = `INSERT INTO sales_incomes (branch_id, bill_number, name, unit_price, quantity, amount, credit, discount, date) VALUES (?,?,?,?,?,?,?,?,?)`;
-      insertParams = [branchId, bill_number || null, name, unit_price, quantity, amount, paid, credit, date];
+      insertParams = [branchId, bill_number || null, name, unit_price, quantity, amount, paid, discount, date];
     }
     const [result]: any = await db.query(insertQuery, insertParams);
     return NextResponse.json({ success: true, insertId: result.insertId, message: "Sales income added successfully." }, { status: 201 });
@@ -288,7 +272,6 @@ export async function POST(request: Request) {
   }
 }
 
-// ✅ ALUTH - PUT : Database eke row eka EDIT karanawa
 export async function PUT(request: Request) {
   try {
     const body: SalesIncomeRequestBody = await request.json();
@@ -298,12 +281,8 @@ export async function PUT(request: Request) {
     const date = typeof body.date === "string" ? body.date : "";
     const branchId = body.branch_id !== undefined && body.branch_id !== null ? String(body.branch_id) : extractBranchId(request);
 
-    let unit_price = Number(body.unit_price ?? 0);
+    const unit_price = Number(body.unit_price ?? 0);
     const quantity = Number(body.quantity ?? 0);
-    if ((!Number.isFinite(unit_price) || unit_price <= 0) && name) {
-      const dbPrice = await getPriceFromDB(name, branchId);
-      if (dbPrice != null) unit_price = dbPrice;
-    }
     let amount = Number(body.amount);
     if (!Number.isFinite(amount) || amount === 0) amount = unit_price * quantity;
     const discount = Number(body.discount ?? 0);
@@ -328,7 +307,7 @@ export async function PUT(request: Request) {
       updateQuery = `UPDATE sales_incomes SET branch_id=?, bill_number=?, name=?, unit_price=?, quantity=?, amount=?, credit=?, paid=?, discount=?, date=? WHERE id=?`;
       updateParams = [branchId, bill_number || null, name, unit_price, quantity, amount, credit, paid, discount, date, id];
     } else {
-      // Parana DB - paid column eka na, credit column ekata paid danawa
+      // Parana DB - paid column eka na, credit column ekata paid danawa, discount column ekata discount danawa
       updateQuery = `UPDATE sales_incomes SET branch_id=?, bill_number=?, name=?, unit_price=?, quantity=?, amount=?, credit=?, discount=?, date=? WHERE id=?`;
       updateParams = [branchId, bill_number || null, name, unit_price, quantity, amount, paid, discount, date, id];
     }
@@ -341,7 +320,6 @@ export async function PUT(request: Request) {
   }
 }
 
-// ✅ FIX - DELETE : id witharakin weda karanawa, branch_id awoth ekatath check karanawa
 export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
