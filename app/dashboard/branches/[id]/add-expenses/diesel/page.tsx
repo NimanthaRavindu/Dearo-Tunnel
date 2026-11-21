@@ -31,9 +31,9 @@ export default function DieselExpensesPage() {
   const [savingPast, setSavingPast] = useState(false);
   const [filterDate, setFilterDate] = useState(""); const [filterMachine, setFilterMachine] = useState("");
 
-  // ✅ History map - diesel_stock eken ena format eka (total_diesel / added_diesel dekama handle karanawa)
+  
   const mapHistory = (arr: any[]) => (arr || [])
-    .filter((h: any) => !h.branch_id || String(h.branch_id) === String(branchId)) // ✅ Danata branch eke witharai
+    .filter((h: any) => !h.branch_id || String(h.branch_id) === String(branchId)) 
     .map((h: any) => ({
       id: h.id,
       branch_id: h.branch_id,
@@ -140,10 +140,10 @@ export default function DieselExpensesPage() {
   const displayInitialAmountRemaining = Math.max(0, originalInitialAmount - displayTotalAmount);
   const displayRemainingBalance = displayInitialAmountRemaining;
 
-  // ✅ History eka danata branch eke witharai - API ekenuth, frontend ekenuth filter
+
   const branchHistory = useMemo(() => initialHistory.filter(h => !h.branch_id || String(h.branch_id) === String(branchId)), [initialHistory, branchId]);
 
-  // ✅ Fallback eka duplicate wenna epa - API eken history enawanan eka witharai ganna
+  
   const effectiveHistory: InitialAdd[] = useMemo(() => {
     if (branchHistory.length === 0 && initialDieselStock > 0) return [{ id: 0, branch_id: branchId, date: initialDate || new Date().toISOString().slice(0,10), diesel: initialDieselStock, amount: initialTotalAmount }];
     return branchHistory;
@@ -186,7 +186,7 @@ export default function DieselExpensesPage() {
       <div className="mx-auto max-w-7xl space-y-5">
         <button onClick={() => router.back()} className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-bold hover:bg-slate-800"><ArrowLeft size={16}/> Back</button>
         <header className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-slate-700/80 bg-slate-900 p-5 shadow-xl">
-          <div className="flex items-center gap-4"><div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400"><Fuel size={29}/></div><div><h1 className="text-2xl font-black tracking-tight">Diesel Expenses</h1><p className="text-sm text-slate-400">Live Preview • Type karaddi ma card update wenawa • Diesel Price Rs. {DIESEL_PRICE}/L • Branch: {branchId}</p></div></div>
+          <div className="flex items-center gap-4"><div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400"><Fuel size={29}/></div><div><h1 className="text-2xl font-black tracking-tight">Diesel Expenses</h1><p className="text-sm text-slate-400">Live Preview •  Diesel Price Rs. {DIESEL_PRICE}/L • Branch: {branchId}</p></div></div>
           <button onClick={() => { loadExpenses(); loadInitialHistory(); }} className="h-11 inline-flex items-center gap-2 rounded-xl border border-slate-600 bg-slate-800 px-5 text-sm font-bold hover:bg-slate-700"><RefreshCw size={17} className={loading? "animate-spin" : ""}/>Refresh</button>
         </header>
 
@@ -205,17 +205,17 @@ export default function DieselExpensesPage() {
         </section>
 
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          <SummaryCard title="Initial Diesel" subtitle={initialDate ? `Stock Date • ${initialDate}` : "Denata Stock Dawase"} value={`${formatNumber(displayInitialDiesel)} L`} icon={<Fuel size={22}/>} color="violet"/>
+          <SummaryCard title="Initial Diesel" subtitle={initialDate ? `Stock Date • ${initialDate}` : ""} value={`${formatNumber(displayInitialDiesel)} L`} icon={<Fuel size={22}/>} color="violet"/>
           <SummaryCard title="Total Diesel" subtitle="Original Stock" value={`${formatNumber(displayTotalDiesel)} L`} icon={<Fuel size={22}/>} color="red"/>
           <SummaryCard title="Diesel Used" subtitle={isFiltered ? `Filtered: ${formatNumber(fDiesel)} L` : "All expenses"} value={`${formatNumber(displayDieselUsed)} L`} icon={<Droplets size={22}/>} color="cyan"/>
           <SummaryCard title="Remaining Diesel" subtitle="Initial - Used" value={`${formatNumber(displayRemainingDiesel)} L`} icon={<Gauge size={22}/>} color="orange"/>
-          <SummaryCard title="Initial Amount" subtitle={`Ithuru gana • Original Rs. ${formatNumber(originalInitialAmount)}`} value={`Rs. ${formatNumber(displayInitialAmountRemaining)}`} icon={<Banknote size={22}/>} color="violet"/>
+          <SummaryCard title="Initial Amount" subtitle={`Original Rs. ${formatNumber(originalInitialAmount)}`} value={`Rs. ${formatNumber(displayInitialAmountRemaining)}`} icon={<Banknote size={22}/>} color="violet"/>
           <SummaryCard title="Total Amount" subtitle={isFiltered ? `Filtered payable` : "Payable total"} value={`Rs. ${formatNumber(displayTotalAmount)}`} icon={<Wallet size={22}/>} color="blue"/>
           <SummaryCard title="Remaining Balance" subtitle="Initial Amount eke ithuru gana • Same" value={`Rs. ${formatNumber(displayRemainingBalance)}`} icon={<CreditCard size={22}/>} color="green"/>
         </section>
 
         <section className="rounded-3xl border border-slate-700/80 bg-slate-900 overflow-hidden shadow-xl">
-          <div className="border-b border-slate-700/80 bg-slate-800/30 px-6 py-5 flex flex-wrap justify-between gap-3"><div><h2 className="text-xl font-black">Add Diesel Expense</h2><p className="text-xs text-slate-400 mt-1">Diesel gahaddi Payable auto = Diesel x Rs. {DIESEL_PRICE} • Save kalama Remaining Diesel / Initial Amount adu wenawa</p></div>{formDiesel > 0 && <div className="rounded-xl bg-cyan-500/10 border border-cyan-500/20 px-4 py-2 text-xs font-bold text-cyan-300">Live: Remaining {formatNumber(displayRemainingDiesel)} L • Balance Rs. {formatNumber(displayRemainingBalance)} • Total Diesel {formatNumber(displayTotalDiesel)} L</div>}</div>
+          <div className="border-b border-slate-700/80 bg-slate-800/30 px-6 py-5 flex flex-wrap justify-between gap-3"><div><h2 className="text-xl font-black">Add Diesel Expense</h2><p className="text-xs text-slate-400 mt-1"> Diesel x Rs. {DIESEL_PRICE} </p></div>{formDiesel > 0 && <div className="rounded-xl bg-cyan-500/10 border border-cyan-500/20 px-4 py-2 text-xs font-bold text-cyan-300">Live: Remaining {formatNumber(displayRemainingDiesel)} L • Balance Rs. {formatNumber(displayRemainingBalance)} • Total Diesel {formatNumber(displayTotalDiesel)} L</div>}</div>
           <form onSubmit={handleSubmit} className="space-y-6 p-6">
             <div className="grid gap-6 md:grid-cols-2">
               <Field label="Machine"><select value={selectedMachine} onChange={e => { setSelectedMachine(e.target.value); if (e.target.value!== "Other Machine") setOtherMachine(""); }} className={inputClass}><option value="">Select Machine</option>{machines.map(m => <option key={m} value={m}>{m}</option>)}<option value="Other Machine">Other Machine</option></select>{selectedMachine === "Other Machine" && <input value={otherMachine} onChange={e => setOtherMachine(e.target.value)} placeholder="Other machine name" className={`${inputClass} mt-3`}/>}</Field>

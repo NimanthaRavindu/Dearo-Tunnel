@@ -21,7 +21,7 @@ interface SalesIncomeItem {
   created_at?: string;
 }
 
-// ✅ Credit Field eka Form eke ADD kara
+
 interface SalesIncomeFormData {
   bill_number: string; name: string; date: string;
   unit_price: string; quantity: string; paid: string; credit: string;
@@ -73,7 +73,7 @@ const FALLBACK_PRICES: ProductPrice[] = [
 
 function getToday(): string { return new Date().toISOString().split("T")[0]; }
 
-// ✅ HEMA NUMBER FIELD EKAKATA - Arrow na, nikamma type karanna puluwan
+
 function NoSpinnerInput({
   value, onChange, placeholder, name, className = "",
 }: {
@@ -135,7 +135,7 @@ function SalesIncomesContent() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // ✅ Credit = "" - Form eke aluthin
+
   const [formData, setFormData] = useState<SalesIncomeFormData>({
     bill_number: "", name: "", date: getToday(), unit_price: "", quantity: "", paid: "", credit: "",
   });
@@ -146,7 +146,7 @@ function SalesIncomesContent() {
     return up * qty;
   }, [formData.unit_price, formData.quantity]);
   const calculatedPaid = useMemo(() => Number(formData.paid || 0), [formData.paid]);
-  // ✅ Credit - Form eken type karana gane
+  // ✅ Credit 
   const calculatedCredit = useMemo(() => Number(formData.credit || 0), [formData.credit]);
   // ✅ Discount = Amount - Paid - Credit
   const calculatedDiscountForm = useMemo(() => Math.max(0, calculatedAmount - calculatedPaid - calculatedCredit), [calculatedAmount, calculatedPaid, calculatedCredit]);
