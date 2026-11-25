@@ -28,12 +28,18 @@ export default function ViewDieselExpensesPage() {
   const [filterDate, setFilterDate] = useState("");
   const [filterMachine, setFilterMachine] = useState("");
 
+  // ✅ FIX - Date eka NULL namuth "No Date" kiyala gannawa, row eka ain karanne na
   const mapHistory = (arr: any[]) => (arr || [])
     .filter((h: any) => !h.branch_id || String(h.branch_id) === String(branchId))
-    .map((h: any) => ({
-      id: h.id, branch_id: h.branch_id, date: String(h.stock_date || h.initial_date || h.date || "").slice(0,10),
-      diesel: Number(h.added_diesel ?? h.total_diesel ?? h.diesel ?? 0), amount: Number(h.added_amount ?? h.total_amount ?? h.amount ?? 0),
-    }));
+    .map((h: any) => {
+      let rawDate = String(h.stock_date || h.initial_date || h.created_at || h.date || "").slice(0,10);
+      // MySQL NULL / Invalid date nam "No Date" kiyala pennanawa
+      if (!rawDate || rawDate === "null" || rawDate === "Invalid Date" || rawDate.startsWith("0000")) rawDate = "No Date";
+      return {
+        id: h.id, branch_id: h.branch_id, date: rawDate,
+        diesel: Number(h.added_diesel ?? h.total_diesel ?? h.diesel ?? 0), amount: Number(h.added_amount ?? h.total_amount ?? h.amount ?? 0),
+      };
+    });
 
   const loadExpenses = async () => {
     if (!branchId) return;
@@ -94,17 +100,23 @@ export default function ViewDieselExpensesPage() {
   const displayInitialDiesel = initialDieselStock;
   const displayInitialAmount = initialTotalAmount;
 
+  // ✅ FIX - Date Wise Group - Date eka nathi row ekauth "No Date" widiyata group wenawa
   const initialByDate = useMemo(() => {
     const map = new Map<string, { date: string; diesel: number; amount: number; count: number }>();
     initialHistory.forEach((h) => {
-      const d = String(h.date || "").slice(0,10);
-      if (!d) return;
+      const d = String(h.date || "").slice(0,10) || "No Date";
       const cur = map.get(d) || { date: d, diesel: 0, amount: 0, count: 0 };
       cur.diesel += numberValue(h.diesel); cur.amount += numberValue(h.amount); cur.count += 1;
       map.set(d, cur);
     });
-    return Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date));
+    // No Date eka udata, ituruwa date anuwa
+    return Array.from(map.values()).sort((a, b) => {
+      if (a.date === "No Date") return -1;
+      if (b.date === "No Date") return 1;
+      return b.date.localeCompare(a.date);
+    });
   }, [initialHistory]);
+
   const filteredInitialByDate = useMemo(() => initialByDate.filter(r => !initialFilterDate || r.date === initialFilterDate), [initialByDate, initialFilterDate]);
   const totalInitialHistoryDiesel = useMemo(() => initialHistory.reduce((s, h) => s + numberValue(h.diesel), 0), [initialHistory]);
   const totalInitialHistoryAmount = useMemo(() => initialHistory.reduce((s, h) => s + numberValue(h.amount), 0), [initialHistory]);
@@ -145,7 +157,6 @@ export default function ViewDieselExpensesPage() {
     setShowInitialSummary(true);
   };
 
-  // ✅ PDF - Initial Diesel 745L kohomada hadune? Date Wise + Running Total
   const downloadInitialPDF = () => {
     const doc = new jsPDF();
     doc.setFontSize(16);
@@ -154,7 +165,11 @@ export default function ViewDieselExpensesPage() {
     doc.text(`Branch: ${branchId}  |  Date: ${new Date().toLocaleDateString()}`, 14, 23);
     doc.text(`Total Initial Diesel: ${formatNumber(initialDieselStock)} L  |  Total Amount: Rs. ${formatNumber(initialTotalAmount)}`, 14, 30);
     let running = 0;
-    const sorted = [...filteredInitialByDate].sort((a, b) => a.date.localeCompare(b.date));
+    const sorted = [...filteredInitialByDate].sort((a, b) => {
+      if (a.date === "No Date") return -1;
+      if (b.date === "No Date") return 1;
+      return a.date.localeCompare(b.date);
+    });
     const body = sorted.map((r) => { running += r.diesel; return [r.date, String(r.count), `${formatNumber(r.diesel)} L`, `Rs. ${formatNumber(r.amount)}`, `${formatNumber(running)} L`]; });
     autoTable(doc, {
       startY: 35,
@@ -167,10 +182,13 @@ export default function ViewDieselExpensesPage() {
     doc.save(`Initial-Diesel-History-Branch-${branchId}-${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
-  // ✅ EXCEL - Initial Diesel 745L kohomada hadune?
   const downloadInitialExcel = () => {
     let running = 0;
-    const sorted = [...filteredInitialByDate].sort((a, b) => a.date.localeCompare(b.date));
+    const sorted = [...filteredInitialByDate].sort((a, b) => {
+      if (a.date === "No Date") return -1;
+      if (b.date === "No Date") return 1;
+      return a.date.localeCompare(b.date);
+    });
     const wsData = [
       ["DEARO - Initial Diesel Stock History", "", "", "", ""],
       [`Branch: ${branchId}`, `Date: ${new Date().toLocaleDateString()}`, "", "", ""],
@@ -231,7 +249,6 @@ export default function ViewDieselExpensesPage() {
           </div>
         </header>
 
-        {/* ✅ CARD 7 - HAMA EKAKATHUMA EYE ICON EKA CARD EKE ATHULATHAMA */}
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           <SummaryCard title="Initial Diesel" subtitle="Original Stock • Modal eke wage" value={`${formatNumber(displayInitialDiesel)} L`} icon={<Fuel size={22}/>} color="violet" onEye={() => handleCardEye("initial")} eyeTitle="745L kohomada hadune? Date wise balanna" />
           <SummaryCard title="Initial Amount" subtitle={`Original Amount • Total Stock Value`} value={`Rs. ${formatNumber(displayInitialAmount)}`} icon={<Banknote size={22}/>} color="violet" onEye={() => handleCardEye("initial")} eyeTitle="Initial Amount Date wise balanna" />
@@ -242,7 +259,6 @@ export default function ViewDieselExpensesPage() {
           <SummaryCard title="Total Diesel" subtitle="Initial stock" value={`${formatNumber(displayTotalDiesel)} L`} icon={<AlertCircle size={22}/>} color="red" onEye={() => handleCardEye("total")} eyeTitle="Total Diesel balanna" />
         </section>
 
-        {/* FILTER + TABLE */}
         <section className="rounded-3xl border border-slate-700/80 bg-slate-900 overflow-hidden">
           <div className="p-5 border-b border-slate-700/80 space-y-4">
             <div className="flex justify-between items-center"><h2 className="font-bold">Records</h2><span className="text-sm bg-slate-800 px-3 py-1 rounded-xl">{filteredExpenses.length} / {expenses.length} Records</span></div>
@@ -257,7 +273,6 @@ export default function ViewDieselExpensesPage() {
         </section>
       </div>
 
-      {/* ✅ MODAL - Initial Diesel 745L kohomada hadune? */}
       {showInitialSummary && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm overflow-y-auto" onClick={() => setShowInitialSummary(false)}>
           <div className="w-full max-w-2xl my-6 rounded-3xl border border-slate-700 bg-[#0d1527] shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
@@ -284,8 +299,9 @@ export default function ViewDieselExpensesPage() {
                   <button onClick={downloadInitialExcel} className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 py-2.5 text-xs font-black uppercase"><FileSpreadsheet size={14}/> Download Excel</button>
                 </div>
 
+                {/* ✅ DAN TABLE EKA PENAWA - Date eka naththanuth */}
                 {filteredInitialByDate.length === 0 ? (<p className="rounded-2xl border border-slate-800 bg-slate-900/50 px-4 py-6 text-center text-sm text-slate-500">Thama Initial Add History na<br/><span className="text-[11px]">DB Total: {formatNumber(initialDieselStock)} L / Rs. {formatNumber(initialTotalAmount)}</span></p>) : (
-                  <div className="overflow-hidden rounded-2xl border border-cyan-500/20"><table className="w-full text-sm"><thead className="bg-slate-900"><tr className="text-left text-[10px] uppercase tracking-wider text-slate-500"><th className="px-4 py-3">Date</th><th className="px-4 py-3 text-center">Adds</th><th className="px-4 py-3 text-right">Initial Diesel</th><th className="px-4 py-3 text-right">Initial Amount</th><th className="px-4 py-3 text-right">Running Total</th></tr></thead><tbody className="divide-y divide-slate-800/70">{(() => { let running = 0; const sorted = [...filteredInitialByDate].sort((a,b)=>a.date.localeCompare(b.date)); return sorted.map((row) => { running += row.diesel; return (<tr key={row.date} className="hover:bg-slate-800/40"><td className="px-4 py-3 font-bold">{row.date}</td><td className="px-4 py-3 text-center"><span className="rounded-lg bg-slate-800 px-2 py-1 text-[11px] font-bold">{row.count}</span></td><td className="px-4 py-3 text-right font-bold text-cyan-300">{formatNumber(row.diesel)} L</td><td className="px-4 py-3 text-right font-bold">Rs. {formatNumber(row.amount)}</td><td className="px-4 py-3 text-right font-bold text-emerald-300">{formatNumber(running)} L</td></tr>); }); })()}</tbody><tfoot className="bg-slate-900"><tr className="font-black"><td className="px-4 py-3 text-slate-400">Total (History)</td><td className="px-4 py-3 text-center">{initialHistory.length}</td><td className="px-4 py-3 text-right text-cyan-300">{formatNumber(totalInitialHistoryDiesel)} L</td><td className="px-4 py-3 text-right">Rs. {formatNumber(totalInitialHistoryAmount)}</td><td className="px-4 py-3 text-right text-emerald-300">{formatNumber(totalInitialHistoryDiesel)} L</td></tr><tr className="font-black text-[11px] text-slate-500"><td colSpan={2} className="px-4 py-2">DB Total</td><td className="px-4 py-2 text-right">{formatNumber(initialDieselStock)} L</td><td className="px-4 py-2 text-right">Rs. {formatNumber(initialTotalAmount)}</td><td className="px-4 py-2 text-right">-</td></tr></tfoot></table></div>
+                  <div className="overflow-hidden rounded-2xl border border-cyan-500/20"><table className="w-full text-sm"><thead className="bg-slate-900"><tr className="text-left text-[10px] uppercase tracking-wider text-slate-500"><th className="px-4 py-3">Date</th><th className="px-4 py-3 text-center">Adds</th><th className="px-4 py-3 text-right">Initial Diesel</th><th className="px-4 py-3 text-right">Initial Amount</th><th className="px-4 py-3 text-right">Running Total</th></tr></thead><tbody className="divide-y divide-slate-800/70">{(() => { let running = 0; const sorted = [...filteredInitialByDate].sort((a,b)=>{ if(a.date==="No Date") return -1; if(b.date==="No Date") return 1; return a.date.localeCompare(b.date); }); return sorted.map((row) => { running += row.diesel; return (<tr key={row.date} className="hover:bg-slate-800/40"><td className="px-4 py-3 font-bold">{row.date}</td><td className="px-4 py-3 text-center"><span className="rounded-lg bg-slate-800 px-2 py-1 text-[11px] font-bold">{row.count}</span></td><td className="px-4 py-3 text-right font-bold text-cyan-300">{formatNumber(row.diesel)} L</td><td className="px-4 py-3 text-right font-bold">Rs. {formatNumber(row.amount)}</td><td className="px-4 py-3 text-right font-bold text-emerald-300">{formatNumber(running)} L</td></tr>); }); })()}</tbody><tfoot className="bg-slate-900"><tr className="font-black"><td className="px-4 py-3 text-slate-400">Total (History)</td><td className="px-4 py-3 text-center">{initialHistory.length}</td><td className="px-4 py-3 text-right text-cyan-300">{formatNumber(totalInitialHistoryDiesel)} L</td><td className="px-4 py-3 text-right">Rs. {formatNumber(totalInitialHistoryAmount)}</td><td className="px-4 py-3 text-right text-emerald-300">{formatNumber(totalInitialHistoryDiesel)} L</td></tr><tr className="font-black text-[11px] text-slate-500"><td colSpan={2} className="px-4 py-2">DB Total</td><td className="px-4 py-2 text-right">{formatNumber(initialDieselStock)} L</td><td className="px-4 py-2 text-right">Rs. {formatNumber(initialTotalAmount)}</td><td className="px-4 py-2 text-right">-</td></tr></tfoot></table></div>
                 )}
               </div>
 
@@ -310,7 +326,6 @@ export default function ViewDieselExpensesPage() {
   );
 }
 
-// ✅ SUMMARY CARD - EYE ICON EKA CARD EKE ATHULATHAMA - Value eka yata
 function SummaryCard({ title, subtitle, value, icon, color, onEye, eyeTitle }: { title: string; subtitle: string; value: string; icon: React.ReactNode; color: CardColor; onEye?: () => void; eyeTitle?: string; }) {
   const s: any = { cyan: { b: "border-cyan-500/25", i: "bg-cyan-500/10 text-cyan-400", v: "text-cyan-300", eye: "bg-cyan-600/20 border-cyan-500/40 text-cyan-300 hover:bg-cyan-600 hover:text-white" }, blue: { b: "border-blue-500/25", i: "bg-blue-500/10 text-blue-400", v: "text-blue-300", eye: "bg-blue-600/20 border-blue-500/40 text-blue-300 hover:bg-blue-600 hover:text-white" }, orange: { b: "border-orange-500/25", i: "bg-orange-500/10 text-orange-400", v: "text-orange-300", eye: "bg-orange-600/20 border-orange-500/40 text-orange-300 hover:bg-orange-600 hover:text-white" }, green: { b: "border-green-500/25", i: "bg-green-500/10 text-green-400", v: "text-green-300", eye: "bg-green-600/20 border-green-500/40 text-green-300 hover:bg-green-600 hover:text-white" }, red: { b: "border-red-500/25", i: "bg-red-500/10 text-red-400", v: "text-red-300", eye: "bg-red-600/20 border-red-500/40 text-red-300 hover:bg-red-600 hover:text-white" }, violet: { b: "border-violet-500/25", i: "bg-violet-500/10 text-violet-400", v: "text-violet-300", eye: "bg-violet-600/20 border-violet-500/40 text-violet-300 hover:bg-violet-600 hover:text-white" } };
   const c = s[color];
