@@ -24,10 +24,10 @@ export default function ViewDieselExpensesPage() {
   const [showInitialSummary, setShowInitialSummary] = useState(false);
   const [initialHistory, setInitialHistory] = useState<InitialAdd[]>([]);
   const [initialFilterDate, setInitialFilterDate] = useState("");
-  const [modalType, setModalType] = useState<"initial" | "used" | "total" | "remaining">("initial");
+  
+  const [modalType, setModalType] = useState<"initial" | "used" | "totalAmount" | "remaining" | "remainingBalance" | "total">("initial");
   const [filterDate, setFilterDate] = useState("");
   const [filterMachine, setFilterMachine] = useState("");
-  // ✅ Diesel Used Modal eke Filter
   const [usedFilterDate, setUsedFilterDate] = useState("");
   const [usedFilterMachine, setUsedFilterMachine] = useState("");
 
@@ -53,8 +53,7 @@ export default function ViewDieselExpensesPage() {
     if (!branchId) return;
     try {
       const r = await fetch(`/api/expences/diesel?branch_id=${encodeURIComponent(branchId)}&type=history`, { cache: "no-store" });
-      if (!r.ok) return;
-      const j = await r.json();
+      if (!r.ok) return; const j = await r.json();
       const arr = Array.isArray(j) ? j : (Array.isArray(j.history) ? j.history : []);
       setInitialHistory(mapHistory(arr));
     } catch {}
@@ -79,6 +78,8 @@ export default function ViewDieselExpensesPage() {
   const displayRemainingBalance = displayRemainingDiesel * DIESEL_PRICE;
   const displayInitialDiesel = initialDieselStock;
   const displayInitialAmount = initialTotalAmount;
+  const usedPercent = initialDieselStock > 0 ? (totalUsedDiesel / initialDieselStock) * 100 : 0;
+  const remainingPercent = 100 - usedPercent;
 
   const initialByDate = useMemo(() => {
     const map = new Map<string, { date: string; diesel: number; amount: number; count: number }>();
@@ -89,7 +90,6 @@ export default function ViewDieselExpensesPage() {
   const totalInitialHistoryDiesel = useMemo(() => initialHistory.reduce((s, h) => s + numberValue(h.diesel), 0), [initialHistory]);
   const totalInitialHistoryAmount = useMemo(() => initialHistory.reduce((s, h) => s + numberValue(h.amount), 0), [initialHistory]);
 
-  // ✅ DIESEL_EXPENSES TABLE EKE SUMMARY - Date Wise + Machine Wise
   const dateWiseSummary = useMemo(() => {
     const map = new Map<string, { date: string; diesel: number; amount: number; paid: number; balance: number; count: number; machines: Set<string> }>();
     expenses.forEach((item) => {
@@ -99,7 +99,6 @@ export default function ViewDieselExpensesPage() {
     });
     return Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date));
   }, [expenses]);
-
   const machineWiseSummary = useMemo(() => {
     const map = new Map<string, { machine: string; diesel: number; amount: number; paid: number; balance: number; count: number }>();
     expenses.forEach((item) => {
@@ -109,8 +108,6 @@ export default function ViewDieselExpensesPage() {
     });
     return Array.from(map.values()).sort((a, b) => b.diesel - a.diesel);
   }, [expenses]);
-
-  // ✅ Diesel Used Modal eke Filter karapu data
   const filteredUsedByDate = useMemo(() => dateWiseSummary.filter(r => (!usedFilterDate || r.date === usedFilterDate) && (!usedFilterMachine || Array.from(r.machines).includes(usedFilterMachine))), [dateWiseSummary, usedFilterDate, usedFilterMachine]);
   const filteredUsedByMachine = useMemo(() => machineWiseSummary.filter(m => !usedFilterMachine || m.machine === usedFilterMachine), [machineWiseSummary, usedFilterMachine]);
   const filteredUsedExpenses = useMemo(() => expenses.filter(e => (!usedFilterDate || String(e.date).slice(0,10) === usedFilterDate) && (!usedFilterMachine || e.machine === usedFilterMachine)), [expenses, usedFilterDate, usedFilterMachine]);
@@ -119,13 +116,11 @@ export default function ViewDieselExpensesPage() {
   const filteredUsedPaid = filteredUsedExpenses.reduce((s, i) => s + numberValue(i.paid), 0);
 
   const clearFilters = () => { setFilterDate(""); setFilterMachine(""); };
-  const handleCardEye = async (type: "initial" | "used" | "total" | "remaining") => {
+  const handleCardEye = async (type: "initial" | "used" | "totalAmount" | "remaining" | "remainingBalance" | "total") => {
     setModalType(type); setUsedFilterDate(""); setUsedFilterMachine(""); setInitialFilterDate("");
-    await loadInitialHistory(); await loadExpenses();
-    setShowInitialSummary(true);
+    await loadInitialHistory(); await loadExpenses(); setShowInitialSummary(true);
   };
 
-  // ✅ INITIAL PDF / EXCEL - 745L History
   const downloadInitialPDF = () => {
     const doc = new jsPDF(); doc.setFontSize(16); doc.text("DEARO - Initial Diesel Stock History", 14, 15); doc.setFontSize(10); doc.text(`Branch: ${branchId}  |  Date: ${new Date().toLocaleDateString()}`, 14, 23); doc.text(`Total Initial Diesel: ${formatNumber(initialDieselStock)} L  |  Total Amount: Rs. ${formatNumber(initialTotalAmount)}`, 14, 30);
     let running = 0; const sorted = [...filteredInitialByDate].sort((a, b) => { if (a.date === "No Date") return -1; if (b.date === "No Date") return 1; return a.date.localeCompare(b.date); });
@@ -139,40 +134,74 @@ export default function ViewDieselExpensesPage() {
     const ws = XLSX.utils.aoa_to_sheet(wsData); ws["!cols"] = [{ wch: 14 }, { wch: 10 }, { wch: 18 }, { wch: 20 }, { wch: 20 }]; const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Initial Diesel History"); XLSX.writeFile(wb, `Initial-Diesel-History-Branch-${branchId}-${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
-  // ✅ DIESEL USED - diesel_expenses SUMMARY PDF - Date Wise + Machine Wise + Full Records
   const downloadUsedPDF = () => {
-    const doc = new jsPDF();
-    doc.setFontSize(16); doc.text("DEARO - Diesel Used Summary", 14, 15);
-    doc.setFontSize(10); doc.text(`Branch: ${branchId}  |  Date: ${new Date().toLocaleDateString()}`, 14, 23);
-    doc.text(`Total Used: ${formatNumber(totalUsedDiesel)} L  |  Total Payable: Rs. ${formatNumber(totalPayable)}  |  Paid: Rs. ${formatNumber(totalPaid)}  |  Balance: Rs. ${formatNumber(totalBalance)}`, 14, 30);
+    const doc = new jsPDF(); doc.setFontSize(16); doc.text("DEARO - Diesel Used Summary", 14, 15); doc.setFontSize(10); doc.text(`Branch: ${branchId}  |  Date: ${new Date().toLocaleDateString()}`, 14, 23); doc.text(`Total Used: ${formatNumber(totalUsedDiesel)} L  |  Total Payable: Rs. ${formatNumber(totalPayable)}  |  Paid: Rs. ${formatNumber(totalPaid)}  |  Balance: Rs. ${formatNumber(totalBalance)}`, 14, 30);
     doc.setFontSize(11); doc.text("1. Date Wise Summary - diesel_expenses", 14, 38);
     autoTable(doc, { startY: 42, head: [["Date", "Records", "Machines", "Diesel Used (L)", "Payable (Rs.)", "Paid (Rs.)", "Balance (Rs.)"]], body: filteredUsedByDate.map((r) => [r.date, String(r.count), Array.from(r.machines).join(", "), `${formatNumber(r.diesel)} L`, `Rs. ${formatNumber(r.amount)}`, `Rs. ${formatNumber(r.paid)}`, `Rs. ${formatNumber(r.balance)}`]), foot: [["TOTAL", String(filteredUsedExpenses.length), "-", `${formatNumber(filteredUsedDiesel)} L`, `Rs. ${formatNumber(filteredUsedPayable)}`, `Rs. ${formatNumber(filteredUsedPaid)}`, `Rs. ${formatNumber(filteredUsedPayable - filteredUsedPaid)}`]], styles: { fontSize: 9 }, headStyles: { fillColor: [8, 145, 178] } });
-    const y1 = (doc as any).lastAutoTable.finalY + 8;
-    doc.text("2. Machine Wise Summary", 14, y1);
+    const y1 = (doc as any).lastAutoTable.finalY + 8; doc.text("2. Machine Wise Summary", 14, y1);
     autoTable(doc, { startY: y1 + 4, head: [["Machine", "Records", "Diesel Used (L)", "Payable (Rs.)", "Paid (Rs.)", "Balance (Rs.)"]], body: filteredUsedByMachine.map((m) => [m.machine, String(m.count), `${formatNumber(m.diesel)} L`, `Rs. ${formatNumber(m.amount)}`, `Rs. ${formatNumber(m.paid)}`, `Rs. ${formatNumber(m.balance)}`]), foot: [["TOTAL", String(filteredUsedExpenses.length), `${formatNumber(filteredUsedDiesel)} L`, `Rs. ${formatNumber(filteredUsedPayable)}`, `Rs. ${formatNumber(filteredUsedPaid)}`, `Rs. ${formatNumber(filteredUsedPayable - filteredUsedPaid)}`]], styles: { fontSize: 9 }, headStyles: { fillColor: [249, 115, 22] } });
-    const y2 = (doc as any).lastAutoTable.finalY + 8;
-    doc.text("3. Full Records - diesel_expenses", 14, y2);
+    const y2 = (doc as any).lastAutoTable.finalY + 8; doc.text("3. Full Records - diesel_expenses", 14, y2);
     autoTable(doc, { startY: y2 + 4, head: [["Date", "Machine", "Diesel (L)", "Payable (Rs.)", "Paid (Rs.)", "Balance (Rs.)"]], body: [...filteredUsedExpenses].sort((a,b)=>String(a.date).localeCompare(String(b.date))).map((e) => [String(e.date).slice(0,10), e.machine, formatNumber(e.diesel), formatNumber(e.payable), formatNumber(e.paid), formatNumber(numberValue(e.payable) - numberValue(e.paid))]), styles: { fontSize: 9 }, headStyles: { fillColor: [30, 41, 59] } });
     doc.save(`Diesel-Used-Summary-Branch-${branchId}-${new Date().toISOString().slice(0, 10)}.pdf`);
   };
-
-  // ✅ DIESEL USED - diesel_expenses SUMMARY EXCEL - 3 Sheets!
   const downloadUsedExcel = () => {
     const wb = XLSX.utils.book_new();
-    // Sheet 1 - Summary
     const summaryData = [["DEARO - Diesel Used Summary", "", "", "", "", ""],[`Branch: ${branchId}`, `Date: ${new Date().toLocaleDateString()}`, "", "", "", ""],[`Total Used: ${formatNumber(totalUsedDiesel)} L`, `Total Payable: Rs. ${formatNumber(totalPayable)}`, `Paid: Rs. ${formatNumber(totalPaid)}`, `Balance: Rs. ${formatNumber(totalBalance)}`, `Records: ${expenses.length}`, ""],[],["Metric", "Value"], ["Total Diesel Used (L)", totalUsedDiesel], ["Total Payable (Rs.)", totalPayable], ["Total Paid (Rs.)", totalPaid], ["Total Balance (Rs.)", totalBalance], ["Total Records", expenses.length], ["Initial Diesel (L)", initialDieselStock], ["Remaining Diesel (L)", displayRemainingDiesel]];
     const ws1 = XLSX.utils.aoa_to_sheet(summaryData); ws1["!cols"] = [{ wch: 25 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 18 }, { wch: 18 }]; XLSX.utils.book_append_sheet(wb, ws1, "Summary");
-    // Sheet 2 - Date Wise
     const dateData = [["Date", "Records", "Machines", "Diesel Used (L)", "Payable (Rs.)", "Paid (Rs.)", "Balance (Rs.)"], ...filteredUsedByDate.map((r) => [r.date, r.count, Array.from(r.machines).join(", "), r.diesel, r.amount, r.paid, r.balance]), ["TOTAL", filteredUsedExpenses.length, "-", filteredUsedDiesel, filteredUsedPayable, filteredUsedPaid, filteredUsedPayable - filteredUsedPaid]];
     const ws2 = XLSX.utils.aoa_to_sheet(dateData); ws2["!cols"] = [{ wch: 14 }, { wch: 10 }, { wch: 30 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 16 }]; XLSX.utils.book_append_sheet(wb, ws2, "Date Wise");
-    // Sheet 3 - Machine Wise
     const machineData = [["Machine", "Records", "Diesel Used (L)", "Payable (Rs.)", "Paid (Rs.)", "Balance (Rs.)"], ...filteredUsedByMachine.map((m) => [m.machine, m.count, m.diesel, m.amount, m.paid, m.balance]), ["TOTAL", filteredUsedExpenses.length, filteredUsedDiesel, filteredUsedPayable, filteredUsedPaid, filteredUsedPayable - filteredUsedPaid]];
     const ws3 = XLSX.utils.aoa_to_sheet(machineData); ws3["!cols"] = [{ wch: 22 }, { wch: 10 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 16 }]; XLSX.utils.book_append_sheet(wb, ws3, "Machine Wise");
-    // Sheet 4 - Full Records
     const recordsData = [["Date", "Machine", "Diesel (L)", "Payable (Rs.)", "Paid (Rs.)", "Balance (Rs.)"], ...[...filteredUsedExpenses].sort((a,b)=>String(a.date).localeCompare(String(b.date))).map((e) => [String(e.date).slice(0,10), e.machine, Number(e.diesel), Number(e.payable), Number(e.paid), Number(e.payable) - Number(e.paid)])];
     const ws4 = XLSX.utils.aoa_to_sheet(recordsData); ws4["!cols"] = [{ wch: 14 }, { wch: 22 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 16 }]; XLSX.utils.book_append_sheet(wb, ws4, "All Records");
     XLSX.writeFile(wb, `Diesel-Used-Summary-Branch-${branchId}-${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
+
+  // ✅ TOTAL AMOUNT - diesel_expenses Payable Summary PDF / Excel
+  const downloadTotalAmountPDF = () => {
+    const doc = new jsPDF(); doc.setFontSize(16); doc.text("DEARO - Total Amount Summary", 14, 15); doc.setFontSize(10); doc.text(`Branch: ${branchId}  |  Date: ${new Date().toLocaleDateString()}`, 14, 23); doc.text(`Total Amount (Payable): Rs. ${formatNumber(totalPayable)}  |  Paid: Rs. ${formatNumber(totalPaid)}  |  Balance: Rs. ${formatNumber(totalBalance)}  |  Diesel Used: ${formatNumber(totalUsedDiesel)} L`, 14, 30);
+    doc.setFontSize(11); doc.text("Date Wise - Total Amount", 14, 38);
+    autoTable(doc, { startY: 42, head: [["Date", "Records", "Diesel (L)", "Payable - Total Amount (Rs.)", "Paid (Rs.)", "Balance (Rs.)"]], body: filteredUsedByDate.map((r) => [r.date, String(r.count), `${formatNumber(r.diesel)} L`, `Rs. ${formatNumber(r.amount)}`, `Rs. ${formatNumber(r.paid)}`, `Rs. ${formatNumber(r.balance)}`]), foot: [["TOTAL", String(filteredUsedExpenses.length), `${formatNumber(filteredUsedDiesel)} L`, `Rs. ${formatNumber(filteredUsedPayable)}`, `Rs. ${formatNumber(filteredUsedPaid)}`, `Rs. ${formatNumber(filteredUsedPayable - filteredUsedPaid)}`]], styles: { fontSize: 9 }, headStyles: { fillColor: [37, 99, 235] } });
+    const y1 = (doc as any).lastAutoTable.finalY + 8; doc.text("Machine Wise - Total Amount", 14, y1);
+    autoTable(doc, { startY: y1 + 4, head: [["Machine", "Records", "Diesel (L)", "Total Amount (Rs.)", "Paid (Rs.)", "Balance (Rs.)"]], body: filteredUsedByMachine.map((m) => [m.machine, String(m.count), `${formatNumber(m.diesel)} L`, `Rs. ${formatNumber(m.amount)}`, `Rs. ${formatNumber(m.paid)}`, `Rs. ${formatNumber(m.balance)}`]), styles: { fontSize: 9 }, headStyles: { fillColor: [30, 41, 59] } });
+    doc.save(`Total-Amount-Summary-Branch-${branchId}-${new Date().toISOString().slice(0, 10)}.pdf`);
+  };
+  const downloadTotalAmountExcel = () => {
+    const wb = XLSX.utils.book_new();
+    const ws1 = XLSX.utils.aoa_to_sheet([["DEARO - Total Amount Summary"],[`Branch: ${branchId}`, `Date: ${new Date().toLocaleDateString()}`],[],["Metric","Value"],["Total Amount - Payable (Rs.)", totalPayable],["Total Paid (Rs.)", totalPaid],["Total Balance (Rs.)", totalBalance],["Total Diesel Used (L)", totalUsedDiesel],["Total Records", expenses.length]]); ws1["!cols"] = [{ wch: 30 }, { wch: 20 }]; XLSX.utils.book_append_sheet(wb, ws1, "Summary");
+    const ws2 = XLSX.utils.aoa_to_sheet([["Date","Records","Diesel (L)","Total Amount - Payable (Rs.)","Paid (Rs.)","Balance (Rs.)"], ...filteredUsedByDate.map((r) => [r.date, r.count, r.diesel, r.amount, r.paid, r.balance]), ["TOTAL", filteredUsedExpenses.length, filteredUsedDiesel, filteredUsedPayable, filteredUsedPaid, filteredUsedPayable - filteredUsedPaid]]); ws2["!cols"] = [{ wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 22 }, { wch: 14 }, { wch: 16 }]; XLSX.utils.book_append_sheet(wb, ws2, "Date Wise");
+    const ws3 = XLSX.utils.aoa_to_sheet([["Machine","Records","Diesel (L)","Total Amount (Rs.)","Paid (Rs.)","Balance (Rs.)"], ...filteredUsedByMachine.map((m) => [m.machine, m.count, m.diesel, m.amount, m.paid, m.balance])]); ws3["!cols"] = [{ wch: 22 }, { wch: 10 }, { wch: 14 }, { wch: 18 }, { wch: 14 }, { wch: 16 }]; XLSX.utils.book_append_sheet(wb, ws3, "Machine Wise");
+    XLSX.writeFile(wb, `Total-Amount-Summary-Branch-${branchId}-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
+  // ✅ REMAINING DIESEL / BALANCE - Initial - Used Summary PDF / Excel
+  const downloadRemainingPDF = () => {
+    const doc = new jsPDF(); doc.setFontSize(16); doc.text("DEARO - Remaining Diesel & Balance Summary", 14, 15); doc.setFontSize(10); doc.text(`Branch: ${branchId}  |  Date: ${new Date().toLocaleDateString()}`, 14, 23);
+    doc.text(`Initial Diesel: ${formatNumber(initialDieselStock)} L  |  Used: ${formatNumber(totalUsedDiesel)} L  |  Remaining: ${formatNumber(displayRemainingDiesel)} L`, 14, 30);
+    doc.text(`Remaining Balance: Remaining Diesel ${formatNumber(displayRemainingDiesel)} L x Rs. ${DIESEL_PRICE} = Rs. ${formatNumber(displayRemainingBalance)}`, 14, 37);
+    doc.setFontSize(11); doc.text("Calculation - Initial - Used = Remaining", 14, 45);
+    autoTable(doc, { startY: 49, head: [["Description", "Diesel (L)", "Amount (Rs.)", "Percentage"]], body: [["Initial Diesel Stock", `${formatNumber(initialDieselStock)} L`, `Rs. ${formatNumber(initialTotalAmount)}`, "100%"], ["Diesel Used", `${formatNumber(totalUsedDiesel)} L`, `Rs. ${formatNumber(totalPayable)}`, `${usedPercent.toFixed(1)}%`], ["Remaining Diesel", `${formatNumber(displayRemainingDiesel)} L`, `Rs. ${formatNumber(displayRemainingBalance)}`, `${remainingPercent.toFixed(1)}%`]], foot: [["CHECK: Initial - Used = Remaining", `${formatNumber(initialDieselStock)} - ${formatNumber(totalUsedDiesel)} = ${formatNumber(displayRemainingDiesel)} L`, `Rs. ${formatNumber(displayRemainingBalance)}`, ""]], styles: { fontSize: 10 }, headStyles: { fillColor: [249, 115, 22] } });
+    const y1 = (doc as any).lastAutoTable.finalY + 8; doc.text("Date Wise Used - For Remaining Calculation", 14, y1);
+    autoTable(doc, { startY: y1 + 4, head: [["Date", "Records", "Diesel Used (L)", "Payable (Rs.)"]], body: filteredUsedByDate.map((r) => [r.date, String(r.count), `${formatNumber(r.diesel)} L`, `Rs. ${formatNumber(r.amount)}`]), foot: [["TOTAL USED", String(filteredUsedExpenses.length), `${formatNumber(filteredUsedDiesel)} L`, `Rs. ${formatNumber(filteredUsedPayable)}`]], styles: { fontSize: 9 }, headStyles: { fillColor: [30, 41, 59] } });
+    doc.save(`Remaining-Summary-Branch-${branchId}-${new Date().toISOString().slice(0, 10)}.pdf`);
+  };
+  const downloadRemainingExcel = () => {
+    const wb = XLSX.utils.book_new();
+    const ws1 = XLSX.utils.aoa_to_sheet([["DEARO - Remaining Diesel & Balance Summary"],[`Branch: ${branchId}`, `Date: ${new Date().toLocaleDateString()}`],[],["Description","Diesel (L)","Amount (Rs.)","Percentage"],["Initial Diesel Stock", initialDieselStock, initialTotalAmount, "100%"],["Diesel Used", totalUsedDiesel, totalPayable, `${usedPercent.toFixed(1)}%`],["Remaining Diesel", displayRemainingDiesel, displayRemainingBalance, `${remainingPercent.toFixed(1)}%`],[],["Formula","Value"],["Remaining Diesel = Initial - Used", `${initialDieselStock} - ${totalUsedDiesel} = ${displayRemainingDiesel} L`],["Remaining Balance = Remaining Diesel x 397", `${displayRemainingDiesel} x ${DIESEL_PRICE} = Rs. ${displayRemainingBalance}`]]); ws1["!cols"] = [{ wch: 35 }, { wch: 18 }, { wch: 20 }, { wch: 14 }]; XLSX.utils.book_append_sheet(wb, ws1, "Remaining Summary");
+    const ws2 = XLSX.utils.aoa_to_sheet([["Date","Records","Diesel Used (L)","Payable (Rs.)"], ...filteredUsedByDate.map((r) => [r.date, r.count, r.diesel, r.amount]), ["TOTAL USED", filteredUsedExpenses.length, filteredUsedDiesel, filteredUsedPayable]]); ws2["!cols"] = [{ wch: 14 }, { wch: 10 }, { wch: 16 }, { wch: 18 }]; XLSX.utils.book_append_sheet(wb, ws2, "Date Wise Used");
+    XLSX.writeFile(wb, `Remaining-Summary-Branch-${branchId}-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
+  const getModalTitle = () => {
+    if (modalType === "initial") return "Initial Stock Summary - 745L Kohomada Hadune?";
+    if (modalType === "used") return "Diesel Used Summary - diesel_expenses";
+    if (modalType === "totalAmount") return "Total Amount Summary - Payable Total";
+    if (modalType === "remaining") return "Remaining Diesel Summary - Initial - Used";
+    if (modalType === "remainingBalance") return "Remaining Balance Summary - Remaining x Rs.397";
+    return "Total Diesel Summary";
+  };
+  const getModalPDF = () => { if (modalType === "used") return downloadUsedPDF; if (modalType === "totalAmount") return downloadTotalAmountPDF; if (modalType === "remaining" || modalType === "remainingBalance") return downloadRemainingPDF; return downloadInitialPDF; };
+  const getModalExcel = () => { if (modalType === "used") return downloadUsedExcel; if (modalType === "totalAmount") return downloadTotalAmountExcel; if (modalType === "remaining" || modalType === "remainingBalance") return downloadRemainingExcel; return downloadInitialExcel; };
 
   return (
     <main className="min-h-screen bg-slate-950 p-4 text-white md:p-6">
@@ -186,13 +215,14 @@ export default function ViewDieselExpensesPage() {
           </div>
         </header>
 
+  
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           <SummaryCard title="Initial Diesel" subtitle="Original Stock • Modal eke wage" value={`${formatNumber(displayInitialDiesel)} L`} icon={<Fuel size={22}/>} color="violet" onEye={() => handleCardEye("initial")} eyeTitle="745L kohomada hadune? Date wise balanna" />
           <SummaryCard title="Initial Amount" subtitle={`Original Amount • Total Stock Value`} value={`Rs. ${formatNumber(displayInitialAmount)}`} icon={<Banknote size={22}/>} color="violet" onEye={() => handleCardEye("initial")} eyeTitle="Initial Amount Date wise balanna" />
           <SummaryCard title="Diesel Used" subtitle={isFiltered ? `Filtered: ${fDiesel}L` : "Table eke diesel wala ekathuwa"} value={`${formatNumber(displayDieselUsed)} L`} icon={<Droplets size={22}/>} color="cyan" onEye={() => handleCardEye("used")} eyeTitle="diesel_expenses Summary PDF / Excel walin balanna" />
-          <SummaryCard title="Total Amount" subtitle={isFiltered ? `Filtered payable` : "Table eke viyadam wela thiyena amount"} value={`Rs. ${formatNumber(displayTotalAmount)}`} icon={<Wallet size={22}/>} color="blue" onEye={() => handleCardEye("used")} eyeTitle="Total Amount Date wise balanna" />
-          <SummaryCard title="Remaining Diesel" subtitle="Total Diesel - Diesel Used" value={`${formatNumber(displayRemainingDiesel)} L`} icon={<Droplets size={22}/>} color="orange" onEye={() => handleCardEye("remaining")} eyeTitle="Remaining Diesel balanna" />
-          <SummaryCard title="Remaining Balance" subtitle={`Remaining Diesel x Rs. ${DIESEL_PRICE}`} value={`Rs. ${formatNumber(displayRemainingBalance)}`} icon={<CreditCard size={22}/>} color="green" onEye={() => handleCardEye("remaining")} eyeTitle="Remaining Balance balanna" />
+          <SummaryCard title="Total Amount" subtitle={isFiltered ? `Filtered payable` : "Table eke viyadam wela thiyena amount"} value={`Rs. ${formatNumber(displayTotalAmount)}`} icon={<Wallet size={22}/>} color="blue" onEye={() => handleCardEye("totalAmount")} eyeTitle="Total Amount Summary balanna" />
+          <SummaryCard title="Remaining Diesel" subtitle="Total Diesel - Diesel Used" value={`${formatNumber(displayRemainingDiesel)} L`} icon={<Droplets size={22}/>} color="orange" onEye={() => handleCardEye("remaining")} eyeTitle="Remaining Diesel Summary balanna" />
+          <SummaryCard title="Remaining Balance" subtitle={`Remaining Diesel x Rs. ${DIESEL_PRICE}`} value={`Rs. ${formatNumber(displayRemainingBalance)}`} icon={<CreditCard size={22}/>} color="green" onEye={() => handleCardEye("remainingBalance")} eyeTitle="Remaining Balance Summary balanna" />
           <SummaryCard title="Total Diesel" subtitle="Initial stock" value={`${formatNumber(displayTotalDiesel)} L`} icon={<AlertCircle size={22}/>} color="red" onEye={() => handleCardEye("total")} eyeTitle="Total Diesel balanna" />
         </section>
 
@@ -210,18 +240,51 @@ export default function ViewDieselExpensesPage() {
         </section>
       </div>
 
-      {/* ✅ MODAL - Initial nam Initial History, Used nam diesel_expenses Summary */}
       {showInitialSummary && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm overflow-y-auto" onClick={() => setShowInitialSummary(false)}>
           <div className="w-full max-w-3xl my-6 rounded-3xl border border-slate-700 bg-[#0d1527] shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-slate-800 bg-slate-900/80 px-6 py-4">
-              <div className="flex items-center gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400"><BarChart3 size={20}/></div><div><h2 className="text-base font-black uppercase tracking-wider">{modalType === "initial" ? "Initial Stock Summary - 745L Kohomada Hadune?" : "Diesel Used Summary - diesel_expenses"}</h2><p className="text-[11px] text-slate-500 mt-0.5">Branch • {branchId} • {expenses.length} Records • {dateWiseSummary.length} Days</p></div></div>
+              <div className="flex items-center gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400"><BarChart3 size={20}/></div><div><h2 className="text-base font-black uppercase tracking-wider">{getModalTitle()}</h2><p className="text-[11px] text-slate-500 mt-0.5">Branch • {branchId} • {expenses.length} Records • {dateWiseSummary.length} Days</p></div></div>
               <button onClick={() => setShowInitialSummary(false)} className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-500 text-white font-black hover:bg-red-600"><X size={16}/></button>
             </div>
 
             <div className="max-h-[70vh] overflow-y-auto p-6 space-y-5">
 
-              {/* ✅ DIESEL USED MODAL EKA - diesel_expenses Summary */}
+              {/* ✅ TOTAL AMOUNT MODAL */}
+              {modalType === "totalAmount" && (
+                <>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Total Amount</p><p className="mt-2 text-lg font-black text-blue-300">Rs. {formatNumber(totalPayable)}</p><p className="text-[10px] text-slate-500 mt-1">Payable Total</p></div>
+                    <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Total Paid</p><p className="mt-2 text-lg font-black text-emerald-300">Rs. {formatNumber(totalPaid)}</p><p className="text-[10px] text-slate-500 mt-1">Paid Total</p></div>
+                    <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Balance</p><p className="mt-2 text-lg font-black text-red-300">Rs. {formatNumber(totalBalance)}</p><p className="text-[10px] text-slate-500 mt-1">Payable - Paid</p></div>
+                    <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Diesel Used</p><p className="mt-2 text-lg font-black text-cyan-300">{formatNumber(totalUsedDiesel)} L</p><p className="text-[10px] text-slate-500 mt-1">{expenses.length} Records</p></div>
+                  </div>
+                  <div className="flex gap-2"><button onClick={downloadTotalAmountPDF} className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 hover:bg-red-500 py-3 text-xs font-black uppercase"><FileText size={14}/> Download PDF - Total Amount</button><button onClick={downloadTotalAmountExcel} className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 py-3 text-xs font-black uppercase"><FileSpreadsheet size={14}/> Download Excel</button></div>
+                  <div><h3 className="text-xs font-black uppercase tracking-widest text-blue-300 mb-3">Date Wise - Total Amount</h3><div className="overflow-hidden rounded-2xl border border-blue-500/20"><table className="w-full text-sm"><thead className="bg-slate-900"><tr className="text-left text-[10px] uppercase tracking-wider text-slate-500"><th className="px-4 py-3">Date</th><th className="px-4 py-3 text-center">Records</th><th className="px-4 py-3 text-right">Diesel</th><th className="px-4 py-3 text-right">Total Amount</th><th className="px-4 py-3 text-right">Paid</th><th className="px-4 py-3 text-right">Balance</th></tr></thead><tbody className="divide-y divide-slate-800/70">{filteredUsedByDate.map((row) => (<tr key={row.date} className="hover:bg-slate-800/40"><td className="px-4 py-3 font-bold">{row.date}</td><td className="px-4 py-3 text-center"><span className="rounded-lg bg-slate-800 px-2 py-1 text-[11px] font-bold">{row.count}</span></td><td className="px-4 py-3 text-right text-cyan-300 font-bold">{formatNumber(row.diesel)} L</td><td className="px-4 py-3 text-right font-bold text-blue-300">Rs. {formatNumber(row.amount)}</td><td className="px-4 py-3 text-right text-emerald-300">Rs. {formatNumber(row.paid)}</td><td className="px-4 py-3 text-right text-red-300">Rs. {formatNumber(row.balance)}</td></tr>))}</tbody><tfoot className="bg-slate-900"><tr className="font-black"><td className="px-4 py-3 text-slate-400">Total</td><td className="px-4 py-3 text-center">{filteredUsedExpenses.length}</td><td className="px-4 py-3 text-right">{formatNumber(filteredUsedDiesel)} L</td><td className="px-4 py-3 text-right text-blue-300">Rs. {formatNumber(filteredUsedPayable)}</td><td className="px-4 py-3 text-right">Rs. {formatNumber(filteredUsedPaid)}</td><td className="px-4 py-3 text-right">Rs. {formatNumber(filteredUsedPayable - filteredUsedPaid)}</td></tr></tfoot></table></div></div>
+                  <div><h3 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-3">Machine Wise - Total Amount</h3><div className="space-y-2">{filteredUsedByMachine.map((m) => (<div key={m.machine} className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-3"><div><p className="font-bold text-sm">{m.machine}</p><p className="text-[11px] text-slate-500">{m.count} records • {formatNumber(m.diesel)} L</p></div><div className="text-right"><p className="font-black text-blue-300 text-sm">Rs. {formatNumber(m.amount)}</p><p className="text-[11px] text-slate-400">Paid Rs. {formatNumber(m.paid)} • Bal Rs. {formatNumber(m.balance)}</p></div></div>))}</div></div>
+                </>
+              )}
+
+              {/* ✅ REMAINING DIESEL / BALANCE MODAL */}
+              {(modalType === "remaining" || modalType === "remainingBalance") && (
+                <>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <div className="rounded-2xl border border-violet-500/20 bg-violet-500/5 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Initial Diesel</p><p className="mt-2 text-lg font-black text-violet-300">{formatNumber(initialDieselStock)} L</p><p className="text-[10px] text-slate-500 mt-1">Rs. {formatNumber(initialTotalAmount)}</p></div>
+                    <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Diesel Used</p><p className="mt-2 text-lg font-black text-cyan-300">{formatNumber(totalUsedDiesel)} L</p><p className="text-[10px] text-slate-500 mt-1">Rs. {formatNumber(totalPayable)}</p></div>
+                    <div className="rounded-2xl border border-orange-500/20 bg-orange-500/5 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Remaining Diesel</p><p className="mt-2 text-lg font-black text-orange-300">{formatNumber(displayRemainingDiesel)} L</p><p className="text-[10px] text-slate-500 mt-1">{remainingPercent.toFixed(1)}% Left</p></div>
+                    <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Remaining Balance</p><p className="mt-2 text-lg font-black text-emerald-300">Rs. {formatNumber(displayRemainingBalance)}</p><p className="text-[10px] text-slate-500 mt-1">{formatNumber(displayRemainingDiesel)} L x Rs. {DIESEL_PRICE}</p></div>
+                  </div>
+                  <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4 space-y-2 text-sm">
+                    <p><span className="text-slate-400">Formula Diesel:</span> <span className="font-bold">{formatNumber(initialDieselStock)} L - {formatNumber(totalUsedDiesel)} L = <span className="text-orange-300">{formatNumber(displayRemainingDiesel)} L</span></span></p>
+                    <p><span className="text-slate-400">Formula Balance:</span> <span className="font-bold">{formatNumber(displayRemainingDiesel)} L x Rs. {DIESEL_PRICE} = <span className="text-emerald-300">Rs. {formatNumber(displayRemainingBalance)}</span></span></p>
+                    <div><div className="flex justify-between text-[11px] font-bold text-slate-400 mb-2"><span>Used {usedPercent.toFixed(1)}%</span><span>Remaining {remainingPercent.toFixed(1)}%</span></div><div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-orange-500 transition-all" style={{ width: `${Math.min(100, usedPercent)}%` }} /></div></div>
+                  </div>
+                  <div className="flex gap-2"><button onClick={downloadRemainingPDF} className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 hover:bg-red-500 py-3 text-xs font-black uppercase"><FileText size={14}/> Download PDF - Remaining</button><button onClick={downloadRemainingExcel} className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 py-3 text-xs font-black uppercase"><FileSpreadsheet size={14}/> Download Excel</button></div>
+                  <div><h3 className="text-xs font-black uppercase tracking-widest text-orange-300 mb-3">Date Wise Used - Remaining Calculation</h3><div className="overflow-hidden rounded-2xl border border-orange-500/20"><table className="w-full text-sm"><thead className="bg-slate-900"><tr className="text-left text-[10px] uppercase tracking-wider text-slate-500"><th className="px-4 py-3">Date</th><th className="px-4 py-3 text-center">Records</th><th className="px-4 py-3 text-right">Diesel Used</th><th className="px-4 py-3 text-right">Payable</th></tr></thead><tbody className="divide-y divide-slate-800/70">{filteredUsedByDate.map((row) => (<tr key={row.date} className="hover:bg-slate-800/40"><td className="px-4 py-3 font-bold">{row.date}</td><td className="px-4 py-3 text-center"><span className="rounded-lg bg-slate-800 px-2 py-1 text-[11px] font-bold">{row.count}</span></td><td className="px-4 py-3 text-right text-cyan-300 font-bold">{formatNumber(row.diesel)} L</td><td className="px-4 py-3 text-right">Rs. {formatNumber(row.amount)}</td></tr>))}</tbody><tfoot className="bg-slate-900"><tr className="font-black"><td className="px-4 py-3 text-slate-400">Total Used</td><td className="px-4 py-3 text-center">{filteredUsedExpenses.length}</td><td className="px-4 py-3 text-right text-cyan-300">{formatNumber(filteredUsedDiesel)} L</td><td className="px-4 py-3 text-right">Rs. {formatNumber(filteredUsedPayable)}</td></tr><tr className="font-black text-orange-300"><td className="px-4 py-3">Remaining</td><td className="px-4 py-3 text-center">-</td><td className="px-4 py-3 text-right">{formatNumber(displayRemainingDiesel)} L</td><td className="px-4 py-3 text-right">Rs. {formatNumber(displayRemainingBalance)}</td></tr></tfoot></table></div></div>
+                </>
+              )}
+
+              {/* ✅ DIESEL USED MODAL */}
               {modalType === "used" && (
                 <>
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -230,40 +293,14 @@ export default function ViewDieselExpensesPage() {
                     <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Total Paid</p><p className="mt-2 text-lg font-black text-emerald-300">Rs. {formatNumber(totalPaid)}</p><p className="text-[10px] text-slate-500 mt-1">Paid Total</p></div>
                     <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Balance</p><p className="mt-2 text-lg font-black text-red-300">Rs. {formatNumber(totalBalance)}</p><p className="text-[10px] text-slate-500 mt-1">Payable - Paid</p></div>
                   </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <div className="flex items-center gap-1.5 h-9 rounded-lg border border-slate-600 bg-slate-900 px-3"><Calendar size={14} className="text-slate-400"/><input type="date" value={usedFilterDate} onChange={e=>setUsedFilterDate(e.target.value)} className="bg-transparent text-xs outline-none" /></div>
-                    <select value={usedFilterMachine} onChange={e=>setUsedFilterMachine(e.target.value)} className="h-9 rounded-lg border border-slate-600 bg-slate-900 px-3 text-xs outline-none"><option value="">All Machines</option>{machines.map(m=> <option key={m} value={m}>{m}</option>)}{expenses.map(e=>e.machine).filter((v,i,a)=>v && !machines.includes(v) && a.indexOf(v)===i).map(m=> <option key={m} value={m}>{m}</option>)}</select>
-                    {(usedFilterDate || usedFilterMachine) && <button onClick={()=>{setUsedFilterDate(""); setUsedFilterMachine("");}} className="h-9 px-3 rounded-lg bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold flex items-center gap-1"><X size={12}/>Clear</button>}
-                  </div>
-
-                  <div className="flex gap-2">
-                    <button onClick={downloadUsedPDF} className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 hover:bg-red-500 py-3 text-xs font-black uppercase"><FileText size={14}/> Download PDF - Used Summary</button>
-                    <button onClick={downloadUsedExcel} className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 py-3 text-xs font-black uppercase"><FileSpreadsheet size={14}/> Download Excel - 4 Sheets</button>
-                  </div>
-
-                  <div>
-                    <div className="flex items-center justify-between mb-3"><h3 className="text-xs font-black uppercase tracking-widest text-cyan-300">Date Wise Summary • diesel_expenses</h3><span className="rounded-lg bg-cyan-500/15 text-cyan-300 px-2.5 py-1 text-[11px] font-bold">{filteredUsedByDate.length} Days • {filteredUsedExpenses.length} Records</span></div>
-                    {filteredUsedByDate.length === 0 ? (<p className="rounded-2xl border border-slate-800 bg-slate-900/50 px-4 py-6 text-center text-sm text-slate-500">Thama records na</p>) : (
-                      <div className="overflow-hidden rounded-2xl border border-cyan-500/20"><table className="w-full text-sm"><thead className="bg-slate-900"><tr className="text-left text-[10px] uppercase tracking-wider text-slate-500"><th className="px-4 py-3">Date</th><th className="px-4 py-3 text-center">Records</th><th className="px-4 py-3 text-right">Diesel</th><th className="px-4 py-3 text-right">Payable</th><th className="px-4 py-3 text-right">Paid</th><th className="px-4 py-3 text-right">Balance</th></tr></thead><tbody className="divide-y divide-slate-800/70">{filteredUsedByDate.map((row) => (<tr key={row.date} className="hover:bg-slate-800/40"><td className="px-4 py-3"><p className="font-bold">{row.date}</p><p className="text-[11px] text-slate-500">{Array.from(row.machines).slice(0,2).join(", ")}{row.machines.size > 2 ? ` +${row.machines.size - 2} more` : ""}</p></td><td className="px-4 py-3 text-center"><span className="rounded-lg bg-slate-800 px-2 py-1 text-[11px] font-bold">{row.count}</span></td><td className="px-4 py-3 text-right font-bold text-cyan-300">{formatNumber(row.diesel)} L</td><td className="px-4 py-3 text-right font-bold">Rs. {formatNumber(row.amount)}</td><td className="px-4 py-3 text-right font-bold text-emerald-300">Rs. {formatNumber(row.paid)}</td><td className="px-4 py-3 text-right font-bold text-red-300">Rs. {formatNumber(row.balance)}</td></tr>))}</tbody><tfoot className="bg-slate-900"><tr className="font-black"><td className="px-4 py-3 text-slate-400">Total</td><td className="px-4 py-3 text-center">{filteredUsedExpenses.length}</td><td className="px-4 py-3 text-right text-cyan-300">{formatNumber(filteredUsedDiesel)} L</td><td className="px-4 py-3 text-right">Rs. {formatNumber(filteredUsedPayable)}</td><td className="px-4 py-3 text-right">Rs. {formatNumber(filteredUsedPaid)}</td><td className="px-4 py-3 text-right">Rs. {formatNumber(filteredUsedPayable - filteredUsedPaid)}</td></tr></tfoot></table></div>
-                    )}
-                  </div>
-
-                  <div>
-                    <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-3">Machine Wise Summary • diesel_expenses</h3>
-                    <div className="space-y-2">{filteredUsedByMachine.map((m) => (<div key={m.machine} className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-3"><div><p className="font-bold text-sm">{m.machine}</p><p className="text-[11px] text-slate-500">{m.count} records</p></div><div className="text-right"><p className="font-black text-cyan-300 text-sm">{formatNumber(m.diesel)} L</p><p className="text-[11px] text-slate-400">Rs. {formatNumber(m.amount)} • Paid Rs. {formatNumber(m.paid)} • Bal Rs. {formatNumber(m.balance)}</p></div></div>))}</div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-3">All Records • diesel_expenses</h3>
-                    <div className="overflow-hidden rounded-2xl border border-slate-800"><table className="w-full text-sm"><thead className="bg-slate-900"><tr className="text-left text-[10px] uppercase tracking-wider text-slate-500"><th className="px-4 py-3">Date</th><th className="px-4 py-3">Machine</th><th className="px-4 py-3 text-right">Diesel</th><th className="px-4 py-3 text-right">Payable</th><th className="px-4 py-3 text-right">Paid</th></tr></thead><tbody className="divide-y divide-slate-800/70">{[...filteredUsedExpenses].sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,50).map((e) => (<tr key={e.id} className="hover:bg-slate-800/40"><td className="px-4 py-3 font-bold">{String(e.date).slice(0,10)}</td><td className="px-4 py-3">{e.machine}</td><td className="px-4 py-3 text-right text-cyan-300 font-bold">{formatNumber(e.diesel)} L</td><td className="px-4 py-3 text-right">Rs. {formatNumber(e.payable)}</td><td className="px-4 py-3 text-right text-emerald-300">Rs. {formatNumber(e.paid)}</td></tr>))}</tbody></table></div>
-                    <p className="text-[11px] text-slate-500 mt-2">* Modal eke 50 witharai penwanawa. PDF / Excel eke okkoma {filteredUsedExpenses.length} records thiyenawa.</p>
-                  </div>
+                  <div className="flex gap-2"><button onClick={downloadUsedPDF} className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 hover:bg-red-500 py-3 text-xs font-black uppercase"><FileText size={14}/> Download PDF - Used Summary</button><button onClick={downloadUsedExcel} className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 py-3 text-xs font-black uppercase"><FileSpreadsheet size={14}/> Download Excel - 4 Sheets</button></div>
+                  <div><div className="flex items-center justify-between mb-3"><h3 className="text-xs font-black uppercase tracking-widest text-cyan-300">Date Wise Summary • diesel_expenses</h3><span className="rounded-lg bg-cyan-500/15 text-cyan-300 px-2.5 py-1 text-[11px] font-bold">{filteredUsedByDate.length} Days • {filteredUsedExpenses.length} Records</span></div><div className="overflow-hidden rounded-2xl border border-cyan-500/20"><table className="w-full text-sm"><thead className="bg-slate-900"><tr className="text-left text-[10px] uppercase tracking-wider text-slate-500"><th className="px-4 py-3">Date</th><th className="px-4 py-3 text-center">Records</th><th className="px-4 py-3 text-right">Diesel</th><th className="px-4 py-3 text-right">Payable</th><th className="px-4 py-3 text-right">Paid</th><th className="px-4 py-3 text-right">Balance</th></tr></thead><tbody className="divide-y divide-slate-800/70">{filteredUsedByDate.map((row) => (<tr key={row.date} className="hover:bg-slate-800/40"><td className="px-4 py-3"><p className="font-bold">{row.date}</p><p className="text-[11px] text-slate-500">{Array.from(row.machines).slice(0,2).join(", ")}{row.machines.size > 2 ? ` +${row.machines.size - 2} more` : ""}</p></td><td className="px-4 py-3 text-center"><span className="rounded-lg bg-slate-800 px-2 py-1 text-[11px] font-bold">{row.count}</span></td><td className="px-4 py-3 text-right font-bold text-cyan-300">{formatNumber(row.diesel)} L</td><td className="px-4 py-3 text-right font-bold">Rs. {formatNumber(row.amount)}</td><td className="px-4 py-3 text-right font-bold text-emerald-300">Rs. {formatNumber(row.paid)}</td><td className="px-4 py-3 text-right font-bold text-red-300">Rs. {formatNumber(row.balance)}</td></tr>))}</tbody><tfoot className="bg-slate-900"><tr className="font-black"><td className="px-4 py-3 text-slate-400">Total</td><td className="px-4 py-3 text-center">{filteredUsedExpenses.length}</td><td className="px-4 py-3 text-right text-cyan-300">{formatNumber(filteredUsedDiesel)} L</td><td className="px-4 py-3 text-right">Rs. {formatNumber(filteredUsedPayable)}</td><td className="px-4 py-3 text-right">Rs. {formatNumber(filteredUsedPaid)}</td><td className="px-4 py-3 text-right">Rs. {formatNumber(filteredUsedPayable - filteredUsedPaid)}</td></tr></tfoot></table></div></div>
+                  <div><h3 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-3">Machine Wise Summary</h3><div className="space-y-2">{filteredUsedByMachine.map((m) => (<div key={m.machine} className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-3"><div><p className="font-bold text-sm">{m.machine}</p><p className="text-[11px] text-slate-500">{m.count} records</p></div><div className="text-right"><p className="font-black text-cyan-300 text-sm">{formatNumber(m.diesel)} L</p><p className="text-[11px] text-slate-400">Rs. {formatNumber(m.amount)} • Paid Rs. {formatNumber(m.paid)} • Bal Rs. {formatNumber(m.balance)}</p></div></div>))}</div></div>
                 </>
               )}
 
-              {/* ✅ INITIAL MODAL EKA */}
-              {modalType !== "used" && (
+              {/* ✅ INITIAL / TOTAL MODAL */}
+              {(modalType === "initial" || modalType === "total") && (
                 <>
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                     <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Initial Diesel</p><p className="mt-2 text-lg font-black text-cyan-300">{formatNumber(initialDieselStock)} L</p><p className="text-[10px] text-slate-500 mt-1">Total Add karapu gaana</p></div>
@@ -272,18 +309,15 @@ export default function ViewDieselExpensesPage() {
                     <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Remaining</p><p className="mt-2 text-lg font-black text-emerald-300">{formatNumber(Math.max(0, initialDieselStock - totalUsedDiesel))} L</p><p className="text-[10px] text-slate-500 mt-1">Rs. {formatNumber(Math.max(0, initialDieselStock - totalUsedDiesel) * DIESEL_PRICE)}</p></div>
                   </div>
                   <div><div className="flex justify-between text-[11px] font-bold text-slate-400 mb-2"><span>Used {initialDieselStock > 0 ? Math.round((totalUsedDiesel / initialDieselStock) * 100) : 0}%</span><span>Remaining {initialDieselStock > 0 ? Math.round((Math.max(0, initialDieselStock - totalUsedDiesel) / initialDieselStock) * 100) : 0}%</span></div><div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-all" style={{ width: `${initialDieselStock > 0 ? Math.min(100, (totalUsedDiesel / initialDieselStock) * 100) : 0}%` }} /></div></div>
-                  <div>
-                    <div className="flex flex-wrap items-center justify-between gap-2 mb-3"><h3 className="text-xs font-black uppercase tracking-widest text-cyan-300">Initial Add History • Date Wise • Branch {branchId}</h3><div className="flex items-center gap-2"><div className="flex items-center gap-1.5 h-9 rounded-lg border border-slate-600 bg-slate-900 px-3"><Calendar size={14} className="text-slate-400"/><input type="date" value={initialFilterDate} onChange={e=>setInitialFilterDate(e.target.value)} className="bg-transparent text-xs outline-none" /></div>{initialFilterDate && <button onClick={()=>setInitialFilterDate("")} className="h-9 px-3 rounded-lg bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold flex items-center gap-1"><X size={12}/>Clear</button>}<span className="rounded-lg bg-cyan-500/15 text-cyan-300 px-2.5 py-1 text-[11px] font-bold">{filteredInitialByDate.length} Days • {initialHistory.length} Adds</span></div></div>
-                    <div className="flex gap-2 mb-3"><button onClick={downloadInitialPDF} className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 hover:bg-red-500 py-2.5 text-xs font-black uppercase"><FileText size={14}/> Download PDF - 745L History</button><button onClick={downloadInitialExcel} className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 py-2.5 text-xs font-black uppercase"><FileSpreadsheet size={14}/> Download Excel</button></div>
-                    {filteredInitialByDate.length === 0 ? (<p className="rounded-2xl border border-slate-800 bg-slate-900/50 px-4 py-6 text-center text-sm text-slate-500">Thama Initial Add History na<br/><span className="text-[11px]">DB Total: {formatNumber(initialDieselStock)} L / Rs. {formatNumber(initialTotalAmount)}</span></p>) : (<div className="overflow-hidden rounded-2xl border border-cyan-500/20"><table className="w-full text-sm"><thead className="bg-slate-900"><tr className="text-left text-[10px] uppercase tracking-wider text-slate-500"><th className="px-4 py-3">Date</th><th className="px-4 py-3 text-center">Adds</th><th className="px-4 py-3 text-right">Initial Diesel</th><th className="px-4 py-3 text-right">Initial Amount</th><th className="px-4 py-3 text-right">Running Total</th></tr></thead><tbody className="divide-y divide-slate-800/70">{(() => { let running = 0; const sorted = [...filteredInitialByDate].sort((a,b)=>{ if(a.date==="No Date") return -1; if(b.date==="No Date") return 1; return a.date.localeCompare(b.date); }); return sorted.map((row) => { running += row.diesel; return (<tr key={row.date} className="hover:bg-slate-800/40"><td className="px-4 py-3 font-bold">{row.date}</td><td className="px-4 py-3 text-center"><span className="rounded-lg bg-slate-800 px-2 py-1 text-[11px] font-bold">{row.count}</span></td><td className="px-4 py-3 text-right font-bold text-cyan-300">{formatNumber(row.diesel)} L</td><td className="px-4 py-3 text-right font-bold">Rs. {formatNumber(row.amount)}</td><td className="px-4 py-3 text-right font-bold text-emerald-300">{formatNumber(running)} L</td></tr>); }); })()}</tbody><tfoot className="bg-slate-900"><tr className="font-black"><td className="px-4 py-3 text-slate-400">Total (History)</td><td className="px-4 py-3 text-center">{initialHistory.length}</td><td className="px-4 py-3 text-right text-cyan-300">{formatNumber(totalInitialHistoryDiesel)} L</td><td className="px-4 py-3 text-right">Rs. {formatNumber(totalInitialHistoryAmount)}</td><td className="px-4 py-3 text-right text-emerald-300">{formatNumber(totalInitialHistoryDiesel)} L</td></tr></tfoot></table></div>)}
-                  </div>
+                  <div><div className="flex flex-wrap items-center justify-between gap-2 mb-3"><h3 className="text-xs font-black uppercase tracking-widest text-cyan-300">Initial Add History • Date Wise • Branch {branchId}</h3><div className="flex items-center gap-2"><div className="flex items-center gap-1.5 h-9 rounded-lg border border-slate-600 bg-slate-900 px-3"><Calendar size={14} className="text-slate-400"/><input type="date" value={initialFilterDate} onChange={e=>setInitialFilterDate(e.target.value)} className="bg-transparent text-xs outline-none" /></div>{initialFilterDate && <button onClick={()=>setInitialFilterDate("")} className="h-9 px-3 rounded-lg bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold flex items-center gap-1"><X size={12}/>Clear</button>}<span className="rounded-lg bg-cyan-500/15 text-cyan-300 px-2.5 py-1 text-[11px] font-bold">{filteredInitialByDate.length} Days • {initialHistory.length} Adds</span></div></div><div className="flex gap-2 mb-3"><button onClick={downloadInitialPDF} className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 hover:bg-red-500 py-2.5 text-xs font-black uppercase"><FileText size={14}/> Download PDF - 745L History</button><button onClick={downloadInitialExcel} className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 py-2.5 text-xs font-black uppercase"><FileSpreadsheet size={14}/> Download Excel</button></div>{filteredInitialByDate.length === 0 ? (<p className="rounded-2xl border border-slate-800 bg-slate-900/50 px-4 py-6 text-center text-sm text-slate-500">Thama Initial Add History na<br/><span className="text-[11px]">DB Total: {formatNumber(initialDieselStock)} L / Rs. {formatNumber(initialTotalAmount)}</span></p>) : (<div className="overflow-hidden rounded-2xl border border-cyan-500/20"><table className="w-full text-sm"><thead className="bg-slate-900"><tr className="text-left text-[10px] uppercase tracking-wider text-slate-500"><th className="px-4 py-3">Date</th><th className="px-4 py-3 text-center">Adds</th><th className="px-4 py-3 text-right">Initial Diesel</th><th className="px-4 py-3 text-right">Initial Amount</th><th className="px-4 py-3 text-right">Running Total</th></tr></thead><tbody className="divide-y divide-slate-800/70">{(() => { let running = 0; const sorted = [...filteredInitialByDate].sort((a,b)=>{ if(a.date==="No Date") return -1; if(b.date==="No Date") return 1; return a.date.localeCompare(b.date); }); return sorted.map((row) => { running += row.diesel; return (<tr key={row.date} className="hover:bg-slate-800/40"><td className="px-4 py-3 font-bold">{row.date}</td><td className="px-4 py-3 text-center"><span className="rounded-lg bg-slate-800 px-2 py-1 text-[11px] font-bold">{row.count}</span></td><td className="px-4 py-3 text-right font-bold text-cyan-300">{formatNumber(row.diesel)} L</td><td className="px-4 py-3 text-right font-bold">Rs. {formatNumber(row.amount)}</td><td className="px-4 py-3 text-right font-bold text-emerald-300">{formatNumber(running)} L</td></tr>); }); })()}</tbody><tfoot className="bg-slate-900"><tr className="font-black"><td className="px-4 py-3 text-slate-400">Total (History)</td><td className="px-4 py-3 text-center">{initialHistory.length}</td><td className="px-4 py-3 text-right text-cyan-300">{formatNumber(totalInitialHistoryDiesel)} L</td><td className="px-4 py-3 text-right">Rs. {formatNumber(totalInitialHistoryAmount)}</td><td className="px-4 py-3 text-right text-emerald-300">{formatNumber(totalInitialHistoryDiesel)} L</td></tr></tfoot></table></div>)}</div>
                 </>
               )}
             </div>
 
             <div className="flex gap-2 border-t border-slate-800 bg-slate-900/80 px-6 py-4">
               <button onClick={() => setShowInitialSummary(false)} className="flex-1 rounded-xl bg-cyan-500 py-3 text-xs font-black uppercase tracking-wider text-slate-950 hover:bg-cyan-400">Close</button>
-              {modalType === "used" ? (<><button onClick={downloadUsedPDF} className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-4 py-3 text-xs font-bold hover:bg-red-500"><Download size={14}/> PDF</button><button onClick={downloadUsedExcel} className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-3 text-xs font-bold hover:bg-emerald-500"><Download size={14}/> Excel</button></>) : (<><button onClick={downloadInitialPDF} className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-4 py-3 text-xs font-bold hover:bg-red-500"><Download size={14}/> PDF</button><button onClick={downloadInitialExcel} className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-3 text-xs font-bold hover:bg-emerald-500"><Download size={14}/> Excel</button></>)}
+              <button onClick={getModalPDF()} className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-4 py-3 text-xs font-bold hover:bg-red-500"><Download size={14}/> PDF</button>
+              <button onClick={getModalExcel()} className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-3 text-xs font-bold hover:bg-emerald-500"><Download size={14}/> Excel</button>
               <button onClick={() => window.print()} className="rounded-xl border border-slate-700 px-5 py-3 text-xs font-bold hover:bg-slate-800">Print</button>
             </div>
           </div>
