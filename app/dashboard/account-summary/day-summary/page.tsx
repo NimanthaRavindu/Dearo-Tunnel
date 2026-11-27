@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useMemo, useState, useCallback } from "react";
-import { Calendar, Wallet, CreditCard, Building2, Loader2, Search, Download, Phone, Car, Receipt, TrendingDown, Scale } from "lucide-react";
+import { Calendar, Wallet, CreditCard, Building2, Loader2, Search, Download, Phone, Car, Receipt, TrendingDown, Scale, Plus, Equal } from "lucide-react";
 
 const fmt = (n: number) => `LKR ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
 const numeric = (v: any) => Number(v ?? 0) || 0;
@@ -53,6 +53,7 @@ export default function DaySummaryPage() {
   const [credits, setCredits] = useState<any[]>([]);
   const [branches, setBranches] = useState<any[]>([]);
   const [showCreditors, setShowCreditors] = useState(true);
+  const [showIncomeBreakdown, setShowIncomeBreakdown] = useState(true);
   const [allDates, setAllDates] = useState<string[]>([]);
   const [expenseRows, setExpenseRows] = useState<any[]>([]);
   const [allExpensesRaw, setAllExpensesRaw] = useState<any[]>([]);
@@ -87,8 +88,6 @@ export default function DaySummaryPage() {
       const uniqDates = Array.from(new Set(datesFromAll)).sort().reverse().slice(0, 15) as string[];
       setAllDates(uniqDates);
 
-      // ✅ FIX - summary eke credit eka balanne NAHA! sales_incomes eke credit = 0 nisa!
-      // Credit eka passe sales_credits eken gannawa!
       const normalizedSummary = summaryData.map((r: any) => {
         const paid = numeric(r.totalPaid ?? r.total_paid ?? r.paid ?? r.paid_amount ?? 0);
         const bid = String(r._forcedBranchId || getRecordBranchId(r) || r.branchId || r.branch_id || "");
@@ -97,8 +96,8 @@ export default function DaySummaryPage() {
           branchName: getName(bid, r.branchName || r.branch_name),
           date: String(r.date || "").slice(0, 10),
           paid,
-          credit: 0, // ✅ sales_incomes credit eka ignore karanawa - 0
-          income: paid, // ✅ Income eka passe Creditors eken add karanawa
+          credit: 0,
+          income: paid,
           amount: paid,
           discount: numeric(r.totalDiscount ?? r.total_discount ?? r.discount),
           count: numeric(r.entriesCount ?? r.entries_count ?? 0),
@@ -154,7 +153,6 @@ export default function DaySummaryPage() {
       }
       const expenseChunks = await Promise.all(expensePromises);
       let allExpenses = expenseChunks.flat();
-
       const seen = new Set<string>();
       allExpenses = allExpenses.filter((r: any) => {
         const k = `${r._type}|${r.id ?? ""}|${r._branchId}|${getPayable(r)}|${getExpDate(r)}`;
@@ -211,7 +209,6 @@ export default function DaySummaryPage() {
     return list.sort((a, b) => numeric(b.credit_amount) - numeric(a.credit_amount));
   }, [credits, date, branchFilter, search]);
 
-  // ✅ FIX - Credit eka Creditors (sales_credits) eken Date + Branch anuwa group karanawa - Search eken affect wenne NAHA!
   const creditByDateBranch = useMemo(() => {
     const map = new Map<string, number>();
     credits.forEach((r: any) => {
@@ -223,6 +220,22 @@ export default function DaySummaryPage() {
       if (!d) return;
       const key = `${d}|${bid}`;
       map.set(key, (map.get(key) || 0) + numeric(r.credit_amount));
+    });
+    return map;
+  }, [credits, date, branchFilter]);
+
+  // ✅ CREDIT COUNT - Creditors kiyadenekda?
+  const creditCountByDateBranch = useMemo(() => {
+    const map = new Map<string, number>();
+    credits.forEach((r: any) => {
+      if (numeric(r.credit_amount) <= 0) return;
+      if (date !== "all" && getCreditDateStr(r) !== date) return;
+      const bid = getBranchKey(r);
+      if (branchFilter !== "all" && bid !== branchFilter) return;
+      const d = getCreditDateStr(r);
+      if (!d) return;
+      const key = `${d}|${bid}`;
+      map.set(key, (map.get(key) || 0) + 1);
     });
     return map;
   }, [credits, date, branchFilter]);
@@ -244,7 +257,6 @@ export default function DaySummaryPage() {
       const row = map.get(key);
       row.salary += numeric(r.salary); row.other += numeric(r.other); row.diesel += numeric(r.diesel); row.capital += numeric(r.capital); row.salesExp += numeric(r.salesExp);
     });
-    // ✅ Credit eka sales_credits eken gannawa - meken thamai 11,000 enne!
     creditByDateBranch.forEach((creditAmt, key) => {
       if (!map.has(key)) {
         const [d, bid] = key.split("|");
@@ -252,17 +264,16 @@ export default function DaySummaryPage() {
         map.set(key, { key, branchId: bid, branchName: credSample ? getBranchName(credSample) : `Branch ${bid}`, date: d, paid: 0, income: 0, amount: 0, discount: 0, credit: 0, count: 0, salary: 0, other: 0, diesel: 0, capital: 0, salesExp: 0 });
       }
       const row = map.get(key);
-      row.credit = creditAmt; // ✅ 11,000!
+      row.credit = creditAmt;
     });
     return Array.from(map.values()).map(r => {
-      const totalIncome = numeric(r.paid) + numeric(r.credit); // ✅ 64,000 + 11,000 = 75,000
+      const totalIncome = numeric(r.paid) + numeric(r.credit);
       const totalExpenses = numeric(r.salary) + numeric(r.other) + numeric(r.diesel) + numeric(r.capital) + numeric(r.salesExp);
-      return { ...r, totalIncome, totalExpenses, netBalance: totalIncome - totalExpenses };
+      return { ...r, totalIncome, totalExpenses, netBalance: totalIncome - totalExpenses, creditCount: creditCountByDateBranch.get(`${r.date}|${r.branchId}`) || 0 };
     }).sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(a.branchName).localeCompare(String(b.branchName)));
-  }, [summaryRows, creditByDateBranch, branchFilter, expenseRows, date, credits]);
+  }, [summaryRows, creditByDateBranch, creditCountByDateBranch, branchFilter, expenseRows, date, credits]);
 
   const totalPaid = useMemo(() => dayRows.reduce((t, r) => t + numeric(r.paid), 0), [dayRows]);
-  // ✅ Total Credit = Creditors eke ekathuwa - sales_credits eken!
   const totalCredit = useMemo(() => dayRows.reduce((t, r) => t + numeric(r.credit), 0), [dayRows]);
   const totalIncome = useMemo(() => totalPaid + totalCredit, [totalPaid, totalCredit]);
   const totalDiscount = useMemo(() => dayRows.reduce((t, r) => t + r.discount, 0), [dayRows]);
@@ -355,6 +366,54 @@ export default function DaySummaryPage() {
                 <p className={`mt-3 text-2xl font-black ${netBalance >= 0 ? "text-emerald-400" : "text-red-400"}`}>{fmt(netBalance)}</p>
                 <p className="mt-1 text-[10px] text-slate-500">Total Income {fmt(totalIncome)} - Total Expenses {fmt(totalExpenses)}</p>
               </div>
+            </div>
+
+            {/* ✅ ALUTH WENAMA TABLE EKA - TOTAL INCOME HEDUNA VIDIYA */}
+            <div className="rounded-2xl border border-blue-500/30 bg-[#0B1226] p-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="flex items-center gap-2 font-bold uppercase tracking-wider"><Receipt size={14} className="text-blue-400" /> Total Income Heduna Vidiya • Paid + Credit = Income</h3>
+                  <p className="text-[10px] text-slate-500 mt-1">Total Income eka kohomada hadune kiyala wenama table eken - Paid (sales_incomes) + Credit (sales_credits) = Total Income</p>
+                </div>
+                <button onClick={() => setShowIncomeBreakdown(!showIncomeBreakdown)} className="px-3 py-2 bg-slate-900 border border-white/10 rounded-xl text-[10px] font-bold">{showIncomeBreakdown ? "Hide" : "Show"}</button>
+              </div>
+
+              {showIncomeBreakdown && (
+                <>
+                  {/* Formula Box */}
+                  <div className="mt-4 flex flex-wrap items-center justify-center gap-2 rounded-2xl border border-blue-500/20 bg-blue-500/5 px-4 py-4 text-center">
+                    <span className="rounded-xl bg-emerald-500/15 border border-emerald-500/30 px-4 py-2"><span className="block text-[10px] text-slate-400 uppercase font-bold">Total Paid</span><span className="block text-base font-black text-emerald-400">{fmt(totalPaid)}</span><span className="block text-[10px] text-slate-500">{totalBills} bills</span></span>
+                    <span className="text-xl font-black text-slate-400"><Plus size={18} /></span>
+                    <span className="rounded-xl bg-amber-500/15 border border-amber-500/30 px-4 py-2"><span className="block text-[10px] text-slate-400 uppercase font-bold">Total Credit</span><span className="block text-base font-black text-amber-400">{fmt(totalCredit)}</span><span className="block text-[10px] text-slate-500">{creditorRows.length} creditors</span></span>
+                    <span className="text-xl font-black text-slate-400"><Equal size={18} /></span>
+                    <span className="rounded-xl bg-blue-500/15 border border-blue-500/40 px-4 py-2"><span className="block text-[10px] text-slate-400 uppercase font-bold">Total Income</span><span className="block text-base font-black text-white">{fmt(totalIncome)}</span><span className="block text-[10px] text-slate-500">Paid + Credit</span></span>
+                  </div>
+
+                  {dayRows.length === 0 ? <p className="py-8 text-center text-slate-500">Data na.</p> : (
+                    <div className="overflow-x-auto mt-4">
+                      <table className="w-full text-left min-w-[1000px]">
+                        <thead><tr className="border-b border-white/[0.06] text-[10px] uppercase text-slate-500"><th className="py-3">Date</th><th className="py-3">Branch</th><th className="py-3 text-right">Total Paid<br /><span className="normal-case text-emerald-400">sales_incomes • Paid</span></th><th className="py-3 text-center">+</th><th className="py-3 text-right">Total Credit<br /><span className="normal-case text-amber-400">sales_credits • Credit</span></th><th className="py-3 text-center">=</th><th className="py-3 text-right">Total Income<br /><span className="normal-case text-blue-300">Paid + Credit</span></th><th className="py-3">Formula</th></tr></thead>
+                        <tbody>
+                          {dayRows.map(r => (
+                            <tr key={r.key} className="border-b border-white/[0.04]">
+                              <td className="py-3 font-bold">{r.date}</td>
+                              <td className="py-3"><p className="font-bold flex items-center gap-2"><Building2 size={13} className="text-cyan-400" /> {r.branchName}</p><p className="text-[10px] text-slate-500">{r.count} bills • {r.creditCount} creditors</p></td>
+                              <td className="py-3 text-right"><p className="font-black text-emerald-400">{fmt(r.paid)}</p><p className="text-[10px] text-slate-500">{r.count} bills walin</p></td>
+                              <td className="py-3 text-center font-black text-slate-400">+</td>
+                              <td className="py-3 text-right"><p className="font-black text-amber-400">{fmt(r.credit)}</p><p className="text-[10px] text-slate-500">{r.creditCount} creditors walin</p></td>
+                              <td className="py-3 text-center font-black text-slate-400">=</td>
+                              <td className="py-3 text-right font-black text-white text-base">{fmt(r.totalIncome)}</td>
+                              <td className="py-3"><span className="rounded-lg bg-slate-900 border border-white/10 px-2 py-1 text-[11px] font-bold">{fmt(r.paid)} + {fmt(r.credit)} = {fmt(r.totalIncome)}</span></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot><tr className="font-black text-base"><td className="py-4">Total</td><td className="py-4 text-slate-400">{dayRows.length} Rows</td><td className="py-4 text-right text-emerald-400">{fmt(totalPaid)}</td><td className="py-4 text-center">+</td><td className="py-4 text-right text-amber-400">{fmt(totalCredit)}</td><td className="py-4 text-center">=</td><td className="py-4 text-right text-white">{fmt(totalIncome)}</td><td className="py-4"><span className="rounded-lg bg-blue-500/15 border border-blue-500/30 px-2 py-1 text-[11px]">{fmt(totalPaid)} + {fmt(totalCredit)} = {fmt(totalIncome)}</span></td></tr></tfoot>
+                      </table>
+                    </div>
+                  )}
+                  <p className="mt-3 text-[11px] text-slate-500">📌 Total Paid enne <span className="text-emerald-400 font-bold">sales_incomes table</span> eke Paid column eken • Total Credit enne <span className="text-amber-400 font-bold">sales_credits table</span> eke Credit Amount eken • Total Income = Paid + Credit • Discount eka Total Income ekata add wenne na!</p>
+                </>
+              )}
             </div>
 
             <div className="rounded-2xl border border-emerald-500/20 bg-[#0B1226] p-5">
