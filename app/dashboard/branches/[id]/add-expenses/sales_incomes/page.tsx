@@ -21,7 +21,6 @@ interface SalesIncomeItem {
   created_at?: string;
 }
 
-
 interface SalesIncomeFormData {
   bill_number: string; name: string; date: string;
   unit_price: string; quantity: string; paid: string; credit: string;
@@ -72,7 +71,6 @@ const FALLBACK_PRICES: ProductPrice[] = [
 ];
 
 function getToday(): string { return new Date().toISOString().split("T")[0]; }
-
 
 function NoSpinnerInput({
   value, onChange, placeholder, name, className = "",
@@ -135,7 +133,6 @@ function SalesIncomesContent() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-
   const [formData, setFormData] = useState<SalesIncomeFormData>({
     bill_number: "", name: "", date: getToday(), unit_price: "", quantity: "", paid: "", credit: "",
   });
@@ -146,9 +143,7 @@ function SalesIncomesContent() {
     return up * qty;
   }, [formData.unit_price, formData.quantity]);
   const calculatedPaid = useMemo(() => Number(formData.paid || 0), [formData.paid]);
-  // ✅ Credit 
   const calculatedCredit = useMemo(() => Number(formData.credit || 0), [formData.credit]);
-  // ✅ Discount = Amount - Paid - Credit
   const calculatedDiscountForm = useMemo(() => Math.max(0, calculatedAmount - calculatedPaid - calculatedCredit), [calculatedAmount, calculatedPaid, calculatedCredit]);
   const calculatedPayable = useMemo(() => calculatedPaid + calculatedCredit, [calculatedPaid, calculatedCredit]);
 
@@ -202,10 +197,12 @@ function SalesIncomesContent() {
     return Number(item.credit || 0);
   };
 
-  const totalAmount = filteredIncomes.reduce((total, item) => total + Number(item.amount || 0), 0);
-  const totalPaid = filteredIncomes.reduce((total, item) => total + Number(item.paid ?? 0), 0);
-  const totalCreditTop = filteredIncomes.reduce((total, item) => total + getCreditAmountForItem(item), 0);
-  const totalDiscount = Math.max(0, totalAmount - totalPaid - totalCreditTop);
+  // ✅ FIX EKA MEKA THAMAI - Total Amount = Total Paid + Total Credit
+  const totalAmountRaw = filteredIncomes.reduce((total, item) => total + Number(item.amount || 0), 0); // 81,000 - Amount column eke ekathuwa - Discount calculate karanna witharak
+  const totalPaid = filteredIncomes.reduce((total, item) => total + Number(item.paid ?? 0), 0); // 64,000
+  const totalCreditTop = filteredIncomes.reduce((total, item) => total + getCreditAmountForItem(item), 0); // 11,000
+  const totalAmount = totalPaid + totalCreditTop; // ✅ 64,000 + 11,000 = 75,000 - Total Amount Card eke penna one meka!
+  const totalDiscount = Math.max(0, totalAmountRaw - totalPaid - totalCreditTop); // 81,000 - 64,000 - 11,000 = 6,000 - Discount eka ehemama!
 
   const filteredCredits = useMemo(() => {
     let list = credits;
@@ -240,7 +237,6 @@ function SalesIncomesContent() {
     setErrorMessage("");
   };
 
-  // ✅ Credit eka Auto Fill karanna button eka - Amount - Paid
   const handleAutoCredit = () => {
     const auto = Math.max(0, calculatedAmount - calculatedPaid);
     setFormData((prev) => ({ ...prev, credit: auto > 0 ? String(auto) : "" }));
@@ -568,15 +564,12 @@ function SalesIncomesContent() {
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><DollarSign size={12} />Paid (LKR)</label>
               <NoSpinnerInput name="paid" value={formData.paid} onChange={(v) => handleNumberChange("paid", v)} placeholder="0.00" className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 focus:border-red-500/60 focus:outline-none transition-colors" />
             </div>
-
-            {/* ✅ ALUTHIN ADD KARA - CREDIT FIELD EKA FORM EKE */}
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5"><CreditCard size={12} />Credit (LKR) - Nayata Ganna Mudala</label>
               <NoSpinnerInput name="credit" value={formData.credit} onChange={(v) => handleNumberChange("credit", v)} placeholder="Ex: 25000.00" className="w-full px-3.5 py-2.5 bg-amber-500/10 border border-amber-500/40 rounded-xl text-amber-400 font-black focus:border-amber-500 focus:outline-none transition-colors" />
               <button type="button" onClick={handleAutoCredit} className="text-[10px] font-bold text-amber-400 hover:text-amber-300 underline underline-offset-2">Auto Fill: Amount - Paid = LKR {(Math.max(0, calculatedAmount - calculatedPaid)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</button>
               <p className="text-[10px] text-slate-500">Paid LKR {calculatedPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })} + Credit LKR {calculatedCredit.toLocaleString(undefined, { minimumFractionDigits: 2 })} = LKR {calculatedPayable.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
             </div>
-
             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><BadgePercent size={12} />Discount (LKR) - Auto = Amount - Paid - Credit</label><div className="w-full px-3.5 py-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400 font-black text-sm">LKR {calculatedDiscountForm.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
             <div className="sm:col-span-2 lg:col-span-4 flex justify-end gap-2 mt-2">
               <button type="button" onClick={handleOpenCreditPage} className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-amber-500/20 active:scale-95"><CreditCard size={14} /><span>Add Credit Details</span></button>
@@ -603,7 +596,8 @@ function SalesIncomesContent() {
 
           {!isLoading && filteredIncomes.length > 0 && (
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-              <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Amount</p><p className="mt-1 text-lg font-black text-red-400">LKR {totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
+              {/* ✅ TOTAL AMOUNT CARD - Dan Paid + Credit = 75,000 */}
+              <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Amount</p><p className="mt-1 text-lg font-black text-red-400">LKR {totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p><p className="text-[10px] text-slate-500 mt-1">Paid {totalPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })} + Credit {totalCreditTop.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
               <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Paid</p><p className="mt-1 text-lg font-black text-emerald-400">LKR {totalPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
               <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4"><p className="text-[10px] uppercase tracking-wider text-amber-400">Total Credit - Nayata Ganna Mudala</p><p className="mt-1 text-lg font-black text-amber-400">LKR {totalCreditTop.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
               <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Discount = Amount - Paid - Credit</p><p className="mt-1 text-lg font-black text-amber-400">LKR {totalDiscount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
