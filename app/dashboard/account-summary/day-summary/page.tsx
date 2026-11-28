@@ -84,9 +84,6 @@ export default function DaySummaryPage() {
 
       const summaryChunks = await Promise.all(summaryPromises);
       const summaryData = summaryChunks.flat();
-      const datesFromAll = summaryData.map((r: any) => String(r.date || "").slice(0, 10)).filter(Boolean);
-      const uniqDates = Array.from(new Set(datesFromAll)).sort().reverse().slice(0, 15) as string[];
-      setAllDates(uniqDates);
 
       const normalizedSummary = summaryData.map((r: any) => {
         const paid = numeric(r.totalPaid ?? r.total_paid ?? r.paid ?? r.paid_amount ?? 0);
@@ -162,15 +159,19 @@ export default function DaySummaryPage() {
       });
       setAllExpensesRaw(allExpenses);
 
+      // ✅ FIX 3: Dates - Incomes + Credits + Expenses 3kenma
+      const datesFromAll = [
+        ...summaryData.map((r: any) => String(r.date || "").slice(0, 10)),
+        ...allCredits.map((r: any) => String(r.created_date || r.date || r.created_at || "").slice(0, 10)),
+        ...allExpenses.map((r: any) => getExpDate(r)),
+      ].filter(Boolean);
+      const uniqDates = Array.from(new Set(datesFromAll)).sort().reverse().slice(0, 30) as string[];
+      setAllDates(uniqDates);
+
       const expMap = new Map<string, any>();
-      const latestDateForBranch = new Map<string, string>();
-      normalizedSummary.forEach((r: any) => {
-        const cur = latestDateForBranch.get(String(r.branchId));
-        if (!cur || String(r.date) > cur) latestDateForBranch.set(String(r.branchId), String(r.date));
-      });
       allExpenses.forEach((r: any) => {
-        let d = getExpDate(r);
-        if (!d) d = date !== "all" ? date : (latestDateForBranch.get(String(r._branchId)) || uniqDates[0] || "");
+        // ✅ FIX 2: Date naa nam skip - latest date ekata danne naa
+        const d = getExpDate(r);
         if (!d) return;
         if (date !== "all" && d !== date) return;
         const key = `${d}|${String(r._branchId)}`;
@@ -195,8 +196,9 @@ export default function DaySummaryPage() {
   const isBranch = (r: any) => branchFilter === "all" || getBranchKey(r) === branchFilter;
   const branchOptions = useMemo(() => branches.map((b: any) => ({ id: String(b.id), name: b.branch_name })), [branches]);
 
-  const creditorRows = useMemo(() => {
-    let list = credits.filter(r => {
+  // ✅ FIX 1: Search + Date + Branch filter eka ekama thanakin - Credit okkotama meka thamai
+  const filteredCredits = useMemo(() => {
+    return credits.filter(r => {
       if (date !== "all" && getCreditDateStr(r) !== date) return false;
       if (!isBranch(r)) return false;
       if (numeric(r.credit_amount) <= 0) return false;
@@ -206,39 +208,35 @@ export default function DaySummaryPage() {
       }
       return true;
     });
-    return list.sort((a, b) => numeric(b.credit_amount) - numeric(a.credit_amount));
   }, [credits, date, branchFilter, search]);
+
+  const creditorRows = useMemo(() => {
+    return [...filteredCredits].sort((a, b) => numeric(b.credit_amount) - numeric(a.credit_amount));
+  }, [filteredCredits]);
 
   const creditByDateBranch = useMemo(() => {
     const map = new Map<string, number>();
-    credits.forEach((r: any) => {
-      if (numeric(r.credit_amount) <= 0) return;
-      if (date !== "all" && getCreditDateStr(r) !== date) return;
+    filteredCredits.forEach((r: any) => {
       const bid = getBranchKey(r);
-      if (branchFilter !== "all" && bid !== branchFilter) return;
       const d = getCreditDateStr(r);
       if (!d) return;
       const key = `${d}|${bid}`;
       map.set(key, (map.get(key) || 0) + numeric(r.credit_amount));
     });
     return map;
-  }, [credits, date, branchFilter]);
+  }, [filteredCredits]);
 
-  // ✅ CREDIT COUNT - Creditors kiyadenekda?
   const creditCountByDateBranch = useMemo(() => {
     const map = new Map<string, number>();
-    credits.forEach((r: any) => {
-      if (numeric(r.credit_amount) <= 0) return;
-      if (date !== "all" && getCreditDateStr(r) !== date) return;
+    filteredCredits.forEach((r: any) => {
       const bid = getBranchKey(r);
-      if (branchFilter !== "all" && bid !== branchFilter) return;
       const d = getCreditDateStr(r);
       if (!d) return;
       const key = `${d}|${bid}`;
       map.set(key, (map.get(key) || 0) + 1);
     });
     return map;
-  }, [credits, date, branchFilter]);
+  }, [filteredCredits]);
 
   const dayRows = useMemo(() => {
     const map = new Map<string, any>();
@@ -280,19 +278,12 @@ export default function DaySummaryPage() {
   const totalCreditFromCreditors = useMemo(() => creditorRows.reduce((t, r) => t + numeric(r.credit_amount), 0), [creditorRows]);
   const totalBills = useMemo(() => dayRows.reduce((t, r) => t + r.count, 0), [dayRows]);
 
-  const filteredExpensesForTotal = useMemo(() => allExpensesRaw.filter((r: any) => {
-    if (branchFilter !== "all" && String(r._branchId) !== branchFilter) return false;
-    if (date !== "all") {
-      const d = getExpDate(r);
-      if (d && d !== date) return false;
-    }
-    return true;
-  }), [allExpensesRaw, branchFilter, date]);
-  const totalSalary = useMemo(() => filteredExpensesForTotal.filter((r: any) => r._type === "salary").reduce((t, r) => t + getPayable(r), 0), [filteredExpensesForTotal]);
-  const totalOther = useMemo(() => filteredExpensesForTotal.filter((r: any) => r._type === "other").reduce((t, r) => t + getPayable(r), 0), [filteredExpensesForTotal]);
-  const totalDiesel = useMemo(() => filteredExpensesForTotal.filter((r: any) => r._type === "diesel").reduce((t, r) => t + getPayable(r), 0), [filteredExpensesForTotal]);
-  const totalCapital = useMemo(() => filteredExpensesForTotal.filter((r: any) => r._type === "capital").reduce((t, r) => t + getPayable(r), 0), [filteredExpensesForTotal]);
-  const totalSalesExp = useMemo(() => filteredExpensesForTotal.filter((r: any) => r._type === "salesExp").reduce((t, r) => t + getPayable(r), 0), [filteredExpensesForTotal]);
+  // ✅ FIX 2 continued: Expenses total eka dayRows walinma ganna - mismatch naa
+  const totalSalary = useMemo(() => dayRows.reduce((t, r) => t + numeric(r.salary), 0), [dayRows]);
+  const totalOther = useMemo(() => dayRows.reduce((t, r) => t + numeric(r.other), 0), [dayRows]);
+  const totalDiesel = useMemo(() => dayRows.reduce((t, r) => t + numeric(r.diesel), 0), [dayRows]);
+  const totalCapital = useMemo(() => dayRows.reduce((t, r) => t + numeric(r.capital), 0), [dayRows]);
+  const totalSalesExp = useMemo(() => dayRows.reduce((t, r) => t + numeric(r.salesExp), 0), [dayRows]);
   const totalExpenses = useMemo(() => totalSalary + totalOther + totalDiesel + totalCapital + totalSalesExp, [totalSalary, totalOther, totalDiesel, totalCapital, totalSalesExp]);
   const netBalance = useMemo(() => totalIncome - totalExpenses, [totalIncome, totalExpenses]);
 
@@ -368,7 +359,6 @@ export default function DaySummaryPage() {
               </div>
             </div>
 
-            {/* ✅ ALUTH WENAMA TABLE EKA - TOTAL INCOME HEDUNA VIDIYA */}
             <div className="rounded-2xl border border-blue-500/30 bg-[#0B1226] p-5">
               <div className="flex items-center justify-between">
                 <div>
@@ -380,7 +370,6 @@ export default function DaySummaryPage() {
 
               {showIncomeBreakdown && (
                 <>
-                  {/* Formula Box */}
                   <div className="mt-4 flex flex-wrap items-center justify-center gap-2 rounded-2xl border border-blue-500/20 bg-blue-500/5 px-4 py-4 text-center">
                     <span className="rounded-xl bg-emerald-500/15 border border-emerald-500/30 px-4 py-2"><span className="block text-[10px] text-slate-400 uppercase font-bold">Total Paid</span><span className="block text-base font-black text-emerald-400">{fmt(totalPaid)}</span><span className="block text-[10px] text-slate-500">{totalBills} bills</span></span>
                     <span className="text-xl font-black text-slate-400"><Plus size={18} /></span>
