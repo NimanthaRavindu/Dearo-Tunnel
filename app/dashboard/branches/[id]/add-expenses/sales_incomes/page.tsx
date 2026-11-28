@@ -190,20 +190,16 @@ function SalesIncomesContent() {
     return credits.find((c) => String(c.bill_number || "").trim().toLowerCase() === String(billNo).trim().toLowerCase());
   };
 
+  // ✅ FIX 1 - find() newei, filter + sum - ekama Bill ekata Credit 2k thibboth dekama gannawa
   const getCreditAmountForItem = (item: SalesIncomeItem) => {
-    const billNo = item.bill_number || item.billNumber || "-";
-    const rec = getCreditByBill(billNo);
-    if (rec) return Number(rec.credit_amount || 0);
-    return Number(item.credit || 0);
+    const billNo = String(item.bill_number || item.billNumber || "").trim().toLowerCase();
+    if (!billNo || billNo === "-") return Number(item.credit || 0);
+    const matched = credits.filter((c) => String(c.bill_number || "").trim().toLowerCase() === billNo);
+    if (matched.length === 0) return Number(item.credit || 0);
+    return matched.reduce((t, c) => t + Number(c.credit_amount || 0), 0);
   };
 
-  // ✅ FIX EKA MEKA THAMAI - Total Amount = Total Paid + Total Credit
-  const totalAmountRaw = filteredIncomes.reduce((total, item) => total + Number(item.amount || 0), 0); // 81,000 - Amount column eke ekathuwa - Discount calculate karanna witharak
-  const totalPaid = filteredIncomes.reduce((total, item) => total + Number(item.paid ?? 0), 0); // 64,000
-  const totalCreditTop = filteredIncomes.reduce((total, item) => total + getCreditAmountForItem(item), 0); // 11,000
-  const totalAmount = totalPaid + totalCreditTop; // ✅ 64,000 + 11,000 = 75,000 - Total Amount Card eke penna one meka!
-  const totalDiscount = Math.max(0, totalAmountRaw - totalPaid - totalCreditTop); // 81,000 - 64,000 - 11,000 = 6,000 - Discount eka ehemama!
-
+  // ✅ FIX 2 - Yata table eke filter eka uda ekatama - meka kalin thibba thanama, eth dan uda totals mekenma gannawa
   const filteredCredits = useMemo(() => {
     let list = credits;
     if (filterDate) list = list.filter((r) => (r.created_date || "").slice(0, 10) === filterDate);
@@ -217,6 +213,24 @@ function SalesIncomesContent() {
   const creditTotal = useMemo(() => filteredCredits.reduce((t, r) => t + Number(r.credit_amount || 0), 0), [filteredCredits]);
   const creditOverdueCount = useMemo(() => filteredCredits.filter((r) => (r.promise_date || "").slice(0, 10) < getToday()).length, [filteredCredits]);
   const creditOverdueAmount = useMemo(() => filteredCredits.filter((r) => (r.promise_date || "").slice(0, 10) < getToday()).reduce((t, r) => t + Number(r.credit_amount || 0), 0), [filteredCredits]);
+
+  // ✅ FIX 3 - Orphan Credit hoyanna - Bill ekata match nowena tika
+  const orphanCredits = useMemo(() => {
+    const billNos = new Set(filteredIncomes.map((i) => String(i.bill_number || i.billNumber || "").trim().toLowerCase()));
+    return filteredCredits.filter((c) => {
+      const b = String(c.bill_number || "").trim().toLowerCase();
+      return !b || b === "-" || !billNos.has(b);
+    });
+  }, [filteredCredits, filteredIncomes]);
+  const matchedCreditTotal = useMemo(() => filteredIncomes.reduce((t, item) => t + getCreditAmountForItem(item), 0), [filteredIncomes, credits]);
+  const orphanCreditTotal = useMemo(() => orphanCredits.reduce((t, c) => t + Number(c.credit_amount || 0), 0), [orphanCredits]);
+
+  // ✅ FIX 4 - Uda Cards wala Total Credit = Yata Table eke Total Credit = sales_credits total eka ma
+  const totalAmountRaw = filteredIncomes.reduce((total, item) => total + Number(item.amount || 0), 0);
+  const totalPaid = filteredIncomes.reduce((total, item) => total + Number(item.paid ?? 0), 0);
+  const totalCreditTop = creditTotal; // ❌ kalin: matched witharak = 454,250 | ✅ dan: okkoma = 488,750
+  const totalAmount = totalPaid + totalCreditTop; // ✅ Total Amount Card eken Discount eka ayin karala thiyenne mehemai - Paid + Credit
+  const totalDiscount = Math.max(0, totalAmountRaw - totalPaid - matchedCreditTotal); // Discount eka Orphan nathuwa, Matched eken witharak - nathnam Discount eka weradi wenawa
 
   const getCreditStatus = (promiseDate: string) => {
     const d = (promiseDate || "").slice(0, 10);
@@ -257,7 +271,7 @@ function SalesIncomesContent() {
   const handleEditRow = (item: SalesIncomeItem) => {
     const billNo = item.bill_number || item.billNumber || "";
     const creditRec = getCreditByBill(billNo);
-    const creditAmt = creditRec ? Number(creditRec.credit_amount || 0) : Number(item.credit || 0);
+    const creditAmt = getCreditAmountForItem(item);
     const discountVal = Math.max(0, Number(item.amount || 0) - Number(item.paid || 0) - creditAmt);
     setEditingRowId(String(item.id));
     setRowEditData({
@@ -596,10 +610,10 @@ function SalesIncomesContent() {
 
           {!isLoading && filteredIncomes.length > 0 && (
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-              {/* ✅ TOTAL AMOUNT CARD - Dan Paid + Credit = 75,000 */}
               <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Amount</p><p className="mt-1 text-lg font-black text-red-400">LKR {totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p><p className="text-[10px] text-slate-500 mt-1">Paid {totalPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })} + Credit {totalCreditTop.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
               <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Paid</p><p className="mt-1 text-lg font-black text-emerald-400">LKR {totalPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
-              <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4"><p className="text-[10px] uppercase tracking-wider text-amber-400">Total Credit - Nayata Ganna Mudala</p><p className="mt-1 text-lg font-black text-amber-400">LKR {totalCreditTop.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
+              {/* ✅ Total Credit Card eke dan pennanne sales_credits total eka ma - Matched + Orphan */}
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4"><p className="text-[10px] uppercase tracking-wider text-amber-400">Total Credit - Nayata Ganna Mudala</p><p className="mt-1 text-lg font-black text-amber-400">LKR {totalCreditTop.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p><p className="text-[10px] text-slate-500 mt-1">Matched {matchedCreditTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })} + Orphan {orphanCreditTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
               <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Discount = Amount - Paid - Credit</p><p className="mt-1 text-lg font-black text-amber-400">LKR {totalDiscount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
             </div>
           )}
@@ -683,6 +697,28 @@ function SalesIncomesContent() {
                       </tr>
                     );
                   })}
+                  {/* ✅ ORPHAN CREDIT rows - kalin table eke penune nathi tika, dan Total Credit ekata match wenna penwanawa */}
+                  {orphanCredits.map((c) => (
+                    <tr key={`orphan-${c.id}`} className="bg-amber-500/[0.04] hover:bg-amber-500/10 transition-colors">
+                      <td className="py-3 px-4 font-bold text-amber-300">{c.bill_number || "-"}</td>
+                      <td className="py-3 px-4 font-bold text-amber-300">Credit Only - Bill Not Found</td>
+                      <td className="py-3 px-4 text-slate-400">{(c.created_date || "").slice(0, 10)}</td>
+                      <td className="py-3 px-4 text-right text-slate-300">-</td>
+                      <td className="py-3 px-4 text-right text-slate-300">-</td>
+                      <td className="py-3 px-4 text-right font-black text-amber-400">LKR {Number(c.credit_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                      <td className="py-3 px-4 text-right font-black text-emerald-400">LKR 0.00</td>
+                      <td className="py-3 px-4 text-right font-black text-amber-400">LKR {Number(c.credit_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                      <td className="py-3 px-4 text-right font-black text-amber-400">LKR 0.00</td>
+                      <td className="py-3 px-4">
+                        <div>
+                          <p className="font-bold text-amber-300 flex items-center gap-1"><User size={11} /> {c.customer_name}</p>
+                          <p className="text-[10px] text-slate-400 flex items-center gap-1"><Phone size={10} /> {c.contact_number}</p>
+                          <p className="text-[10px] text-slate-400 flex items-center gap-1"><Car size={10} /> {c.vehicle_number}</p>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-center"><span className="text-slate-600">-</span></td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
