@@ -116,7 +116,7 @@ export default function DaySummaryPage() {
         const rows = await fetchOne(`/api/expences/sales-incomes?branch_id=${encodeURIComponent(id)}`);
         return rows.map((r: any) => ({ ...r, _branchId: getRecordBranchId(r) || String(id), _branchName: getName2(getRecordBranchId(r) || String(id)) }));
       }));
-      // ✅ FIX 0 - Detailed Incomes thawa duplicate wenna epa, id eken dedup
+      // ✅ FIX - Detailed Incomes duplicate wenna epa
       const detailSeen = new Set<string>();
       const dedupedDetails: any[] = [];
       detailChunks.flat().forEach((r: any) => {
@@ -132,9 +132,9 @@ export default function DaySummaryPage() {
           return { ...r, _branchId: rb, _branchName: getName2(rb) };
         });
       }));
-      // ✅ FIX 1 - MEKA THAMAI PRADHANA FIX EKA - Credit dedup eka ID eken witharak
-      // Kalin: `${id}|${_branchId}|${bill}|${amount}|${customer}` - Branch wenas unoth duplicate
-      // Dan: id thiyenawanam id eken witharak - ekama Credit eka 2 parak enne naa
+      // ✅ FIX - CREDIT COLUMN EKE FIX EKA MEKA - Credit dedup eka ID eken witharak
+      // Kalin: `${id}|${_branchId}|...` - ekama Credit eka Branch 2kema awoth 11,000 + 11,000 = 22,000 una
+      // Dan: id eken witharak dedup - 11,000 witharak gannawa
       const creditSeen = new Set<string>();
       const allCredits: any[] = [];
       creditChunks.flat().forEach((r: any) => {
@@ -300,7 +300,7 @@ export default function DaySummaryPage() {
   const totalExpenses = useMemo(() => totalSalary + totalOther + totalDiesel + totalCapital + totalSalesExp, [totalSalary, totalOther, totalDiesel, totalCapital, totalSalesExp]);
   const netBalance = useMemo(() => totalIncome - totalExpenses, [totalIncome, totalExpenses]);
 
-  // ✅ FIX 2 - getCreditAmountForItem eke thawa duplicate ID tika ayin karala ekathu karanna - safety net eka
+  // ✅ FIX - CREDIT COLUMN EKA - duplicate Credit ID tika ayin karala ekathu karanna
   const getCreditAmountForItem = (item: any) => {
     const billNo = String(item.bill_number || item.billNumber || "").trim().toLowerCase();
     if (!billNo || billNo === "-") return Number(item.credit || 0);
@@ -309,7 +309,7 @@ export default function DaySummaryPage() {
     const seenIds = new Set<string>();
     return matched.reduce((t, c: any) => {
       const cid = c.id != null && c.id !== "" ? `id:${String(c.id)}` : `nob:${c.bill_number}|${c.credit_amount}|${c.customer_name}`;
-      if (seenIds.has(cid)) return t;
+      if (seenIds.has(cid)) return t; // duplicate 11,000 eka 2weni parata ekathu karanne naa
       seenIds.add(cid);
       return t + numeric(c.credit_amount);
     }, 0);
