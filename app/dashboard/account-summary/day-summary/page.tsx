@@ -112,7 +112,6 @@ export default function DaySummaryPage() {
       const ids = Array.from(new Set([...branchList.map((b: any) => String(b.id)), ...normalizedSummary.map((r: any) => String(r.branchId))])).filter(Boolean);
       const getName2 = (id: any) => branchList.find((x: any) => String(x.id) === String(id))?.branch_name || normalizedSummary.find((x: any) => String(x.branchId) === String(id))?.branchName || `Branch ${id}`;
 
-      
       const detailChunks = await Promise.all(ids.map(async (id) => {
         const rows = await fetchOne(`/api/expences/sales-incomes?branch_id=${encodeURIComponent(id)}`);
         return rows.map((r: any) => ({ ...r, _branchId: getRecordBranchId(r) || String(id), _branchName: getName2(getRecordBranchId(r) || String(id)) }));
@@ -291,17 +290,19 @@ export default function DaySummaryPage() {
   const totalExpenses = useMemo(() => totalSalary + totalOther + totalDiesel + totalCapital + totalSalesExp, [totalSalary, totalOther, totalDiesel, totalCapital, totalSalesExp]);
   const netBalance = useMemo(() => totalIncome - totalExpenses, [totalIncome, totalExpenses]);
 
-  // ✅ SALES INCOMES DETAILED 
+const getCreditAmountForItem = (item: any) => {
+    const billNo = String(item.bill_number || item.billNumber || "").trim().toLowerCase();
+    if (!billNo || billNo === "-") return Number(item.credit || 0);
+    const matched = credits.filter((c: any) => String(c.bill_number || "").trim().toLowerCase() === billNo);
+    if (matched.length === 0) return Number(item.credit || 0);
+
+    return matched.reduce((t, c: any) => t + numeric(c.credit_amount), 0);
+  };
   const getCreditByBill = (billNo?: string) => {
     if (!billNo || billNo === "-") return undefined;
     return credits.find((c: any) => String(c.bill_number || "").trim().toLowerCase() === String(billNo).trim().toLowerCase());
   };
-  const getCreditAmountForItem = (item: any) => {
-    const billNo = item.bill_number || item.billNumber || "-";
-    const rec = getCreditByBill(billNo);
-    if (rec) return Number(rec.credit_amount || 0);
-    return Number(item.credit || 0);
-  };
+
   const filteredDetailedIncomes = useMemo(() => {
     return detailedIncomes.filter((item: any) => {
       if (date !== "all" && String(item.date || "").slice(0, 10) !== date) return false;
@@ -313,10 +314,22 @@ export default function DaySummaryPage() {
       return true;
     }).sort((a: any, b: any) => String(b.date || "").localeCompare(String(a.date || "")));
   }, [detailedIncomes, date, branchFilter, search]);
+
+  
+  const matchedCreditTotal = useMemo(() => filteredDetailedIncomes.reduce((t, r: any) => t + getCreditAmountForItem(r), 0), [filteredDetailedIncomes, credits]);
+  const orphanCredits = useMemo(() => {
+    const billNos = new Set(filteredDetailedIncomes.map((i: any) => String(i.bill_number || i.billNumber || "").trim().toLowerCase()));
+    return filteredCredits.filter((c: any) => {
+      const b = String(c.bill_number || "").trim().toLowerCase();
+      return !b || b === "-" || !billNos.has(b);
+    });
+  }, [filteredCredits, filteredDetailedIncomes]);
+  const orphanCreditTotal = useMemo(() => orphanCredits.reduce((t, c: any) => t + numeric(c.credit_amount), 0), [orphanCredits]);
+
   const detailTotalAmount = useMemo(() => filteredDetailedIncomes.reduce((t, r: any) => t + numeric(r.amount), 0), [filteredDetailedIncomes]);
   const detailTotalPaid = useMemo(() => filteredDetailedIncomes.reduce((t, r: any) => t + numeric(r.paid), 0), [filteredDetailedIncomes]);
-  const detailTotalCredit = useMemo(() => filteredDetailedIncomes.reduce((t, r: any) => t + getCreditAmountForItem(r), 0), [filteredDetailedIncomes]);
-  const detailTotalDiscount = useMemo(() => filteredDetailedIncomes.reduce((t, r: any) => t + Math.max(0, numeric(r.amount) - numeric(r.paid) - getCreditAmountForItem(r)), 0), [filteredDetailedIncomes]);
+  const detailTotalCredit = useMemo(() => totalCredit, [totalCredit]); // <- meka thamai fix eka, kalin matchedCreditTotal witharak thibbe
+  const detailTotalDiscount = useMemo(() => filteredDetailedIncomes.reduce((t, r: any) => t + Math.max(0, numeric(r.amount) - numeric(r.paid) - getCreditAmountForItem(r)), 0), [filteredDetailedIncomes, credits]);
 
   const exportCSV = () => {
     const head = "Date,Branch,Total Paid,Discount,Total Credit,Total Income,Total Salary,Total Other,Total Diesel,Total Capital,Total Sales Exp,Total Expenses,Net Balance";
@@ -362,7 +375,6 @@ export default function DaySummaryPage() {
 
         {isLoading ? <div className="flex justify-center py-16 text-slate-400"><Loader2 className="animate-spin" /> Loading...</div> : (
           <>
-            {/* ✅ 5 CARDS */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
               <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.05] p-5">
                 <p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase flex items-center gap-2"><Wallet size={13} /> Total Paid • {date === "all" ? "All Dates" : date}</p>
@@ -391,7 +403,6 @@ export default function DaySummaryPage() {
               </div>
             </div>
 
-  
             <div className="rounded-2xl border border-blue-500/30 bg-[#0B1226] p-5">
               <div className="flex items-center justify-between">
                 <div>
@@ -409,25 +420,23 @@ export default function DaySummaryPage() {
                     <span className="text-xl font-black text-slate-400"><Equal size={18} /></span>
                     <span className="rounded-xl bg-blue-500/15 border border-blue-500/40 px-4 py-2"><span className="block text-[10px] text-slate-400 uppercase font-bold">Total Income</span><span className="block text-base font-black text-white">{fmt(totalIncome)}</span><span className="block text-[10px] text-slate-500">Paid + Credit</span></span>
                   </div>
-              
-                  <p className="mt-3 text-[11px] text-slate-500">📌 Total Paid enne <span className="text-emerald-400 font-bold">sales_incomes table</span> eke Paid column eken • Total Credit enne <span className="text-amber-400 font-bold">sales_credits table</span> eke Credit Amount eken • Total Income = Paid + Credit • Discount eka Total Income ekata add wenne na!</p>
+                  <p className="mt-3 text-[11px] text-slate-500">📌 Total Paid enne <span className="text-emerald-400 font-bold">sales_incomes table</span> eke Paid column eken • Total Credit enne <span className="text-amber-400 font-bold">sales_credits table</span> eke Credit Amount eken • Total Income = Paid + Credit</p>
                 </>
               )}
             </div>
 
-          
             <div className="rounded-2xl border border-white/[0.06] bg-[#0B1226] p-5">
               <div className="flex items-center justify-between">
-                <div><h3 className="flex items-center gap-2 font-bold uppercase tracking-wider"><Receipt size={14} className="text-red-400" /> Registered Sales Incomes Ledger</h3><p className="text-[10px] text-slate-500 mt-1">{filteredDetailedIncomes.length} records found • Sales Incomes page eke table eka ma thamai</p></div>
+                <div><h3 className="flex items-center gap-2 font-bold uppercase tracking-wider"><Receipt size={14} className="text-red-400" /> Registered Sales Incomes Ledger</h3><p className="text-[10px] text-slate-500 mt-1">{filteredDetailedIncomes.length} records found • Matched Credit {fmt(matchedCreditTotal)} + Bill nathi Credit {fmt(orphanCreditTotal)} = Total Credit {fmt(detailTotalCredit)}</p></div>
                 <button onClick={() => setShowSalesIncomes(!showSalesIncomes)} className="px-3 py-2 bg-slate-900 border border-white/10 rounded-xl text-[10px] font-bold">{showSalesIncomes ? "Hide" : "Show"}</button>
               </div>
               {showSalesIncomes && (
                 <>
                   {filteredDetailedIncomes.length > 0 && (
                     <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 mt-4">
-                      <div className="rounded-xl border border-white/[0.06] bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Amount</p><p className="mt-1 text-lg font-black text-red-400">LKR {(detailTotalPaid + detailTotalCredit).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p><p className="text-[10px] text-slate-500 mt-1">Paid {detailTotalPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })} + Credit {detailTotalCredit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
+                      <div className="rounded-xl border border-white/[0.06] bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Amount</p><p className="mt-1 text-lg font-black text-red-400">LKR {(detailTotalPaid + detailTotalCredit + detailTotalDiscount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p><p className="text-[10px] text-slate-500 mt-1">Paid + Credit + Discount</p></div>
                       <div className="rounded-xl border border-white/[0.06] bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Paid</p><p className="mt-1 text-lg font-black text-emerald-400">LKR {detailTotalPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
-                      <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4"><p className="text-[10px] uppercase tracking-wider text-amber-400">Total Credit - Nayata Ganna Mudala</p><p className="mt-1 text-lg font-black text-amber-400">LKR {detailTotalCredit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
+                      <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4"><p className="text-[10px] uppercase tracking-wider text-amber-400">Total Credit - Nayata Ganna Mudala</p><p className="mt-1 text-lg font-black text-amber-400">LKR {detailTotalCredit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p><p className="text-[10px] text-slate-500 mt-1">Matched {matchedCreditTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })} + Orphan {orphanCreditTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
                       <div className="rounded-xl border border-white/[0.06] bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Discount = Amount - Paid - Credit</p><p className="mt-1 text-lg font-black text-amber-400">LKR {detailTotalDiscount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
                     </div>
                   )}
@@ -465,8 +474,28 @@ export default function DaySummaryPage() {
                               </tr>
                             );
                           })}
+                          {/* ✅ ORPHAN CREDIT */}
+                          {orphanCredits.map((c: any) => (
+                            <tr key={`orphan-${c.id}`} className="border-b border-amber-500/20 bg-amber-500/[0.04]">
+                              <td className="py-3 font-bold text-amber-300">{c.bill_number || "-"}</td>
+                              <td className="py-3"><p className="font-bold flex items-center gap-2"><Building2 size={13} className="text-cyan-400" /> {getBranchName(c)}</p></td>
+                              <td className="py-3 font-bold text-amber-300">Credit Only - Bill Not Found</td>
+                              <td className="py-3 text-slate-400">{getCreditDateStr(c)}</td>
+                              <td className="py-3 text-right">-</td>
+                              <td className="py-3 text-right">-</td>
+                              <td className="py-3 text-right font-black text-amber-400">LKR {numeric(c.credit_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                              <td className="py-3 text-right">LKR 0.00</td>
+                              <td className="py-3 text-right font-black text-amber-400">LKR {numeric(c.credit_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                              <td className="py-3 text-right">LKR 0.00</td>
+                              <td className="py-3">
+                                <p className="font-bold text-amber-300 flex items-center gap-1"><User size={11} /> {c.customer_name}</p>
+                                <p className="text-[10px] text-slate-400 flex items-center gap-1"><Phone size={10} /> {c.contact_number}</p>
+                                <p className="text-[10px] text-slate-400 flex items-center gap-1"><Car size={10} /> {c.vehicle_number}</p>
+                              </td>
+                            </tr>
+                          ))}
                         </tbody>
-                        <tfoot><tr className="font-black"><td colSpan={6} className="py-3 text-right">Total ({filteredDetailedIncomes.length})</td><td className="py-3 text-right text-red-400">LKR {detailTotalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td><td className="py-3 text-right text-emerald-400">LKR {detailTotalPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td><td className="py-3 text-right text-amber-400">LKR {detailTotalCredit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td><td className="py-3 text-right text-amber-400">LKR {detailTotalDiscount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td><td /></tr></tfoot>
+                        <tfoot><tr className="font-black"><td colSpan={6} className="py-3 text-right">Total ({filteredDetailedIncomes.length + orphanCredits.length})</td><td className="py-3 text-right text-red-400">LKR {detailTotalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td><td className="py-3 text-right text-emerald-400">LKR {detailTotalPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td><td className="py-3 text-right text-amber-400">LKR {detailTotalCredit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td><td className="py-3 text-right text-amber-400">LKR {detailTotalDiscount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td><td /></tr></tfoot>
                       </table>
                     </div>
                   )}
