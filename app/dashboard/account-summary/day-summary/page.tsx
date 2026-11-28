@@ -290,12 +290,11 @@ export default function DaySummaryPage() {
   const totalExpenses = useMemo(() => totalSalary + totalOther + totalDiesel + totalCapital + totalSalesExp, [totalSalary, totalOther, totalDiesel, totalCapital, totalSalesExp]);
   const netBalance = useMemo(() => totalIncome - totalExpenses, [totalIncome, totalExpenses]);
 
-const getCreditAmountForItem = (item: any) => {
+  const getCreditAmountForItem = (item: any) => {
     const billNo = String(item.bill_number || item.billNumber || "").trim().toLowerCase();
     if (!billNo || billNo === "-") return Number(item.credit || 0);
     const matched = credits.filter((c: any) => String(c.bill_number || "").trim().toLowerCase() === billNo);
     if (matched.length === 0) return Number(item.credit || 0);
-
     return matched.reduce((t, c: any) => t + numeric(c.credit_amount), 0);
   };
   const getCreditByBill = (billNo?: string) => {
@@ -315,7 +314,6 @@ const getCreditAmountForItem = (item: any) => {
     }).sort((a: any, b: any) => String(b.date || "").localeCompare(String(a.date || "")));
   }, [detailedIncomes, date, branchFilter, search]);
 
-  
   const matchedCreditTotal = useMemo(() => filteredDetailedIncomes.reduce((t, r: any) => t + getCreditAmountForItem(r), 0), [filteredDetailedIncomes, credits]);
   const orphanCredits = useMemo(() => {
     const billNos = new Set(filteredDetailedIncomes.map((i: any) => String(i.bill_number || i.billNumber || "").trim().toLowerCase()));
@@ -328,8 +326,10 @@ const getCreditAmountForItem = (item: any) => {
 
   const detailTotalAmount = useMemo(() => filteredDetailedIncomes.reduce((t, r: any) => t + numeric(r.amount), 0), [filteredDetailedIncomes]);
   const detailTotalPaid = useMemo(() => filteredDetailedIncomes.reduce((t, r: any) => t + numeric(r.paid), 0), [filteredDetailedIncomes]);
-  const detailTotalCredit = useMemo(() => totalCredit, [totalCredit]); // <- meka thamai fix eka, kalin matchedCreditTotal witharak thibbe
+  const detailTotalCredit = useMemo(() => totalCredit, [totalCredit]);
   const detailTotalDiscount = useMemo(() => filteredDetailedIncomes.reduce((t, r: any) => t + Math.max(0, numeric(r.amount) - numeric(r.paid) - getCreditAmountForItem(r)), 0), [filteredDetailedIncomes, credits]);
+  // ✅ ALUTH: Total Amount Card eke value = Total Amount - Discount
+  const detailTotalAmountAfterDiscount = useMemo(() => detailTotalPaid + detailTotalCredit + detailTotalDiscount - detailTotalDiscount, [detailTotalPaid, detailTotalCredit, detailTotalDiscount]);
 
   const exportCSV = () => {
     const head = "Date,Branch,Total Paid,Discount,Total Credit,Total Income,Total Salary,Total Other,Total Diesel,Total Capital,Total Sales Exp,Total Expenses,Net Balance";
@@ -434,7 +434,8 @@ const getCreditAmountForItem = (item: any) => {
                 <>
                   {filteredDetailedIncomes.length > 0 && (
                     <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 mt-4">
-                      <div className="rounded-xl border border-white/[0.06] bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Amount</p><p className="mt-1 text-lg font-black text-red-400">LKR {(detailTotalPaid + detailTotalCredit + detailTotalDiscount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p><p className="text-[10px] text-slate-500 mt-1">Paid + Credit + Discount</p></div>
+                      {/* ✅ FIX KARA - Total Amount Card eken Discount eka ayin kala */}
+                      <div className="rounded-xl border border-white/[0.06] bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Amount</p><p className="mt-1 text-lg font-black text-red-400">LKR {detailTotalAmountAfterDiscount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p><p className="text-[10px] text-slate-500 mt-1">Paid + Credit • Discount ayin karala</p></div>
                       <div className="rounded-xl border border-white/[0.06] bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Paid</p><p className="mt-1 text-lg font-black text-emerald-400">LKR {detailTotalPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
                       <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4"><p className="text-[10px] uppercase tracking-wider text-amber-400">Total Credit - Nayata Ganna Mudala</p><p className="mt-1 text-lg font-black text-amber-400">LKR {detailTotalCredit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p><p className="text-[10px] text-slate-500 mt-1">Matched {matchedCreditTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })} + Orphan {orphanCreditTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
                       <div className="rounded-xl border border-white/[0.06] bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Discount = Amount - Paid - Credit</p><p className="mt-1 text-lg font-black text-amber-400">LKR {detailTotalDiscount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
@@ -474,7 +475,6 @@ const getCreditAmountForItem = (item: any) => {
                               </tr>
                             );
                           })}
-                          {/* ✅ ORPHAN CREDIT */}
                           {orphanCredits.map((c: any) => (
                             <tr key={`orphan-${c.id}`} className="border-b border-amber-500/20 bg-amber-500/[0.04]">
                               <td className="py-3 font-bold text-amber-300">{c.bill_number || "-"}</td>
