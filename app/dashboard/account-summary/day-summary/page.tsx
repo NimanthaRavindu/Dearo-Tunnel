@@ -116,7 +116,14 @@ export default function DaySummaryPage() {
         const rows = await fetchOne(`/api/expences/sales-incomes?branch_id=${encodeURIComponent(id)}`);
         return rows.map((r: any) => ({ ...r, _branchId: getRecordBranchId(r) || String(id), _branchName: getName2(getRecordBranchId(r) || String(id)) }));
       }));
-      setDetailedIncomes(detailChunks.flat());
+      // ✅ FIX 0 - Detailed Incomes thawa duplicate wenna epa, id eken dedup
+      const detailSeen = new Set<string>();
+      const dedupedDetails: any[] = [];
+      detailChunks.flat().forEach((r: any) => {
+        const dk = r.id != null && r.id !== "" ? `id:${String(r.id)}` : `nob:${r._branchId}|${r.bill_number ?? ""}|${r.amount ?? ""}|${r.date ?? ""}|${r.name ?? ""}`;
+        if (detailSeen.has(dk)) return; detailSeen.add(dk); dedupedDetails.push(r);
+      });
+      setDetailedIncomes(dedupedDetails);
 
       const creditChunks = await Promise.all(ids.map(async (id) => {
         const rows = await fetchOne(`/api/expences/sales-credits?branch_id=${encodeURIComponent(id)}`);
@@ -125,10 +132,13 @@ export default function DaySummaryPage() {
           return { ...r, _branchId: rb, _branchName: getName2(rb) };
         });
       }));
+      // ✅ FIX 1 - MEKA THAMAI PRADHANA FIX EKA - Credit dedup eka ID eken witharak
+      // Kalin: `${id}|${_branchId}|${bill}|${amount}|${customer}` - Branch wenas unoth duplicate
+      // Dan: id thiyenawanam id eken witharak - ekama Credit eka 2 parak enne naa
       const creditSeen = new Set<string>();
       const allCredits: any[] = [];
       creditChunks.flat().forEach((r: any) => {
-        const k = `${r.id ?? ""}|${r._branchId}|${r.bill_number ?? ""}|${r.credit_amount ?? ""}|${r.customer_name ?? ""}`;
+        const k = r.id != null && r.id !== "" ? `id:${String(r.id)}` : `nob:${r._branchId}|${r.bill_number ?? ""}|${r.credit_amount ?? ""}|${r.customer_name ?? ""}`;
         if (creditSeen.has(k)) return; creditSeen.add(k); allCredits.push(r);
       });
       setCredits(allCredits);
@@ -290,12 +300,19 @@ export default function DaySummaryPage() {
   const totalExpenses = useMemo(() => totalSalary + totalOther + totalDiesel + totalCapital + totalSalesExp, [totalSalary, totalOther, totalDiesel, totalCapital, totalSalesExp]);
   const netBalance = useMemo(() => totalIncome - totalExpenses, [totalIncome, totalExpenses]);
 
+  // ✅ FIX 2 - getCreditAmountForItem eke thawa duplicate ID tika ayin karala ekathu karanna - safety net eka
   const getCreditAmountForItem = (item: any) => {
     const billNo = String(item.bill_number || item.billNumber || "").trim().toLowerCase();
     if (!billNo || billNo === "-") return Number(item.credit || 0);
     const matched = credits.filter((c: any) => String(c.bill_number || "").trim().toLowerCase() === billNo);
     if (matched.length === 0) return Number(item.credit || 0);
-    return matched.reduce((t, c: any) => t + numeric(c.credit_amount), 0);
+    const seenIds = new Set<string>();
+    return matched.reduce((t, c: any) => {
+      const cid = c.id != null && c.id !== "" ? `id:${String(c.id)}` : `nob:${c.bill_number}|${c.credit_amount}|${c.customer_name}`;
+      if (seenIds.has(cid)) return t;
+      seenIds.add(cid);
+      return t + numeric(c.credit_amount);
+    }, 0);
   };
   const getCreditByBill = (billNo?: string) => {
     if (!billNo || billNo === "-") return undefined;
@@ -328,7 +345,6 @@ export default function DaySummaryPage() {
   const detailTotalPaid = useMemo(() => filteredDetailedIncomes.reduce((t, r: any) => t + numeric(r.paid), 0), [filteredDetailedIncomes]);
   const detailTotalCredit = useMemo(() => totalCredit, [totalCredit]);
   const detailTotalDiscount = useMemo(() => filteredDetailedIncomes.reduce((t, r: any) => t + Math.max(0, numeric(r.amount) - numeric(r.paid) - getCreditAmountForItem(r)), 0), [filteredDetailedIncomes, credits]);
-  // ✅ ALUTH: Total Amount Card eke value = Total Amount - Discount
   const detailTotalAmountAfterDiscount = useMemo(() => detailTotalPaid + detailTotalCredit + detailTotalDiscount - detailTotalDiscount, [detailTotalPaid, detailTotalCredit, detailTotalDiscount]);
 
   const exportCSV = () => {
@@ -434,7 +450,6 @@ export default function DaySummaryPage() {
                 <>
                   {filteredDetailedIncomes.length > 0 && (
                     <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 mt-4">
-                      {/* ✅ FIX KARA - Total Amount Card eken Discount eka ayin kala */}
                       <div className="rounded-xl border border-white/[0.06] bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Amount</p><p className="mt-1 text-lg font-black text-red-400">LKR {detailTotalAmountAfterDiscount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p><p className="text-[10px] text-slate-500 mt-1">Paid + Credit • Discount ayin karala</p></div>
                       <div className="rounded-xl border border-white/[0.06] bg-slate-950/40 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Total Paid</p><p className="mt-1 text-lg font-black text-emerald-400">LKR {detailTotalPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
                       <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4"><p className="text-[10px] uppercase tracking-wider text-amber-400">Total Credit - Nayata Ganna Mudala</p><p className="mt-1 text-lg font-black text-amber-400">LKR {detailTotalCredit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p><p className="text-[10px] text-slate-500 mt-1">Matched {matchedCreditTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })} + Orphan {orphanCreditTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
