@@ -116,7 +116,6 @@ export default function DaySummaryPage() {
         const rows = await fetchOne(`/api/expences/sales-incomes?branch_id=${encodeURIComponent(id)}`);
         return rows.map((r: any) => ({ ...r, _branchId: getRecordBranchId(r) || String(id), _branchName: getName2(getRecordBranchId(r) || String(id)) }));
       }));
-      // ✅ FIX - Detailed Incomes duplicate wenna epa
       const detailSeen = new Set<string>();
       const dedupedDetails: any[] = [];
       detailChunks.flat().forEach((r: any) => {
@@ -132,9 +131,7 @@ export default function DaySummaryPage() {
           return { ...r, _branchId: rb, _branchName: getName2(rb) };
         });
       }));
-      // ✅ FIX - CREDIT COLUMN EKE FIX EKA MEKA - Credit dedup eka ID eken witharak
-      // Kalin: `${id}|${_branchId}|...` - ekama Credit eka Branch 2kema awoth 11,000 + 11,000 = 22,000 una
-      // Dan: id eken witharak dedup - 11,000 witharak gannawa
+      // ✅ FIX - Credit dedup ID eken
       const creditSeen = new Set<string>();
       const allCredits: any[] = [];
       creditChunks.flat().forEach((r: any) => {
@@ -300,23 +297,53 @@ export default function DaySummaryPage() {
   const totalExpenses = useMemo(() => totalSalary + totalOther + totalDiesel + totalCapital + totalSalesExp, [totalSalary, totalOther, totalDiesel, totalCapital, totalSalesExp]);
   const netBalance = useMemo(() => totalIncome - totalExpenses, [totalIncome, totalExpenses]);
 
-  // ✅ FIX - CREDIT COLUMN EKA - duplicate Credit ID tika ayin karala ekathu karanna
+  // ✅ FIX 1 - AMOUNT = Unit Price x Qty - DB eke waradi amount eka ganna epa
+  // Bill 1573: 13,000 x 1 = 13,000 wenna ona, 11,000 newei
+  const getAmountForItem = (item: any) => {
+    const up = numeric(item.unit_price ?? item.unitPrice);
+    const qty = numeric(item.quantity);
+    if (up > 0 && qty > 0) return up * qty;
+    return numeric(item.amount);
+  };
+
+  // ✅ FIX 2 - CREDIT = Bill + Branch + Date match karala witharak - wena branch eke ekama bill eka ekathu wenne naa
   const getCreditAmountForItem = (item: any) => {
     const billNo = String(item.bill_number || item.billNumber || "").trim().toLowerCase();
     if (!billNo || billNo === "-") return Number(item.credit || 0);
-    const matched = credits.filter((c: any) => String(c.bill_number || "").trim().toLowerCase() === billNo);
+    const itemBranch = String(item._branchId || getRecordBranchId(item) || "");
+    const itemDate = String(item.date || "").slice(0, 10);
+    const matched = credits.filter((c: any) => {
+      if (String(c.bill_number || "").trim().toLowerCase() !== billNo) return false;
+      // Branch eka match wenna ona - thiyenawanam
+      const cBranch = String(c._branchId || getRecordBranchId(c) || "");
+      if (itemBranch && cBranch && itemBranch !== cBranch) return false;
+      // Date eka match wenna ona - thiyenawanam
+      const cDate = getCreditDateStr(c);
+      if (itemDate && cDate && itemDate !== cDate) return false;
+      return true;
+    });
     if (matched.length === 0) return Number(item.credit || 0);
     const seenIds = new Set<string>();
     return matched.reduce((t, c: any) => {
       const cid = c.id != null && c.id !== "" ? `id:${String(c.id)}` : `nob:${c.bill_number}|${c.credit_amount}|${c.customer_name}`;
-      if (seenIds.has(cid)) return t; // duplicate 11,000 eka 2weni parata ekathu karanne naa
+      if (seenIds.has(cid)) return t;
       seenIds.add(cid);
       return t + numeric(c.credit_amount);
     }, 0);
   };
-  const getCreditByBill = (billNo?: string) => {
+  const getCreditByBill = (item: any) => {
+    const billNo = String(item.bill_number || item.billNumber || "").trim().toLowerCase();
     if (!billNo || billNo === "-") return undefined;
-    return credits.find((c: any) => String(c.bill_number || "").trim().toLowerCase() === String(billNo).trim().toLowerCase());
+    const itemBranch = String(item._branchId || getRecordBranchId(item) || "");
+    const itemDate = String(item.date || "").slice(0, 10);
+    return credits.find((c: any) => {
+      if (String(c.bill_number || "").trim().toLowerCase() !== billNo) return false;
+      const cBranch = String(c._branchId || getRecordBranchId(c) || "");
+      if (itemBranch && cBranch && itemBranch !== cBranch) return false;
+      const cDate = getCreditDateStr(c);
+      if (itemDate && cDate && itemDate !== cDate) return false;
+      return true;
+    });
   };
 
   const filteredDetailedIncomes = useMemo(() => {
@@ -341,10 +368,11 @@ export default function DaySummaryPage() {
   }, [filteredCredits, filteredDetailedIncomes]);
   const orphanCreditTotal = useMemo(() => orphanCredits.reduce((t, c: any) => t + numeric(c.credit_amount), 0), [orphanCredits]);
 
-  const detailTotalAmount = useMemo(() => filteredDetailedIncomes.reduce((t, r: any) => t + numeric(r.amount), 0), [filteredDetailedIncomes]);
+  // ✅ Amount total eka thawa Unit x Qty walin
+  const detailTotalAmount = useMemo(() => filteredDetailedIncomes.reduce((t, r: any) => t + getAmountForItem(r), 0), [filteredDetailedIncomes]);
   const detailTotalPaid = useMemo(() => filteredDetailedIncomes.reduce((t, r: any) => t + numeric(r.paid), 0), [filteredDetailedIncomes]);
   const detailTotalCredit = useMemo(() => totalCredit, [totalCredit]);
-  const detailTotalDiscount = useMemo(() => filteredDetailedIncomes.reduce((t, r: any) => t + Math.max(0, numeric(r.amount) - numeric(r.paid) - getCreditAmountForItem(r)), 0), [filteredDetailedIncomes, credits]);
+  const detailTotalDiscount = useMemo(() => filteredDetailedIncomes.reduce((t, r: any) => t + Math.max(0, getAmountForItem(r) - numeric(r.paid) - getCreditAmountForItem(r)), 0), [filteredDetailedIncomes, credits]);
   const detailTotalAmountAfterDiscount = useMemo(() => detailTotalPaid + detailTotalCredit + detailTotalDiscount - detailTotalDiscount, [detailTotalPaid, detailTotalCredit, detailTotalDiscount]);
 
   const exportCSV = () => {
@@ -463,9 +491,10 @@ export default function DaySummaryPage() {
                         <tbody>
                           {filteredDetailedIncomes.map((item: any) => {
                             const billNo = item.bill_number || item.billNumber || "-";
-                            const creditRec = getCreditByBill(billNo);
+                            const creditRec = getCreditByBill(item);
                             const creditAmt = getCreditAmountForItem(item);
-                            const rowDiscount = Math.max(0, Number(item.amount || 0) - Number(item.paid || 0) - creditAmt);
+                            const amt = getAmountForItem(item);
+                            const rowDiscount = Math.max(0, amt - Number(item.paid || 0) - creditAmt);
                             return (
                               <tr key={item.id} className="border-b border-white/[0.04]">
                                 <td className="py-3 font-bold">{billNo}</td>
@@ -474,7 +503,7 @@ export default function DaySummaryPage() {
                                 <td className="py-3 text-slate-400">{String(item.date || "").slice(0, 10)}</td>
                                 <td className="py-3 text-right">LKR {Number(item.unit_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                 <td className="py-3 text-right">{Number(item.quantity || 0)}</td>
-                                <td className="py-3 text-right font-black text-red-400">LKR {Number(item.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                <td className="py-3 text-right font-black text-red-400">LKR {amt.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                 <td className="py-3 text-right font-black text-emerald-400">LKR {Number(item.paid ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                 <td className="py-3 text-right font-black text-amber-400">LKR {creditAmt.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                 <td className="py-3 text-right font-black text-amber-400">LKR {rowDiscount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
